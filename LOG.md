@@ -161,6 +161,10 @@ The object landed on the open cardboard box near its edge closest to the arm.
   Pose: j1 1828, j2 1820, j3 2974, j4 1222, j5 2113, j6 2548, j7 1682, j8 2604.
 - The black object is on the white box.
 - To hand control back to the leader: `python3 scripts/teleop.py start` (the follower will jump to the leader's pose, so put the leader in a similar pose first).
+- **Update 12:51:** both arms and both cameras were unplugged from the laptop. Station kept running and
+  hot-plugs devices, so plugging back in should be enough. After replugging, check with
+  `python3 scripts/arm_state.py` (both buses, ranges still frozen) and `python3 scripts/camera.py`.
+  Teleop and torque state after replugging are unknown; run `teleop.py stop` + `arm.py hold` before scripted moves.
 
 ## Open items
 
