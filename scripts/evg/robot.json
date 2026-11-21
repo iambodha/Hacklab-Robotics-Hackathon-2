@@ -1,0 +1,64 @@
+{
+ "_note": "No secrets here. backend: 'station' = Station API at station_host:8888 (full control, demo recording); 'mcp' = the arm MCP server (token in env EVG_MCP_TOKEN). Override with env EVG_BACKEND / STATION_HOST.",
+ "backend": "station",
+ "mcp": {
+  "url": "http://10.212.27.240:8766/mcp",
+  "token_env": "EVG_MCP_TOKEN",
+  "protocol": "2025-03-26",
+  "server": "elrobot-hardware 1.30.0"
+ },
+ "arm": "follower (main arm)",
+ "cameras": {
+  "overview": "5cd55831",
+  "gripper": "e091eeda"
+ },
+ "joints": {
+  "j1": {
+   "range_min": 1057,
+   "range_max": 3039,
+   "in_range": true
+  },
+  "j2": {
+   "range_min": 976,
+   "range_max": 3120,
+   "in_range": true
+  },
+  "j3": {
+   "range_min": 881,
+   "range_max": 3215,
+   "in_range": true
+  },
+  "j4": {
+   "range_min": 880,
+   "range_max": 3216,
+   "in_range": true
+  },
+  "j5": {
+   "range_min": 127,
+   "range_max": 3969,
+   "in_range": true
+  },
+  "j6": {
+   "range_min": 1006,
+   "range_max": 3090,
+   "in_range": true
+  },
+  "j7": {
+   "range_min": 109,
+   "range_max": 3987,
+   "in_range": true
+  },
+  "j8": {
+   "range_min": 1228,
+   "range_max": 2868,
+   "in_range": true
+  }
+ },
+ "saved_at": "2026-11-21 14:35:07",
+ "station_host": "10.212.27.240",
+ "buses": {
+  "follower": "5B61033301",
+  "leader": "5B61035034"
+ },
+ "calibrated_at": "2026-11-21 14:48:11"
+}

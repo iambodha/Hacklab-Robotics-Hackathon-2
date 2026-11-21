@@ -2,6 +2,7 @@
 usage: python3 scripts/scene_cam.py [camera_unique_id] [port]      -> http://127.0.0.1:8890
 Reads Station's own video queue (keyed by the camera's unique ID), so the camera is not opened a
 second time and the right camera is picked regardless of device order. Loopback only."""
+import os
 import asyncio, hashlib, logging, sys, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,7 +22,7 @@ async def relay():
     log = logging.getLogger("scene_cam")
     while True:
         try:
-            client = await new_station_client("localhost", log)
+            client = await new_station_client(os.environ.get("STATION_HOST", "localhost"), log)
             q = asyncio.Queue(); client.follow(QUEUE, q)
             while True:
                 e = await asyncio.wait_for(q.get(), 10)

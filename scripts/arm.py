@@ -11,6 +11,7 @@
 Base frame: origin under the base, z up. Teleop must be off or mirroring will fight these commands.
 Every move is clamped to the calibrated range minus a margin, and split so no joint jumps far in one command.
 """
+import os
 import asyncio, logging, math, struct, sys, time, xml.etree.ElementTree as ET
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
@@ -99,7 +100,7 @@ def angle_to_steps(m, k, a): lo, hi = LIMITS[k]; return round(m["mn"] + (hi - a)
 class Arm:
     async def connect(self):
         logging.basicConfig(level=logging.ERROR)
-        self.client = await new_station_client("localhost", logging.getLogger("arm"))
+        self.client = await new_station_client(os.environ.get("STATION_HOST", "localhost"), logging.getLogger("arm"))
         self.q = asyncio.Queue(); self.client.follow("st3215/inference", self.q)
         return self
     async def state(self, fresh=True):

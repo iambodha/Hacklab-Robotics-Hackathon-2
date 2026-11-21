@@ -1,6 +1,7 @@
 """Find the dark object in the gripper camera frame (pure stdlib + macOS `sips` for JPEG decoding).
   python3 scripts/vision.py            -> grabs a fresh gripper frame, prints blob centre (px), area, bbox
 Used by grasp.py for camera-guided moves."""
+import os
 import asyncio, hashlib, logging, struct, subprocess, sys, tempfile
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
@@ -65,7 +66,7 @@ if __name__ == "__main__":
     from station_py import new_station_client
     async def main():
         logging.basicConfig(level=logging.ERROR)
-        c = await new_station_client("localhost", logging.getLogger("vision"))
+        c = await new_station_client(os.environ.get("STATION_HOST", "localhost"), logging.getLogger("vision"))
         w, h, lum = decode(await grab(c)); print(f"frame {w}x{h}")
         for b in blobs(w, h, lum): print(f"  blob centre ({b['x']:.0f},{b['y']:.0f}) area {b['area']} box {b['box']}")
     asyncio.run(main())

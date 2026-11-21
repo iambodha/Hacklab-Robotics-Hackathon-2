@@ -1,5 +1,6 @@
 """Start/stop Station motor mirroring (teleop).
 usage: python3 scripts/teleop.py start [LEADER_SERIAL FOLLOWER_SERIAL] | stop | status"""
+import os
 import asyncio, logging, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent / "norma-core"
@@ -22,7 +23,7 @@ async def status(client):
 
 async def main(argv):
     logging.basicConfig(level=logging.WARNING)
-    client = await new_station_client("localhost", logging.getLogger("teleop"))
+    client = await new_station_client(os.environ.get("STATION_HOST", "localhost"), logging.getLogger("teleop"))
     op = argv[0] if argv else "status"
     if op in ("start", "stop"):
         src, dst = (argv[1], argv[2]) if len(argv) >= 3 else (LEADER, FOLLOWER)

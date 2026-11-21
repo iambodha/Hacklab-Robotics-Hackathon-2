@@ -1,6 +1,7 @@
 """Start/stop Station auto-calibration on one ST3215 bus.
 usage: python3 scripts/calibrate.py start|stop|reset|freeze BUS_SERIAL
   start/stop = auto-calibration; reset = clear ranges (then sweep joints by hand); freeze = lock ranges"""
+import os
 import asyncio, logging, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent / "norma-core"
@@ -11,7 +12,7 @@ from target.gen_python.protobuf.drivers.st3215 import st3215
 
 async def main(op, serial):
     logging.basicConfig(level=logging.WARNING)
-    client = await new_station_client("localhost", logging.getLogger("calibrate"))
+    client = await new_station_client(os.environ.get("STATION_HOST", "localhost"), logging.getLogger("calibrate"))
     C = st3215.Command
     cmd = {"start": lambda: C(target_bus_serial=serial, auto_calibrate=st3215.AutoCalibrateCommand(calibrate=True)),
            "stop": lambda: C(target_bus_serial=serial, stop_auto_calibrate=st3215.StopAutoCalibrateCommand(stop=True)),

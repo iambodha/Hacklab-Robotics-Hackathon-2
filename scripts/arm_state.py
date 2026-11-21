@@ -1,4 +1,5 @@
 """Print a snapshot of every ST3215 bus/motor Station sees.  usage: python3 scripts/arm_state.py [seconds]"""
+import os
 import asyncio, logging, struct, sys, time
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent / "norma-core"
@@ -28,7 +29,7 @@ def snapshot(data):
 
 async def main(secs):
     log = logging.getLogger("arm_state"); logging.basicConfig(level=logging.WARNING)
-    client = await new_station_client("localhost", log)
+    client = await new_station_client(os.environ.get("STATION_HOST", "localhost"), log)
     q = asyncio.Queue(); client.follow("st3215/inference", q)
     first = last = None; t0 = time.time()
     while time.time() - t0 < secs or first is None:
