@@ -27,6 +27,7 @@ NAMES = [f'j{i}' for i in range(1, 9)]
 class Recorder:
     def __init__(self, arm, root: Path, fps: float = 10, port: int = 8891, cam: str = 'side_cam', size=(640, 480)):
         self.arm, self.fps, self.cam, self.size = arm, fps, cam, size
+        joint_names = [f'j{i}' for i in range(1, arm.model.nu + 1)]
         self.dir = Path(root) / time.strftime('%Y%m%d-%H%M%S')
         (self.dir / 'frames').mkdir(parents=True)
         (self.dir / 'looks').mkdir()
@@ -38,7 +39,7 @@ class Recorder:
         self.cond = threading.Condition()
         self.running = True
         (self.dir / 'session.json').write_text(json.dumps(
-            {'started': time.strftime('%Y-%m-%d %H:%M:%S'), 'fps': fps, 'camera': cam, 'joints': NAMES}, indent=2))
+            {'started': time.strftime('%Y-%m-%d %H:%M:%S'), 'fps': fps, 'camera': cam, 'joints': joint_names}, indent=2))
         self._state_f = open(self.dir / 'state.jsonl', 'a', buffering=1)
         self._events_f = open(self.dir / 'events.jsonl', 'a', buffering=1)
         threading.Thread(target=self._capture, daemon=True).start()

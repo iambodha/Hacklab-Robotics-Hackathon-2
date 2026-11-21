@@ -27,10 +27,10 @@ CAM_URL = os.environ.get("ROBOT_CAM_URL", "http://localhost:8890")
 MAX_CAM_AGE = float(os.environ.get("ROBOT_MAX_CAM_AGE", "1.0"))
 MAX_DELTA = float(os.environ.get("ROBOT_MAX_DELTA", "0.35"))
 TRACK_TOL = int(os.environ.get("ROBOT_TRACK_TOL", "250"))
-GRIPPER = os.environ.get("ROBOT_GRIPPER_JOINT", "j8")
+GRIPPER = os.environ.get("ROBOT_GRIPPER_JOINT", stn.NAMES[-1])
 NAMES, IDS = stn.NAMES, stn.IDS
 
-server = FastMCP("elrobot-hardware")
+server = FastMCP("so101-hardware" if stn.ROBOT_MODEL == "so101" else "elrobot-hardware")
 _cli = None
 _last_hash: dict[str, str] = {}
 
@@ -60,13 +60,24 @@ def _table(st: dict) -> str:
 
 
 def _cameras() -> list[dict]:
-    with urllib.request.urlopen(f"{CAM_URL}/api/cameras", timeout=3) as r:
+    with urllib.request.urlopen(f"{CAM_URL}/api/cameras", timeout=1.5) as r:
         return [c for c in json.load(r) if c.get("live")]
 
 
 def _snapshot(h: str) -> bytes:
-    with urllib.request.urlopen(f"{CAM_URL}/snapshot/{h}", timeout=3) as r:
+    with urllib.request.urlopen(f"{CAM_URL}/snapshot/{h}", timeout=2.0) as r:
         return r.read()
+
+
+async def live_cameras() -> list[dict]:
+    """Return live cameras from cam_stream (:8890) if running, else directly from Station NormFS WebSocket."""
+    try:
+        cams = _cameras()
+        if cams:
+            return [{**c, "jpeg": None} for c in cams]
+    except Exception:
+        pass
+    return [c for c in await stn.read_live_cameras(await _client()) if c.get("live")]
 
 
 @server.tool(annotations={"readOnlyHint": True})
@@ -75,16 +86,25 @@ async def look() -> list:
     Each image is checked: relay age <= ROBOT_MAX_CAM_AGE seconds and bytes differ from the previous
     capture of that camera; a stale camera is retried and then reported as STALE instead of shown."""
     out: list = []
-    for cam in _cameras():
+    for cam in await live_cameras():
         h, note = cam["hash"], ""
         for _ in range(4):
-            data = _snapshot(h)
+            if cam.get("jpeg") is not None:
+                fresh_list = await stn.read_live_cameras(await _client())
+                cur = next((c for c in fresh_list if c["hash"] == h), None)
+                if cur is None:
+                    note = "missing"
+                    await asyncio.sleep(0.25)
+                    continue
+                data, age = cur["jpeg"], cur["age"]
+            else:
+                data = _snapshot(h)
+                age = next((c["age"] for c in _cameras() if c["hash"] == h), None)
             digest = hashlib.sha1(data).hexdigest()
-            age = next((c["age"] for c in _cameras() if c["hash"] == h), None)
             if age is not None and age <= MAX_CAM_AGE and digest != _last_hash.get(h):
                 break
             note = f"age={age}"
-            await asyncio.sleep(0.3)
+            await asyncio.sleep(0.25)
         else:
             out.append(f"camera {h[:8]} ({cam['unique_id']}): STALE ({note}) — not shown")
             continue

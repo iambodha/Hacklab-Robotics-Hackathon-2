@@ -73,7 +73,8 @@ canvas{width:100%;height:230px;display:block;cursor:crosshair}
 <script>
 const fa=a=>JSON.stringify(a,(k,v)=>typeof v==='number'?Math.round(v*1000)/1000:v).replace(/"/g,'').replace(/,/g,', ');const fr=r=>{const f=(r||'').split('\n')[0];return f.startsWith('joint ')||f.startsWith('camera ')?'':f};
 const D=/*DATA*/null, fps=D.fps, S=D.states, E=D.events;
-const C=['#3d8bfd','#ff9f43','#2ed573','#ff6b81','#a29bfe','#00d2d3','#feca57','#c8d6e5'];
+const NJ=S.length?S[0][1].length:8;
+const C=['#3d8bfd','#ff9f43','#2ed573','#ff6b81','#a29bfe','#00d2d3','#feca57','#c8d6e5'].slice(0,NJ);
 const vid=document.getElementById('vid'), cv=document.getElementById('chart'), ctx=cv.getContext('2d');
 const T=S.length?S[S.length-1][0]:0;
 document.getElementById('info').textContent=`${D.meta.started} · ${E.length} tool calls · ${T.toFixed(0)} s · ${E.filter(e=>e.tool==='move_to'||e.tool==='gripper').length} motions`;
@@ -84,7 +85,7 @@ function draw(){const w=cv.width=cv.clientWidth*devicePixelRatio,h=cv.height=cv.
  const x=i=>i/Math.max(1,S.length-1)*w, y=v=>h-6-(h-12)*v;
  ctx.strokeStyle='#2a313b';ctx.lineWidth=1;[0,.5,1].forEach(v=>{ctx.beginPath();ctx.moveTo(0,y(v));ctx.lineTo(w,y(v));ctx.stroke()});
  E.forEach(e=>{ctx.strokeStyle=e.tool==='look'?'#3a4552':'#56606b';ctx.beginPath();ctx.moveTo(x(e.frame),0);ctx.lineTo(x(e.frame),10*devicePixelRatio);ctx.stroke()});
- for(let j=0;j<8;j++){for(const k of [2,1]){ctx.strokeStyle=C[j];ctx.lineWidth=(k===1?1.6:1)*devicePixelRatio;ctx.setLineDash(k===2?[4,4]:[]);ctx.beginPath();
+ for(let j=0;j<NJ;j++){for(const k of [2,1]){ctx.strokeStyle=C[j];ctx.lineWidth=(k===1?1.6:1)*devicePixelRatio;ctx.setLineDash(k===2?[4,4]:[]);ctx.beginPath();
   const step=Math.max(1,Math.floor(S.length/w));for(let i=0;i<S.length;i+=step){const v=S[i][k][j];i?ctx.lineTo(x(i),y(v)):ctx.moveTo(x(i),y(v))}ctx.stroke()}}
  ctx.setLineDash([]);const f=frameAt(vid.currentTime);ctx.strokeStyle='#fff';ctx.lineWidth=1.5*devicePixelRatio;ctx.beginPath();ctx.moveTo(x(f),0);ctx.lineTo(x(f),h);ctx.stroke()}
 cv.onclick=ev=>{const r=cv.getBoundingClientRect();vid.currentTime=(ev.clientX-r.left)/r.width*(S.length-1)/fps};

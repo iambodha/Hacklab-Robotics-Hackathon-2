@@ -29,16 +29,19 @@ STATIC_CONTACT = {'contype': '2', 'conaffinity': '1'}
 PAD_CONTACT = {'contype': '4', 'conaffinity': '2'}
 NO_CONTACT = {'contype': '0', 'conaffinity': '0'}
 GRIPPER_TORQUE = 0.4  # N m on rev_motor_08 (0 rad = jaws open)
+SO101_GRIPPER_TORQUE = 0.5  # N m on joint 6 (-0.1745 rad = jaws closed)
 
 
-def find_urdf():
+def find_urdf(robot_model='elrobot'):
     candidates = [os.environ.get('NORMA_CORE_REPO', ''), REPO / 'norma-core', REPO.parent / 'norma-core',
-                  '/mnt/d/Robotics-Hackathon/repos/norma-core']
+                  REPO.parent / 'normacorehack/norma-core', '/mnt/d/Robotics-Hackathon/repos/norma-core']
+    rel = ('software/station/clients/station-viewer/public/devices/so101/so101_robot_follower.urdf'
+           if robot_model == 'so101' else 'hardware/elrobot/simulation/elrobot_follower.urdf')
     for base in candidates:
-        path = Path(base) / 'hardware/elrobot/simulation/elrobot_follower.urdf'
+        path = Path(base) / rel
         if base and path.exists():
             return path
-    raise FileNotFoundError('elrobot_follower.urdf not found; set NORMA_CORE_REPO to a full norma-core clone')
+    raise FileNotFoundError(f'{Path(rel).name} not found; set NORMA_CORE_REPO to a full norma-core clone')
 
 
 def fmt(values):
@@ -56,19 +59,20 @@ def camera_axes(pos, lookat):
     return np.r_[x, np.cross(z, x)]
 
 
-def base_arm(out_dir):
+def base_arm(out_dir, robot_model='elrobot'):
     """URDF -> MJCF with position servos; robot self-collision off, contact with the scene on."""
-    urdf_path = find_urdf()
+    urdf_path = find_urdf(robot_model)
     urdf = ET.parse(urdf_path)
     for mesh in urdf.findall('.//mesh'):
         mesh.set('filename', str((urdf_path.parent / mesh.get('filename')).resolve()))
     ext = ET.SubElement(urdf.getroot(), 'mujoco')
     ET.SubElement(ext, 'compiler', discardvisual='false', fusestatic='false', balanceinertia='true',
                   boundmass='0.001', boundinertia='0.0000001')
-    converted = out_dir / 'elrobot_import.urdf'
+    converted = out_dir / f'{robot_model}_import.urdf'
     urdf.write(converted, encoding='unicode')
-    mujoco.mj_saveLastXML(str(out_dir / 'elrobot_base.xml'), mujoco.MjModel.from_xml_path(str(converted)))
-    root = ET.parse(out_dir / 'elrobot_base.xml').getroot()
+    base_xml = out_dir / f'{robot_model}_base.xml'
+    mujoco.mj_saveLastXML(str(base_xml), mujoco.MjModel.from_xml_path(str(converted)))
+    root = ET.parse(base_xml).getroot()
     option = root.find('option')
     if option is None: option = ET.SubElement(root, 'option')
     option.attrib.update(timestep='0.002', integrator='implicitfast', cone='elliptic', impratio='10',
@@ -81,34 +85,63 @@ def base_arm(out_dir):
     ET.SubElement(visual, 'headlight', ambient='0.3 0.3 0.3', diffuse='0.3 0.3 0.3')
     for geom in root.find('worldbody').iter('geom'):
         geom.attrib.update(contype='1', conaffinity='2', friction='1 0.01 0.001')
-    equality = root.find('equality')
-    if equality is None: equality = ET.SubElement(root, 'equality')
-    for name, multiplier in [('rev_motor_08_1', -0.0115), ('rev_motor_08_2', 0.0115)]:
-        for old in list(equality):
-            if old.get('joint1') == name: equality.remove(old)
-        ET.SubElement(equality, 'joint', joint1=name, joint2='rev_motor_08', polycoef=f'0 {multiplier} 0 0 0', solref='0.004 1')
     actuators = ET.SubElement(root, 'actuator')
-    for i in range(1, 9):
-        joint = root.find(f'.//joint[@name="rev_motor_{i:02d}"]')
-        joint.attrib.update(damping='0.3', armature='0.01')
-        # Jaw servo: 0.4 N m through the 11.5 mm/rad linkage = ~35 N squeeze, so it stalls on an object.
-        limit = GRIPPER_TORQUE if i == 8 else 2.94
-        ET.SubElement(actuators, 'position', name=f'motor_{i}', joint=joint.get('name'), kp='30', kv='2',
-                      ctrllimited='true', ctrlrange=joint.get('range'), forcelimited='true', forcerange=f'-{limit} {limit}')
+    if robot_model == 'so101':
+        base = root.find('.//body[@name="base"]')
+        base.set('pos', '-0.168068 0.124202 -0.0300817')
+        base.set('quat', fmt(yaw_quat(90)))
+        for i in range(1, 7):
+            joint = root.find(f'.//joint[@name="{i}"]')
+            joint.attrib.update(damping='0.3', armature='0.01')
+            limit = SO101_GRIPPER_TORQUE if i == 6 else 2.94
+            ET.SubElement(actuators, 'position', name=f'motor_{i}', joint=joint.get('name'), kp='30', kv='2',
+                          ctrllimited='true', ctrlrange=joint.get('range'), forcelimited='true', forcerange=f'-{limit} {limit}')
+    else:
+        equality = root.find('equality')
+        if equality is None: equality = ET.SubElement(root, 'equality')
+        for name, multiplier in [('rev_motor_08_1', -0.0115), ('rev_motor_08_2', 0.0115)]:
+            for old in list(equality):
+                if old.get('joint1') == name: equality.remove(old)
+            ET.SubElement(equality, 'joint', joint1=name, joint2='rev_motor_08', polycoef=f'0 {multiplier} 0 0 0', solref='0.004 1')
+        for i in range(1, 9):
+            joint = root.find(f'.//joint[@name="rev_motor_{i:02d}"]')
+            joint.attrib.update(damping='0.3', armature='0.01')
+            # Jaw servo: 0.4 N m through the 11.5 mm/rad linkage = ~35 N squeeze, so it stalls on an object.
+            limit = GRIPPER_TORQUE if i == 8 else 2.94
+            ET.SubElement(actuators, 'position', name=f'motor_{i}', joint=joint.get('name'), kp='30', kv='2',
+                          ctrllimited='true', ctrlrange=joint.get('range'), forcelimited='true', forcerange=f'-{limit} {limit}')
     return root
 
 
 def add_gripper_parts(root, layout):
-    gripper = root.find('.//body[@name="Gripper_Base_v1_1"]')
-    ET.SubElement(gripper, 'site', name='grasp_tcp', pos='0 .09 0', size='.004', rgba='0 1 0 1', group='3')
-    # Jaw meshes stay visible but do not collide; box pads at the fingertips do the gripping.
-    for name, pos, desired, label in [('Gripper_Jaw_02_v1_1', [.311734, -.199648, .032849], [-.035, .09, 0], 'left_pad'),
-                                      ('Gripper_Jaw_01_v1_1', [.308573, -.243367, -.049391], [.035, .09, 0], 'right_pad')]:
-        body = root.find(f'.//body[@name="{name}"]')
-        for geom in body.findall('geom'): geom.attrib.update(NO_CONTACT)
-        ET.SubElement(body, 'geom', name=label, type='box', pos=fmt(np.subtract(desired, pos)), size='.006 .016 .018',
-                      rgba='.15 .15 .16 1', friction='1.2 .02 .002', condim='4', solref='.004 1', solimp='.95 .99 .001',
+    robot_model = layout.get('robot_model', 'elrobot')
+    if robot_model == 'so101':
+        gripper = root.find('.//body[@name="gripper"]')
+        ET.SubElement(gripper, 'site', name='grasp_tcp', pos='0.014 0 -0.093', xyaxes='1 0 0 0 0 -1',
+                      size='.004', rgba='0 1 0 1', group='3')
+        for geom in gripper.findall('geom'):
+            if geom.get('mesh') == 'wrist_roll_follower_so101_v1':
+                geom.attrib.update(NO_CONTACT)
+        ET.SubElement(gripper, 'geom', name='left_pad', type='box', pos='-0.012 0 -0.090', size='.004 .008 .014',
+                      rgba='.15 .15 .16 1', friction='1.4 .02 .002', condim='4', solref='.004 1', solimp='.95 .99 .001',
                       mass='.005', **PAD_CONTACT)
+        mjaw = root.find('.//body[@name="moving_jaw_so101_v1"]')
+        for geom in mjaw.findall('geom'):
+            geom.attrib.update(NO_CONTACT)
+        ET.SubElement(mjaw, 'geom', name='right_pad', type='box', pos='-0.0083 -0.0666 0.0188', size='.004 .014 .008',
+                      rgba='.15 .15 .16 1', friction='1.4 .02 .002', condim='4', solref='.004 1', solimp='.95 .99 .001',
+                      mass='.005', **PAD_CONTACT)
+    else:
+        gripper = root.find('.//body[@name="Gripper_Base_v1_1"]')
+        ET.SubElement(gripper, 'site', name='grasp_tcp', pos='0 .09 0', size='.004', rgba='0 1 0 1', group='3')
+        # Jaw meshes stay visible but do not collide; box pads at the fingertips do the gripping.
+        for name, pos, desired, label in [('Gripper_Jaw_02_v1_1', [.311734, -.199648, .032849], [-.035, .09, 0], 'left_pad'),
+                                          ('Gripper_Jaw_01_v1_1', [.308573, -.243367, -.049391], [.035, .09, 0], 'right_pad')]:
+            body = root.find(f'.//body[@name="{name}"]')
+            for geom in body.findall('geom'): geom.attrib.update(NO_CONTACT)
+            ET.SubElement(body, 'geom', name=label, type='box', pos=fmt(np.subtract(desired, pos)), size='.006 .016 .018',
+                          rgba='.15 .15 .16 1', friction='1.2 .02 .002', condim='4', solref='.004 1', solimp='.95 .99 .001',
+                          mass='.005', **PAD_CONTACT)
     cam = layout['wrist_camera']
     T = np.array(json.loads((REPO / cam['pose_file']).read_text())['T_link_camera'])
     # OpenCV (x right, y down, z forward) -> MuJoCo camera (x right, y up, looks along -z).
@@ -154,10 +187,12 @@ def add_bin(world, spec):
 
 
 def build_xml(layout, out_dir):
-    root = base_arm(out_dir)
+    robot_model = layout.get('robot_model', 'elrobot')
+    root = base_arm(out_dir, robot_model)
     world = root.find('worldbody')
     for geom in world.iter('geom'):
-        if geom.get('rgba') == '0.7 0.7 0.7 1': geom.set('rgba', fmt(layout['arm_rgba']))
+        if geom.get('rgba') in ('0.7 0.7 0.7 1', '1 0 0 1'):
+            geom.set('rgba', fmt(layout['arm_rgba']))
     add_gripper_parts(root, layout)
 
     table = layout['table']; tw, td = table['size']; th = table['thickness']
@@ -213,15 +248,18 @@ def add_rest_keyframe(root, layout):
 
 
 class ArmIK:
-    """Damped least-squares IK on the grasp_tcp site (7 arm joints, gripper untouched)."""
+    """Damped least-squares IK on the grasp_tcp site (all arm joints except gripper)."""
 
     def __init__(self, model):
         self.model, self.data = model, mujoco.MjData(model)
         joints = model.actuator_trnid[:, 0]
-        self.qids, self.dofs = model.jnt_qposadr[joints], model.jnt_dofadr[joints][:7]
+        self.arm_dofs = model.nu - 1
+        self.qids, self.dofs = model.jnt_qposadr[joints], model.jnt_dofadr[joints][:self.arm_dofs]
         self.site = model.site('grasp_tcp').id
         self.low, self.high = model.actuator_ctrlrange.T
         self.down = np.array([[1., 0, 0], [0, 0, 1], [0, -1, 0]])  # tcp +y (approach) pointing at the table
+        self.rot_tol = 0.06 if self.arm_dofs <= 5 else 0.02
+        self.rot_weight = 0.15 if self.arm_dofs <= 5 else 0.1
 
     def fk(self, q):
         """Measured joints (rad) -> (tcp xyz, tcp rotation matrix) in the base frame."""
@@ -229,13 +267,28 @@ class ArmIK:
         mujoco.mj_kinematics(self.model, self.data)
         return self.data.site_xpos[self.site].copy(), self.data.site_xmat[self.site].reshape(3, 3).copy()
 
-    def solve(self, xyz, top_down=True, q0=None, attempts=16, seed=3, yaw_deg=0.0):
+    def target_rot(self, xyz, lean_deg=0.0, yaw_deg=0.0):
+        r = np.asarray(xyz[:2], float)
+        r = r / np.linalg.norm(r) if np.linalg.norm(r) > 1e-6 else np.array([0.0, 1.0])
+        t, yw = math.radians(lean_deg), math.radians(yaw_deg)
+        a = np.array([math.sin(t) * r[0], math.sin(t) * r[1], -math.cos(t)])
+        j = np.array([math.cos(yw), math.sin(yw), 0.0])
+        j = j - (j @ a) * a
+        if np.linalg.norm(j) < 1e-6:
+            j = np.array([-r[1], r[0], 0.0])
+        j /= np.linalg.norm(j)
+        return np.column_stack([j, a, np.cross(j, a)])
+
+    def solve(self, xyz, top_down=True, q0=None, attempts=16, seed=3, yaw_deg=0.0, lean_deg=0.0):
         rng = np.random.default_rng(seed)
-        c, s = math.cos(math.radians(yaw_deg)), math.sin(math.radians(yaw_deg))
-        down = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]]) @ self.down  # jaw closing axis rotated about vertical
+        n = self.arm_dofs
+        Rt = self.target_rot(xyz, lean_deg=lean_deg, yaw_deg=yaw_deg)
         jp, jr = np.zeros((3, self.model.nv)), np.zeros((3, self.model.nv))
+        best = None
         for attempt in range(attempts):
-            q = (np.zeros(self.model.nu) if q0 is None else q0.copy()) if attempt == 0 else rng.uniform(self.low, self.high)
+            q = (np.zeros(self.model.nu) if q0 is None else q0.copy())
+            if attempt > 0:
+                q[:n] = rng.uniform(self.low[:n], self.high[:n])
             for _ in range(300):
                 self.data.qpos[self.qids] = q
                 mujoco.mj_kinematics(self.model, self.data); mujoco.mj_comPos(self.model, self.data)
@@ -243,18 +296,27 @@ class ArmIK:
                 mujoco.mj_jacSite(self.model, self.data, jp, jr, self.site)
                 if top_down:
                     quat = np.zeros(4)
-                    mujoco.mju_mat2Quat(quat, (down @ self.data.site_xmat[self.site].reshape(3, 3).T).reshape(-1))
+                    mujoco.mju_mat2Quat(quat, (Rt @ self.data.site_xmat[self.site].reshape(3, 3).T).reshape(-1))
                     if quat[0] < 0: quat *= -1
                     length = np.linalg.norm(quat[1:])
                     err_r = quat[1:] * (2*np.arctan2(length, quat[0])/max(length, 1e-9))
-                    if np.linalg.norm(err) < 0.002 and np.linalg.norm(err_r) < 0.02: return q
-                    jac, e = np.vstack([jp[:, self.dofs], .1*jr[:, self.dofs]]), np.r_[err, .1*err_r]
+                    if np.linalg.norm(err) < 0.002 and np.linalg.norm(err_r) < self.rot_tol:
+                        if q0 is None or attempt == 0:
+                            return q
+                        if best is None or np.abs(q[:n] - q0[:n]).max() < np.abs(best[:n] - q0[:n]).max():
+                            best = q.copy()
+                        break
+                    w = self.rot_weight
+                    jac, e = np.vstack([jp[:, self.dofs], w*jr[:, self.dofs]]), np.r_[err, w*err_r]
                 else:
-                    if np.linalg.norm(err) < 0.003: return q
+                    if np.linalg.norm(err) < 0.003:
+                        return q
                     jac, e = jp[:, self.dofs], err
                 dq = jac.T @ np.linalg.solve(jac @ jac.T + 1e-4*np.eye(len(e)), e)
-                q[:7] = np.clip(q[:7] + np.clip(dq, -.08, .08), self.low[:7] + .001, self.high[:7] - .001)
-        return None
+                q[:n] = np.clip(q[:n] + np.clip(dq, -.08, .08), self.low[:n] + .001, self.high[:n] - .001)
+            if best is not None and attempt >= 4:
+                return best
+        return best
 
 
 def sample_reach(model, samples, top_down_deg, seed=0):

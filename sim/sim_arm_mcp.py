@@ -45,32 +45,41 @@ from mcp.server.fastmcp import FastMCP, Image  # noqa: E402
 import build_scene  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-LAYOUT = Path(os.environ.get('ROBOT_SIM_LAYOUT', HERE / 'layout.json'))
+ROBOT_MODEL = os.environ.get('ROBOT_MODEL', '').lower()
+DEFAULT_LAYOUT = HERE / ('layout_so101.json' if ROBOT_MODEL == 'so101' else 'layout.json')
+LAYOUT = Path(os.environ.get('ROBOT_SIM_LAYOUT', DEFAULT_LAYOUT))
+if not ROBOT_MODEL:
+    ROBOT_MODEL = json.loads(LAYOUT.read_text()).get('robot_model', 'elrobot').lower()
+OUT_DIR = Path(os.environ.get('ROBOT_SIM_OUT', HERE / ('generated_so101' if ROBOT_MODEL == 'so101' else 'generated')))
 MAX_DELTA = float(os.environ.get('ROBOT_MAX_DELTA', '0.35'))
 TRACK_TOL = int(os.environ.get('ROBOT_TRACK_TOL', '250'))
-GRIPPER = os.environ.get('ROBOT_GRIPPER_JOINT', 'j8')
 OVERLOAD_S = float(os.environ.get('ROBOT_SIM_OVERLOAD_S', '2.0'))
 TRUTH_LOG = os.environ.get('ROBOT_SIM_TRUTH_LOG')
-IMG_SCALE = int(os.environ.get('ROBOT_SIM_IMG_SCALE', '2'))  # upscale 299x224 frames for the model's eyes
+IMG_SCALE = int(os.environ.get('ROBOT_SIM_IMG_SCALE', '2'))  # upscale frames for the model's eyes
 GRID = os.environ.get('ROBOT_SIM_GRID', '1') == '1'          # labelled pixel grid on look() images
 KINEMATICS = os.environ.get('ROBOT_SIM_KINEMATICS', '1') == '1'  # tcp_pose / move_tcp / pixel_to_table tools
-NAMES = [f'j{i}' for i in range(1, 9)]
 TICKS_PER_RAD = 4096 / (2 * np.pi)
-# Hashes of the real Station camera queues (camera_pose/HANDOFF.md), so prompts carry over.
-CAMERAS = [('wrist_cam', '322ab5514b8e14014c3743c1abfd4a07', 'sim-wrist-uvc'),
-           ('overview_cam', '8c697f6e0c79a3d2fab2a4ea977ee738', 'sim-overview')]
+# Hashes of the real Station camera queues, so prompts carry over.
+CAMERAS = ([('wrist_cam', '55c51b4cc590f444b7709fc0202bff77', 'sim-so101-wrist'),
+            ('overview_cam', '8c697f6e0c79a3d2fab2a4ea977ee738', 'sim-overview')]
+           if ROBOT_MODEL == 'so101' else
+           [('wrist_cam', '322ab5514b8e14014c3743c1abfd4a07', 'sim-wrist-uvc'),
+            ('overview_cam', '8c697f6e0c79a3d2fab2a4ea977ee738', 'sim-overview')])
 
 
 class SimArm:
     def __init__(self):
-        scene = HERE / 'generated/workspace.xml'
+        scene = OUT_DIR / 'workspace.xml'
         sources = [LAYOUT, HERE / 'build_scene.py']
         if not scene.exists() or scene.stat().st_mtime < max(p.stat().st_mtime for p in sources):
-            build_scene.build(LAYOUT, HERE / 'generated', report=False)
+            build_scene.build(LAYOUT, OUT_DIR, report=False)
         self.layout = json.loads(LAYOUT.read_text())
+        self.robot_model = self.layout.get('robot_model', ROBOT_MODEL)
         self.model = mujoco.MjModel.from_xml_path(str(scene))
         self.data = mujoco.MjData(self.model)
         m = self.model
+        self.arm_dofs = m.nu - 1
+        self.grip_idx = m.nu - 1
         self.qids = m.jnt_qposadr[m.actuator_trnid[:, 0]]
         self.dofs = m.jnt_dofadr[m.actuator_trnid[:, 0]]
         self.lo_rad, self.hi_rad = m.actuator_ctrlrange.T.copy()
@@ -121,7 +130,7 @@ class SimArm:
     def _servo_protection(self, dt):
         if OVERLOAD_S <= 0: return
         force = np.abs(self.data.actuator_force)
-        sat = self.torque & (force >= 0.97 * self.fmax) & (np.arange(self.model.nu) != 7)  # jaws may stall
+        sat = self.torque & (force >= 0.97 * self.fmax) & (np.arange(self.model.nu) != self.grip_idx)  # jaws may stall
         self.saturated_s = np.where(sat, self.saturated_s + dt, 0.0)
         for i in np.flatnonzero(self.saturated_s > OVERLOAD_S):
             self.status[i] = 0x20; self._set_torque(i, False); self.saturated_s[i] = 0
@@ -137,16 +146,22 @@ class SimArm:
         self.model.actuator_biasprm[i, :3] = self.bias[i] if on else 0
 
     # --- joint conventions (match the real arm) ------------------------------
+    def _invert_grip(self):
+        return self.robot_model != 'so101'
+
     def norm(self, q):
         n = (q - self.lo_rad) / (self.hi_rad - self.lo_rad)
-        n[7] = 1 - q[7] / self.hi_rad[7]  # j8: 1 = open
+        if self._invert_grip():
+            n[self.grip_idx] = 1 - q[self.grip_idx] / self.hi_rad[self.grip_idx]  # elrobot j8: 1 = open
         return n
 
     def rad(self, i, n):
-        return self.hi_rad[i] * (1 - n) if i == 7 else self.lo_rad[i] + n * (self.hi_rad[i] - self.lo_rad[i])
+        if i == self.grip_idx and self._invert_grip():
+            return self.hi_rad[i] * (1 - n)
+        return self.lo_rad[i] + n * (self.hi_rad[i] - self.lo_rad[i])
 
     def ticks(self, i, q):
-        return int(round(2048 + (-q if i == 7 else q) * TICKS_PER_RAD))
+        return int(round(2048 + (-q if (i == self.grip_idx and self._invert_grip()) else q) * TICKS_PER_RAD))
 
     def state(self):
         with self.lock:
@@ -242,14 +257,18 @@ class SimArm:
 
 
 arm = SimArm()
-server = FastMCP('elrobot-sim')
+NAMES = [f'j{i}' for i in range(1, arm.model.nu + 1)]
+GRIPPER = os.environ.get('ROBOT_GRIPPER_JOINT', NAMES[-1])
+MCP_NAME = os.environ.get('ROBOT_MCP_NAME', 'so101-sim' if arm.robot_model == 'so101' else 'elrobot-sim')
+server = FastMCP(MCP_NAME)
 recorder = None
 if os.environ.get('ROBOT_SIM_RECORD', '1') == '1':
     from recorder import Recorder
-    recorder = Recorder(arm, Path(os.environ.get('ROBOT_SIM_RECORD_DIR', HERE / 'sessions')),
+    default_rec = HERE / ('sessions_so101' if arm.robot_model == 'so101' else 'sessions')
+    recorder = Recorder(arm, Path(os.environ.get('ROBOT_SIM_RECORD_DIR', default_rec)),
                         fps=float(os.environ.get('ROBOT_SIM_RECORD_FPS', '10')),
                         port=int(os.environ.get('ROBOT_SIM_DASHBOARD_PORT', '8891')))
-    print(f'elrobot-sim: recording to {recorder.dir}; live dashboard {recorder.url}', file=sys.stderr, flush=True)
+    print(f'{MCP_NAME}: recording to {recorder.dir}; live dashboard {recorder.url}', file=sys.stderr, flush=True)
 
 
 def recorded(fn):
@@ -328,7 +347,8 @@ async def move_to(targets: dict[str, float], step: float = 0.02, dt: float = 0.1
     return await _move(targets, step, dt, TRACK_TOL)
 
 
-async def _move(targets: dict[str, float], step: float, dt: float, track_tol: int) -> str:
+async def _move(targets: dict[str, float], step: float, dt: float, track_tol: int, max_delta: float | None = None) -> str:
+    max_delta = MAX_DELTA if max_delta is None else max_delta
     unknown = [k for k in targets if k not in NAMES]
     if unknown:
         raise ValueError(f'unknown joints {unknown}; valid {NAMES}')
@@ -344,11 +364,14 @@ async def _move(targets: dict[str, float], step: float, dt: float, track_tol: in
             raise RuntimeError(f"{name} raw {m['raw']} is outside calibrated range [{m['lo']},{m['hi']}] — "
                                'commanding it would snap; recalibrate or move it into range by hand')
         want = min(1.0, max(0.0, float(want)))
-        if abs(want - m['norm']) > MAX_DELTA:
-            raise ValueError(f"{name}: {m['norm']:.3f}->{want:.3f} exceeds max delta {MAX_DELTA}; use waypoints")
+        if abs(want - m['norm']) > max_delta:
+            raise ValueError(f"{name}: {m['norm']:.3f}->{want:.3f} exceeds max delta {max_delta}; use waypoints")
         plan[NAMES.index(name)] = (m['norm'], want)
     with arm.lock:
-        hold = arm.data.qpos[arm.qids].copy()
+        hold = arm.data.ctrl.copy()
+        for i in range(arm.model.nu):
+            if i != arm.grip_idx and abs(hold[i] - arm.data.qpos[arm.qids[i]]) > 0.35:
+                hold[i] = arm.data.qpos[arm.qids[i]]
     n = max([1] + [int(abs(b - a) / step + 0.999) for a, b in plan.values()])
     for k in range(1, n + 1):
         goals = hold.copy()
@@ -359,7 +382,7 @@ async def _move(targets: dict[str, float], step: float, dt: float, track_tol: in
         await asyncio.sleep(dt)
         now = arm.state()
         bad = [(name, now[name]['goal'], now[name]['raw'], now[name]['status']) for name in NAMES
-               if now[name]['status'] or abs(now[name]['goal'] - now[name]['raw']) > track_tol]
+               if name != GRIPPER and (now[name]['status'] or abs(now[name]['goal'] - now[name]['raw']) > track_tol)]
         if bad:
             with arm.lock:
                 tripped = arm.status != 0
@@ -385,6 +408,17 @@ async def tcp_pose() -> str:
             f'jaw closing axis yaw = {np.degrees(np.arctan2(jaw[1], jaw[0])):.0f} deg.\n{FRAME}')
 
 
+LEAN_CANDIDATES = (0, 10, -10, 20, -20, 30, -30, 40, -40, 50, 60)
+
+
+def _solve_with_lean(xyz, seed, yaw_deg):
+    for lean in LEAN_CANDIDATES:
+        sol = arm.ik.solve(np.array(xyz), top_down=True, q0=seed, yaw_deg=yaw_deg, lean_deg=lean)
+        if sol is not None:
+            return sol, lean
+    return None, None
+
+
 async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg: float = 0.0,
                    step: float = 0.02, dt: float = 0.12) -> str:
     """Move the gripper TCP (between the fingertip pads) to (x, y, z) in the base frame using the
@@ -393,7 +427,7 @@ async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg:
     e.g. high up near the base or over the box, it uses the nearest tilted pose and says so); yaw_deg turns the jaw
     closing axis about vertical (0 = jaws close along x). If the target is more than 3 cm away
     sideways, it travels at a safe height (max(target, 0.08 m)), lifting first if it is lower, then descends.
-    The gripper opening (j8) is not changed. Table top is z = 0; grasp small objects at z ~ 0.02."""
+    The gripper opening is not changed. Table top is z = 0; grasp small objects at z ~ 0.02."""
     target = np.array([x, y, z], float)
     if not (0.0 <= z <= 0.45 and np.hypot(x, y) <= 0.45):
         raise ValueError(f'target {target.round(3).tolist()} is outside the workspace (z 0..0.45 m, radius <= 0.45 m)')
@@ -405,15 +439,22 @@ async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg:
         if cur[2] < safe - 0.01: waypoints.append([cur[0], cur[1], safe])  # lift straight up first
         if z < safe: waypoints.append([x, y, safe])                         # travel high, then descend
     waypoints.append(target.tolist())
+    nd = arm.arm_dofs
     seed, log, notes = q, [], []
     for wp in waypoints:
-        sol = arm.ik.solve(np.array(wp), top_down=top_down, q0=seed, yaw_deg=yaw_deg)
-        if sol is None and top_down:  # jaws-down is impossible here (too high/far): accept a tilted gripper
+        lean = 0
+        if top_down:
+            sol, lean = _solve_with_lean(wp, seed, yaw_deg)
+            if sol is not None and lean:
+                notes.append(f'jaws-down unreachable at {np.round(wp, 3).tolist()}: gripper leans {abs(lean)} deg from vertical')
+            if sol is None:
+                sol = arm.ik.solve(np.array(wp), top_down=False, q0=seed)
+                if sol is not None:
+                    _, rot = arm.ik.fk(sol)
+                    notes.append(f'jaws-down unreachable at {np.round(wp, 3).tolist()}: used a gripper tilted '
+                                 f'{np.degrees(np.arccos(np.clip(-rot[2, 1], -1, 1))):.0f} deg from vertical')
+        else:
             sol = arm.ik.solve(np.array(wp), top_down=False, q0=seed)
-            if sol is not None:
-                _, rot = arm.ik.fk(sol)
-                notes.append(f'jaws-down unreachable at {np.round(wp, 3).tolist()}: used a gripper tilted '
-                             f'{np.degrees(np.arccos(np.clip(-rot[2, 1], -1, 1))):.0f} deg from vertical')
         if sol is None:
             return (f'UNREACHABLE: no joint solution for tcp {np.round(wp, 3).tolist()} '
                     f'({"jaws down" if top_down else "any orientation"}); nothing moved after: {log}\n' + arm.table())
@@ -421,8 +462,8 @@ async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg:
         goal = arm.norm(sol)
         for _ in range(12):
             now = arm.norm(arm.measured_q())
-            if max(abs(goal[:7] - now[:7])) < 0.004: break
-            chunk = {NAMES[i]: float(now[i] + np.clip(goal[i] - now[i], -0.3, 0.3)) for i in range(7)}
+            if max(abs(goal[:nd] - now[:nd])) < 0.006: break
+            chunk = {NAMES[i]: float(now[i] + np.clip(goal[i] - now[i], -0.3, 0.3)) for i in range(nd)}
             out = await _move(chunk, step, dt, TRACK_TOL)
             if out.startswith('ABORTED'):
                 pos, _ = arm.ik.fk(arm.measured_q())
@@ -459,9 +500,73 @@ if KINEMATICS:
 @server.tool(annotations={'destructiveHint': True})
 @recorded
 async def gripper(open_fraction: float) -> str:
-    """Set the gripper jaws (j8) to a normalized target: higher = more open. Closing on an object
-    stalls the jaw short of the target, which is a grip; it does not abort for the gripper."""
-    return await _move({GRIPPER: open_fraction}, 0.05, 0.1, 4096)
+    """Set the gripper jaws to a normalized target in [0, 1]: higher = more open (1.0 = open, 0.0 = closed).
+    Closing on an object stalls the jaw short of the target, which is a grip; it does not abort for the gripper."""
+    out = await _move({GRIPPER: open_fraction}, 0.05, 0.08, 4096, max_delta=1.0)
+    st = arm.state()[GRIPPER]
+    if open_fraction < 0.1 and st['norm'] > 0.05:
+        return f"Jaws stalled on something at {st['norm']:.3f}: holding it.\n" + arm.table()
+    return f"gripper at {st['norm']:.3f}.\n" + arm.table()
+
+
+PICK_OPEN = 0.55 if arm.robot_model == 'so101' else 1.0
+CLOSED_NORM = 0.045
+CARRY_Z = 0.15 if arm.robot_model == 'so101' else 0.20
+
+
+async def _sim_views() -> list:
+    out: list = []
+    for cam, h, uid in CAMERAS:
+        out.append(f"camera {h[:8]} ({uid}) fresh, age=0.03s")
+        out.append(Image(data=arm.snapshot(cam), format='jpeg'))
+    return out
+
+
+async def pick_at(x: float, y: float, object_height: float = 0.02, yaw_deg: float = 0.0) -> list:
+    """Pick up a small object whose centre is at (x, y) on the table (base frame): open jaws, hover, descend,
+    close until jaws stall, lift to safe carry height, and return fresh camera images."""
+    log = []
+    if arm.state()[GRIPPER]['norm'] < PICK_OPEN - 0.08:
+        log.append('open: ' + (await gripper(open_fraction=PICK_OPEN)).splitlines()[0])
+    z_descend = 0.012 if object_height < 0.01 else max(0.014, object_height / 2 + 0.008)
+    for name, z in (('hover', max(object_height + 0.05, 0.07)), ('descend', z_descend)):
+        out = await move_tcp(x=x, y=y, z=z, top_down=True, yaw_deg=yaw_deg, step=0.015 if name == 'descend' else 0.02)
+        log.append(f"{name}: {out.splitlines()[0]}")
+        if out.startswith(('ABORTED', 'UNREACHABLE')):
+            return ['PICK STOPPED before closing.\n' + '\n'.join(log)] + await _sim_views()
+    log.append('close: ' + (await gripper(open_fraction=0.0)).splitlines()[0])
+    await asyncio.sleep(0.25)
+    st = arm.state()[GRIPPER]
+    if st['norm'] <= CLOSED_NORM:
+        await gripper(open_fraction=PICK_OPEN)
+        out = await move_tcp(x=x, y=y, z=0.09, top_down=True, yaw_deg=yaw_deg)
+        log.append(f"back off: {out.splitlines()[0]}")
+        return [f"NOT holding (jaws closed fully to {st['norm']:.3f}). Backed off to 9 cm above pick point.\n" + '\n'.join(log)] + await _sim_views()
+    out = await move_tcp(x=x, y=y, z=CARRY_Z, top_down=True, yaw_deg=yaw_deg)
+    log.append(f"lift: {out.splitlines()[0]}")
+    st = arm.state()[GRIPPER]
+    verdict = (f"HOLDING something ({GRIPPER} {st['norm']:.3f}, load {st['load']})."
+               if st['norm'] > CLOSED_NORM else f"NOT holding ({GRIPPER} {st['norm']:.3f}).")
+    return [verdict + '\n' + '\n'.join(log)] + await _sim_views()
+
+
+async def drop_at(x: float, y: float, z: float = CARRY_Z) -> list:
+    """Carry held object to (x, y) at height z, open jaws to release, and retreat to parking hover."""
+    log = []
+    out = await move_tcp(x=x, y=y, z=z, top_down=True)
+    log.append(f"carry: {out.splitlines()[0]}")
+    if out.startswith(('ABORTED', 'UNREACHABLE')):
+        return ['DROP STOPPED before releasing.\n' + '\n'.join(log)] + await _sim_views()
+    log.append('release: ' + (await gripper(open_fraction=PICK_OPEN)).splitlines()[0])
+    await asyncio.sleep(0.4)
+    out = await move_tcp(x=0.0, y=0.17, z=max(z, 0.12), top_down=True)
+    log.append(f"retreat: {out.splitlines()[0]}")
+    return [f"RELEASED at {[round(x, 3), round(y, 3), round(z, 3)]}.\n" + '\n'.join(log)] + await _sim_views()
+
+
+if KINEMATICS:
+    server.tool(annotations={'destructiveHint': True})(recorded(pick_at))
+    server.tool(annotations={'destructiveHint': True})(recorded(drop_at))
 
 
 @server.tool(annotations={'destructiveHint': True})

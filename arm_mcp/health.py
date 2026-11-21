@@ -11,9 +11,11 @@ import station as stn  # noqa: E402
 async def main():
     cli = await stn.connect()
     motors = await stn.bus_frame(cli)
+    cams = await stn.read_live_cameras(cli)
     errors = {int(m.get_id()): stn.as_str(m.get_error().get_description()) for m in motors or []
               if m.get_error() and stn.as_str(m.get_error().get_description())}
-    report = {"bus": stn.BUS, "bus_found": motors is not None, "read_errors": errors}
+    report = {"robot_model": stn.ROBOT_MODEL, "bus": stn.BUS, "bus_found": motors is not None, "read_errors": errors,
+              "cameras": [{k: c[k] for k in ("hash", "label", "w", "h", "age", "live")} for c in cams]}
     if motors and not errors:
         st = await stn.read_state(cli)
         report["joints"] = {stn.NAMES[stn.IDS.index(mid)]: {k: m[k] for k in ("raw", "lo", "hi", "norm", "in_range", "torque", "status", "volt")}

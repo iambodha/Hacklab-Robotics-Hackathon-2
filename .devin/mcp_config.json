@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "so101-sim": {
+      "command": "bash",
+      "args": ["./sim/run_so101_server.sh"],
+      "disabled": false
+    },
+    "so101-real": {
+      "command": "bash",
+      "args": ["./sim/run_so101_real_server.sh"],
+      "disabled": false
+    }
+  }
+}

@@ -1,4 +1,7 @@
 generated/
+generated_so101/
 sessions/
+sessions_so101/
 __pycache__/
 real_sessions/
+real_sessions_so101/

@@ -50,23 +50,30 @@ from PIL import Image as PILImage, ImageDraw  # noqa: E402
 
 import build_scene  # noqa: E402  (ArmIK + the scene builder)
 from arm_mcp import server as am  # noqa: E402  (real Station access; its own MCP server object is unused)
+stn = am.stn
 
+ROBOT_MODEL = stn.ROBOT_MODEL
 IMG_SCALE = int(os.environ.get("ROBOT_IMG_SCALE", "2"))
 GRID = os.environ.get("ROBOT_GRID", "1") == "1"
 MIN_Z = float(os.environ.get("ROBOT_MIN_TCP_Z", "0.012"))
-WRIST_CAM = os.environ.get("ROBOT_WRIST_CAM", "e091eeda")       # cam_stream hash prefixes (per machine)
-OVERVIEW_CAM = os.environ.get("ROBOT_OVERVIEW_CAM", "5cd55831")
+WRIST_CAM = os.environ.get("ROBOT_WRIST_CAM", "auto" if ROBOT_MODEL == "so101" else "e091eeda")
+OVERVIEW_CAM = os.environ.get("ROBOT_OVERVIEW_CAM", "" if ROBOT_MODEL == "so101" else "5cd55831")
 OVERVIEW_CAL = Path(os.environ.get("ROBOT_OVERVIEW_CAL", HERE / "real_overview_camera.json"))
-LOG_DIR = Path(os.environ.get("ROBOT_REAL_LOG_DIR", HERE / "real_sessions"))
-W, H = 299, 224
-NAMES = [f"j{i}" for i in range(1, 9)]
+LOG_DIR = Path(os.environ.get("ROBOT_REAL_LOG_DIR", HERE / ("real_sessions_so101" if ROBOT_MODEL == "so101" else "real_sessions")))
+DEFAULT_W, DEFAULT_H = (398, 224) if ROBOT_MODEL == "so101" else (299, 224)
+_last_wh: dict[str, tuple[int, int]] = {}
 FRAME = ("Base frame, metres: origin = centre of the arm base on the table top, +z up, +y = straight ahead of "
-         "the arm (towards the overview camera), +x = the arm's right-hand side (image-LEFT in the overview camera).")
+         "the arm, +x = the arm's right-hand side.")
 
-_ws = HERE / "generated" / "workspace.xml"
+_layout_path = HERE / ("layout_so101.json" if ROBOT_MODEL == "so101" else "layout.json")
+_out_dir = HERE / ("generated_so101" if ROBOT_MODEL == "so101" else "generated")
+_ws = _out_dir / "workspace.xml"
 if not _ws.exists():
-    build_scene.build(report=False)
+    build_scene.build(_layout_path, _out_dir, report=False)
 MODEL = mujoco.MjModel.from_xml_path(str(_ws))
+ARM_DOFS = MODEL.nu - 1
+GRIP_ID = MODEL.nu
+NAMES = [f"j{i}" for i in range(1, MODEL.nu + 1)]
 IK = build_scene.ArmIK(MODEL)
 LO, HI = MODEL.actuator_ctrlrange.T.copy()          # URDF limits (rad), exactly as the sim maps them
 KD = mujoco.MjData(MODEL)                            # kinematics-only data for camera poses
@@ -90,7 +97,8 @@ if RANGES_FILE:
 
     am._read = _read_with_ranges   # arm_mcp's joint_state / set_torque / _table pick this up too
 
-server = FastMCP("elrobot-real")
+MCP_NAME = os.environ.get("ROBOT_MCP_NAME", "so101-real" if ROBOT_MODEL == "so101" else "elrobot-real")
+server = FastMCP(MCP_NAME)
 LOG_DIR.mkdir(exist_ok=True)
 SESSION_LOG = LOG_DIR / "actions.jsonl"
 
@@ -124,12 +132,15 @@ async def measured():
     n = [st[mid]["norm"] for mid in am.IDS]
     if any(x is None for x in n):
         raise RuntimeError("a joint has no calibrated range; calibrate before using kinematics")
-    q = np.array([LO[i] + n[i] * (HI[i] - LO[i]) for i in range(7)] + [HI[7] * (1 - n[7])])
+    if ROBOT_MODEL == "so101":
+        q = np.array([LO[i] + n[i] * (HI[i] - LO[i]) for i in range(MODEL.nu)])
+    else:
+        q = np.array([LO[i] + n[i] * (HI[i] - LO[i]) for i in range(7)] + [HI[7] * (1 - n[7])])
     return q, st
 
 
 def to_norm(q):
-    return (q[:7] - LO[:7]) / (HI[:7] - LO[:7])
+    return (q[:ARM_DOFS] - LO[:ARM_DOFS]) / (HI[:ARM_DOFS] - LO[:ARM_DOFS])
 
 
 # --- inverse kinematics: as close to jaws-down as the target allows ------------------------------------
@@ -156,13 +167,14 @@ def _target_rot(xyz, lean_deg: float, yaw_deg: float):
 def _solve_rot(xyz, Rt, q0, restarts: int = 0, seed: int = 3):
     """Damped least squares to position + rotation Rt. First from q0; with restarts, the solution nearest q0."""
     m, d = MODEL, IK.data
+    nd = ARM_DOFS
     rng = np.random.default_rng(seed)
     jp, jr = np.zeros((3, m.nv)), np.zeros((3, m.nv))
     best = None
     for attempt in range(1 + restarts):
         q = np.array(q0, float)
         if attempt:
-            q[:7] = rng.uniform(IK.low[:7], IK.high[:7])
+            q[:nd] = rng.uniform(IK.low[:nd], IK.high[:nd])
         for _ in range(300):
             d.qpos[IK.qids] = q
             mujoco.mj_kinematics(m, d); mujoco.mj_comPos(m, d)
@@ -173,13 +185,14 @@ def _solve_rot(xyz, Rt, q0, restarts: int = 0, seed: int = 3):
             if quat[0] < 0: quat *= -1
             ln = np.linalg.norm(quat[1:])
             err_r = quat[1:] * (2 * np.arctan2(ln, quat[0]) / max(ln, 1e-9))
-            if np.linalg.norm(err) < 0.002 and np.linalg.norm(err_r) < 0.02:
-                if best is None or np.abs(q[:7] - q0[:7]).max() < np.abs(best[:7] - q0[:7]).max():
+            if np.linalg.norm(err) < 0.002 and np.linalg.norm(err_r) < IK.rot_tol:
+                if best is None or np.abs(q[:nd] - q0[:nd]).max() < np.abs(best[:nd] - q0[:nd]).max():
                     best = q.copy()
                 break
-            jac, e = np.vstack([jp[:, IK.dofs], .1 * jr[:, IK.dofs]]), np.r_[err, .1 * err_r]
+            w = IK.rot_weight
+            jac, e = np.vstack([jp[:, IK.dofs], w * jr[:, IK.dofs]]), np.r_[err, w * err_r]
             dq = jac.T @ np.linalg.solve(jac @ jac.T + 1e-4 * np.eye(6), e)
-            q[:7] = np.clip(q[:7] + np.clip(dq, -.08, .08), IK.low[:7] + .001, IK.high[:7] - .001)
+            q[:nd] = np.clip(q[:nd] + np.clip(dq, -.08, .08), IK.low[:nd] + .001, IK.high[:nd] - .001)
         if attempt == 0 and best is not None:
             return best
     return best
@@ -203,7 +216,7 @@ def _solve_tcp(xyz, q0, yaw_deg: float):
 # closed-loop until the measured position arrives. Contact (motor load) or a fault holds the present pose.
 LOAD_ABORT = int(os.environ.get("ROBOT_LOAD_ABORT", "550"))   # ST3215 present load, 0..1000
 SETTLE_TOL = 6                                                # ticks
-GRIP_SQUEEZE = int(os.environ.get("ROBOT_GRIP_SQUEEZE", "45"))   # ticks the jaw goal stays past a stalled grip
+GRIP_SQUEEZE = int(os.environ.get("ROBOT_GRIP_SQUEEZE", "35" if ROBOT_MODEL == "so101" else "45"))
 
 
 def _holds(st):
@@ -215,8 +228,17 @@ async def _stop_here(st, mids):
     await am._write(0x2A, {**_holds(st), **{mid: st[mid]["raw"] for mid in mids}}, 2)
 
 
+def _is_active_fault(m_state: dict) -> bool:
+    s = m_state["status"]
+    if not s:
+        return False
+    if s & ~0x20:
+        return True
+    return m_state["load"] > LOAD_ABORT
+
+
 def _flagged(st, plan, grip=False):
-    return {m for m in am.IDS if st[m]["status"] and (m != 8 or (8 in plan and not grip))}
+    return {m for m in am.IDS if _is_active_fault(st[m]) and (m != GRIP_ID or (GRIP_ID in plan and not grip))}
 
 
 async def _faults(now, plan, grip=False):
@@ -240,15 +262,27 @@ async def _drive(plan: dict, step: float = 0.02, dt: float = 0.12, track_tol: in
     for mid in plan:
         if not st[mid]["in_range"]:
             raise RuntimeError(f"{NAMES[mid - 1]} raw {st[mid]['raw']} is outside its calibrated range; commanding it would snap")
-    over = [m for m in am.IDS if m != 8 and st[m]["status"]]
-    if over:       # a motor overloaded while holding (seen on j2 after minutes stretched out): unload it, then go on
+    latched_0x20 = [m for m in am.IDS if m != GRIP_ID and st[m]["status"] == 0x20]
+    if latched_0x20:
+        # ST3215 overload latch (0x20) ignores new goal writes until Torque_Enable (0x28) is cycled 0 -> 1.
+        # Since 0x20 has already disengaged the H-bridge on those motors, cycling only them causes no drop.
+        await am._write(0x28, {m: 0 for m in latched_0x20}, 1)
+        await asyncio.sleep(0.08)
+        fresh = await am._read()
+        await am._write(0x2A, {**_holds(fresh), **{m: fresh[m]["raw"] for m in latched_0x20}}, 2)
+        await asyncio.sleep(0.05)
+        await am._write(0x28, {m: 1 for m in latched_0x20}, 1)
+        await asyncio.sleep(0.15)
+        st = await am._read()
+    over = [m for m in am.IDS if m != GRIP_ID and _is_active_fault(st[m])]
+    if over:       # a motor actively overloaded while holding: unload it, then go on
         await am._write(0x2A, {**_holds(st), **{m: st[m]["raw"] for m in over}}, 2)
         await asyncio.sleep(0.8)
         st = await am._read()
-        still = [(NAMES[m - 1], hex(st[m]["status"])) for m in am.IDS if m != 8 and st[m]["status"]]
+        still = [(NAMES[m - 1], hex(st[m]["status"])) for m in am.IDS if m != GRIP_ID and _is_active_fault(st[m])]
         if still:
             raise RuntimeError(f"motor fault {still} did not clear after unloading: nothing moved. Let the arm rest "
-                               f"(support it, set_torque(false)) or power-cycle the 12 V before continuing")
+                               f"(support it, set_torque(false)) or power-cycle power before continuing")
     raw_goal = {mid: int(round(st[mid]["lo"] + min(1.0, max(0.0, n)) * (st[mid]["hi"] - st[mid]["lo"]))) for mid, n in plan.items()}
     start = {mid: st[mid]["raw"] for mid in plan}
     hold = _holds(st)
@@ -263,9 +297,9 @@ async def _drive(plan: dict, step: float = 0.02, dt: float = 0.12, track_tol: in
         now = await am._read()
         bad = [(NAMES[m - 1], goals[m], now[m]["raw"]) for m in plan if abs(goals[m] - now[m]["raw"]) > track_tol]
         bad = bad or await _faults(now, plan, grip)
-        hot = [(NAMES[m - 1], now[m]["load"]) for m in plan if contact and m != 8 and now[m]["load"] > LOAD_ABORT]
+        hot = [(NAMES[m - 1], now[m]["load"]) for m in plan if contact and m != GRIP_ID and now[m]["load"] > LOAD_ABORT]
         if bad or hot:
-            await _stop_here(now, [m for m in plan if m != 8])
+            await _stop_here(now, [m for m in plan if m != GRIP_ID])
             why = f"tracking error or motor fault {bad}" if bad else f"contact: load over {LOAD_ABORT} {hot}"
             return f"ABORTED at step {k}/{n}: {why}; holding present pose."
     if not settle:
@@ -277,10 +311,10 @@ async def _drive(plan: dict, step: float = 0.02, dt: float = 0.12, track_tol: in
         err = {m: raw_goal[m] - now[m]["raw"] for m in plan}
         if all(abs(e) <= SETTLE_TOL for e in err.values()):
             return f"reached in {n} steps (+{it} corrections)."
-        hot = [(NAMES[m - 1], now[m]["load"]) for m in plan if contact and m != 8 and now[m]["load"] > LOAD_ABORT]
+        hot = [(NAMES[m - 1], now[m]["load"]) for m in plan if contact and m != GRIP_ID and now[m]["load"] > LOAD_ABORT]
         fault = [] if hot else await _faults(now, plan, grip)
         if fault or hot:
-            await _stop_here(now, [m for m in plan if m != 8])
+            await _stop_here(now, [m for m in plan if m != GRIP_ID])
             return f"ABORTED while settling: {'contact ' + str(hot) if hot else 'motor fault ' + str(fault)}; holding present pose."
         for m, e in err.items():
             if abs(e) > SETTLE_TOL:
@@ -311,22 +345,43 @@ def _grid(jpeg: bytes) -> bytes:
     return buf.getvalue()
 
 
-async def _fresh_frame(prefix: str):
-    """(jpeg, note) from the relay; same freshness rule as arm_mcp.look (age and byte change)."""
-    cams = {c["hash"][:8]: c for c in am._cameras()}
-    cam = cams.get(prefix)
+async def _fresh_frame(prefix: str, role: str = "wrist"):
+    """(jpeg, note) from cam_stream relay if running, else directly from Station NormFS WebSocket."""
+    if not prefix:
+        return None, "not configured"
+    cams = await am.live_cameras()
+    cam = None
+    if prefix == "auto":
+        cam = (next((c for c in cams if "u20cam" in c.get("label", "").lower()), None)
+               or (cams[0] if cams else None))
+    else:
+        cam = next((c for c in cams if c["hash"].startswith(prefix)), None)
     if cam is None:
-        return None, f"camera {prefix}: not live on the relay"
+        return None, f"camera {prefix}: not live"
+    h = cam["hash"]
     note = ""
     for _ in range(4):
-        data = am._snapshot(cam["hash"])
+        if cam.get("jpeg") is not None:
+            fresh_list = await stn.read_live_cameras(await am._client())
+            cur = next((c for c in fresh_list if c["hash"] == h), None)
+            if cur is None:
+                note = "missing"
+                await asyncio.sleep(0.25)
+                continue
+            data, age, w, h_px = cur["jpeg"], cur["age"], cur["w"], cur["h"]
+        else:
+            data = am._snapshot(h)
+            cur = next((c for c in am._cameras() if c["hash"] == h), None)
+            age = cur["age"] if cur else None
+            with PILImage.open(io.BytesIO(data)) as im:
+                w, h_px = im.size
         digest = __import__("hashlib").sha1(data).hexdigest()
-        age = next((c["age"] for c in am._cameras() if c["hash"] == cam["hash"]), None)
-        if age is not None and age <= am.MAX_CAM_AGE and digest != am._last_hash.get(cam["hash"]):
-            am._last_hash[cam["hash"]] = digest
-            return data, f"fresh, age={age:.2f}s"
+        if age is not None and age <= am.MAX_CAM_AGE and digest != am._last_hash.get(h):
+            am._last_hash[h] = digest
+            _last_wh[role] = (w, h_px)
+            return data, f"{h[:8]} fresh, age={age:.2f}s ({w * IMG_SCALE}x{h_px * IMG_SCALE})"
         note = f"age={age}"
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.25)
     return None, f"STALE ({note})"
 
 
@@ -337,11 +392,12 @@ def _wrist_pose(q):
     return KD.cam_xpos[WRIST_ID].copy(), KD.cam_xmat[WRIST_ID].reshape(3, 3).copy(), float(MODEL.cam_fovy[WRIST_ID])
 
 
-def _ray(pos, mat, fovy, u, v):
+def _ray(pos, mat, fovy, u, v, role="wrist"):
     """Same pinhole maths as sim_arm_mcp.pixel_ray (MuJoCo camera: looks along -z, y up)."""
+    w, h = _last_wh.get(role, (DEFAULT_W, DEFAULT_H))
     u, v = u / IMG_SCALE, v / IMG_SCALE
-    f = (H / 2) / np.tan(np.radians(fovy) / 2)
-    d = mat @ np.array([(u - W / 2) / f, -(v - H / 2) / f, -1.0])
+    f = (h / 2) / np.tan(np.radians(fovy) / 2)
+    d = mat @ np.array([(u - w / 2) / f, -(v - h / 2) / f, -1.0])
     return pos, d / np.linalg.norm(d)
 
 
@@ -350,15 +406,17 @@ def _ray(pos, mat, fovy, u, v):
 @server.tool(annotations={"readOnlyHint": True})
 @recorded
 async def look() -> list:
-    """FRESH images from every live camera plus the live motor-bus joint table. First image: wrist camera;
-    second: overview camera. Both upscaled 2x (598x448) with a red pixel grid labelled every 50 px."""
+    """FRESH images from every live camera plus the live motor-bus joint table. Images are upscaled 2x
+    with a red pixel grid labelled every 50 px."""
     out: list = []
-    for label, prefix in (("wrist camera", WRIST_CAM), ("overview camera", OVERVIEW_CAM)):
-        data, note = await _fresh_frame(prefix)
+    for role, label, prefix in (("wrist", "wrist camera", WRIST_CAM), ("overview", "overview camera", OVERVIEW_CAM)):
+        if not prefix:
+            continue
+        data, note = await _fresh_frame(prefix, role=role)
         if data is None:
             out.append(f"{label} {prefix}: {note}, not shown")
             continue
-        out.append(f"{label} {prefix} {note}, captured {time.strftime('%H:%M:%S')}")
+        out.append(f"{label} {note}, captured {time.strftime('%H:%M:%S')}")
         out.append(Image(data=_grid(data), format="jpeg"))
     out.append(am._table(await am._read()))
     return out
@@ -402,38 +460,40 @@ async def move_to(targets: dict[str, float], step: float = 0.02, dt: float = 0.1
 @server.tool(annotations={"destructiveHint": True})
 @recorded
 async def gripper(open_fraction: float) -> str:
-    """Set the gripper jaws (j8) to a normalized target in ONE call: 1.0 = fully open, 0.0 = closed. Closing stops
-    by itself when the jaws stall on an object and then holds it with a limited squeeze: the result says
-    "Jaws stalled on something" and j8 stays above its fully closed value (~0.03)."""
+    """Set the gripper jaws to a normalized target in ONE call: 1.0 = fully open, 0.0 = closed. Closing stops
+    by itself when the jaws stall on an object and then holds it with a limited squeeze."""
     st = await am._read()
     if any(st[mid]["torque"] == 0 for mid in am.IDS):
         raise RuntimeError("torque is off on some motors: call set_torque(true) first")
-    if not st[8]["in_range"]:
-        raise RuntimeError("j8 is outside its calibrated range; commanding it would snap")
-    lo, hi = st[8]["lo"], st[8]["hi"]
-    target = int(round(lo + min(OPEN_MAX, max(0.0, float(open_fraction))) * (hi - lo)))   # the jaws stop mechanically near 0.96
-    start, hold = st[8]["raw"], _holds(st)
+    g = GRIP_ID
+    gname = NAMES[g - 1]
+    if not st[g]["in_range"]:
+        raise RuntimeError(f"{gname} is outside its calibrated range; commanding it would snap")
+    lo, hi = st[g]["lo"], st[g]["hi"]
+    target = int(round(lo + min(OPEN_MAX, max(0.0, float(open_fraction))) * (hi - lo)))
+    start, hold = st[g]["raw"], _holds(st)
     n = max(1, int(abs(target - start) / (0.06 * (hi - lo)) + 0.999))
     prev, still = start, 0
+    stall_gap = 120 if ROBOT_MODEL == "so101" else 200
     for k in range(1, n + 1):
         goal = int(round(start + (target - start) * k / n))
-        await am._write(0x2A, {**hold, 8: goal}, 2)
+        await am._write(0x2A, {**hold, g: goal}, 2)
         await asyncio.sleep(0.1)
-        now = (await am._read())[8]["raw"]
+        now = (await am._read())[g]["raw"]
         still = still + 1 if abs(now - prev) < 6 else 0
-        if target < start and now - goal > 200 and still >= 3:    # closing, far behind and not moving for 0.3 s: stalled
+        if target < start and now - goal > stall_gap and still >= 3:
             break
         prev = now
     await asyncio.sleep(0.35)
     st = await am._read()
-    out = f"gripper at {st[8]['norm']:.3f}."
-    if st[8]["raw"] - st[8]["goal"] > GRIP_SQUEEZE + 15:     # stalled on an object: hold it with a bounded squeeze,
-        await am._write(0x2A, {**_holds(st), 8: st[8]["raw"] - GRIP_SQUEEZE}, 2)   # or the servo overloads (0x20)
+    out = f"gripper at {st[g]['norm']:.3f}."
+    if st[g]["raw"] - st[g]["goal"] > GRIP_SQUEEZE + 15:
+        await am._write(0x2A, {**_holds(st), g: max(lo, st[g]["raw"] - GRIP_SQUEEZE)}, 2)
         await asyncio.sleep(0.3)
         st = await am._read()
-        out = f"Jaws stalled on something at {st[8]['norm']:.3f}: holding it with a limited squeeze."
-    elif st[8]["goal"] - st[8]["raw"] > 25:                  # opened against the mechanical stop: stop pushing
-        await am._write(0x2A, {**_holds(st), 8: st[8]["raw"]}, 2)
+        out = f"Jaws stalled on something at {st[g]['norm']:.3f}: holding it with a limited squeeze."
+    elif st[g]["goal"] - st[g]["raw"] > 25:
+        await am._write(0x2A, {**_holds(st), g: st[g]["raw"]}, 2)
     return out + "\n" + am._table(st)
 
 
@@ -501,7 +561,7 @@ async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg:
                 break
             chunk = np.clip(goal - now, -0.3, 0.3)
             last = bool(np.all(np.abs(goal - now) <= 0.3))
-            out = await _drive({i + 1: float(now[i] + chunk[i]) for i in range(7)}, step, dt, settle=last)
+            out = await _drive({i + 1: float(now[i] + chunk[i]) for i in range(ARM_DOFS)}, step, dt, settle=last)
             if out.startswith("ABORTED"):
                 pos, _ = IK.fk((await measured())[0])
                 return f"ABORTED on the way to {np.round(wp, 3).tolist()}; tcp now {pos.round(3).tolist()}.\n" + out
@@ -535,7 +595,7 @@ async def pixel_to_table(camera: str, u: float, v: float, height: float = 0.0) -
         pos, mat, fovy = np.array(cal["pos"]), np.array(cal["xmat"]).reshape(3, 3), float(cal["fovy"])
     else:
         raise ValueError("camera must be one of ['wrist', 'overview']")
-    origin, d = _ray(pos, mat, fovy, float(u), float(v))
+    origin, d = _ray(pos, mat, fovy, float(u), float(v), role=camera)
     if d[2] > -1e-3 and origin[2] > height:
         return f"the ray through ({u}, {v}) does not go down to z = {height} (it points at or above the horizon)"
     t = (height - origin[2]) / d[2]
@@ -547,8 +607,8 @@ async def pixel_to_table(camera: str, u: float, v: float, height: float = 0.0) -
 async def _views(which=("wrist", "overview")) -> list:
     out = []
     for label, prefix in (("wrist", WRIST_CAM), ("overview", OVERVIEW_CAM)):
-        if label in which:
-            data, note = await _fresh_frame(prefix)
+        if label in which and prefix:
+            data, note = await _fresh_frame(prefix, role=label)
             out += [f"{label} camera {note}", Image(data=_grid(data), format="jpeg")] if data else [f"{label} camera: {note}"]
     return out
 
@@ -563,23 +623,27 @@ def _stopped(text: str) -> bool:
 
 
 OPEN_MAX = float(os.environ.get("ROBOT_GRIPPER_OPEN_MAX", "0.96"))
-CLOSED_NORM = float(os.environ.get("ROBOT_GRIPPER_CLOSED", "0.045"))   # j8 above this after closing = holding something
-FLAT_Z = float(os.environ.get("ROBOT_FLAT_PICK_Z", "0.006"))   # TCP height for flat objects (fingertips at the table)
-CARRY_Z = float(os.environ.get("ROBOT_CARRY_Z", "0.20"))
+PICK_OPEN = float(os.environ.get("ROBOT_GRIPPER_PICK_OPEN", "0.55" if ROBOT_MODEL == "so101" else "1.0"))
+CLOSED_NORM = float(os.environ.get("ROBOT_GRIPPER_CLOSED", "0.045"))
+FLAT_Z = float(os.environ.get("ROBOT_FLAT_PICK_Z", "0.008" if ROBOT_MODEL == "so101" else "0.006"))
+CARRY_Z = float(os.environ.get("ROBOT_CARRY_Z", "0.15" if ROBOT_MODEL == "so101" else "0.20"))
+PARK_Y = 0.16 if ROBOT_MODEL == "so101" else 0.19
 
 
 @server.tool(annotations={"destructiveHint": True})
 @recorded
 async def pick_at(x: float, y: float, object_height: float = 0.02, yaw_deg: float = 0.0) -> list:
     """Pick up a small object whose centre is at (x, y) on the table (base frame, from pixel_to_table on a CLOSE
-    wrist view): open the jaws, hover above it, descend, close until the jaws stall, lift to z = 0.20. One call
+    wrist view): open the jaws, hover above it, descend, close until the jaws stall, lift to carry height. One call
     replaces move/close/lift. object_height is the object's height in metres; yaw_deg turns the jaws about
     vertical (the jaws close along x at 0). Returns what happened, whether something is held, and fresh images.
     Stops at the first refused or aborted move and says where the arm is."""
     log = []
+    g = GRIP_ID
+    gname = NAMES[g - 1]
     st = await am._read()
-    if st[8]["norm"] < 0.88:
-        log.append("open: " + _first(await gripper(open_fraction=1.0)))
+    if st[g]["norm"] < PICK_OPEN - 0.07:
+        log.append("open: " + _first(await gripper(open_fraction=PICK_OPEN)))
     global MIN_Z
     flat = object_height < 0.01          # flat things (wrappers): go down until the fingertips touch the table
     for name, z in (("hover", max(object_height + 0.05, 0.07)), ("descend", FLAT_Z if flat else max(MIN_Z, object_height / 2 + 0.008))):
@@ -596,18 +660,18 @@ async def pick_at(x: float, y: float, object_height: float = 0.02, yaw_deg: floa
             log.append("(fingertips are on the table: closing here)")
     log.append("close: " + _first(await gripper(open_fraction=0.0)))
     st = await am._read()
-    if st[8]["norm"] <= CLOSED_NORM:      # closed on nothing: do not carry air to 0.20; back off to a close viewpoint
-        await gripper(open_fraction=1.0)
+    if st[g]["norm"] <= CLOSED_NORM:      # closed on nothing: back off to a close viewpoint
+        await gripper(open_fraction=PICK_OPEN)
         out = await move_tcp(x=x, y=y, z=0.09, top_down=True, yaw_deg=yaw_deg)
         log.append("back off: " + _first(out))
-        return [f"NOT holding (the jaws closed fully to {st[8]['norm']:.3f}). The jaws are open again and the gripper is 9 cm above "
+        return [f"NOT holding (the jaws closed fully to {st[g]['norm']:.3f}). The jaws are open again and the gripper is 9 cm above "
                 f"the pick point: find the object in the wrist image below, re-localize and retry.\n" + "\n".join(log)] + await _views()
     out = await move_tcp(x=x, y=y, z=CARRY_Z, top_down=True, yaw_deg=yaw_deg)
     log.append("lift: " + _first(out))
     st = await am._read()
-    held = st[8]["norm"] > CLOSED_NORM
-    verdict = (f"HOLDING something (j8 {st[8]['norm']:.3f}, load {st[8]['load']}): check the wrist image shows it between the jaws."
-               if held else f"NOT holding (j8 closed fully to {st[8]['norm']:.3f}): the object is still on the table; re-localize and retry.")
+    held = st[g]["norm"] > CLOSED_NORM
+    verdict = (f"HOLDING something ({gname} {st[g]['norm']:.3f}, load {st[g]['load']}): check the wrist image shows it between the jaws."
+               if held else f"NOT holding ({gname} closed fully to {st[g]['norm']:.3f}): the object is still on the table; re-localize and retry.")
     if _stopped(out):
         verdict = "LIFT STOPPED. " + verdict
     return [verdict + "\n" + "\n".join(log)] + await _views()
@@ -615,17 +679,17 @@ async def pick_at(x: float, y: float, object_height: float = 0.02, yaw_deg: floa
 
 @server.tool(annotations={"destructiveHint": True})
 @recorded
-async def drop_at(x: float, y: float, z: float = 0.19) -> list:
+async def drop_at(x: float, y: float, z: float = CARRY_Z) -> list:
     """Carry what the gripper holds to (x, y) at height z (it first rises to z, then travels level), open the jaws
-    to release it, then retreat at the same height to above the parking spot (0.0, 0.19). Use z at least 6 cm above
+    to release it, then retreat at the same height to above the parking spot. Use z at least 5 cm above
     a box rim. Returns what happened and fresh images."""
     log = []
     out = await move_tcp(x=x, y=y, z=z, top_down=True)
     log.append("carry: " + _first(out))
     if _stopped(out):
         return ["DROP STOPPED before releasing (still holding).\n" + "\n".join(log)] + await _views()
-    log.append("release: " + _first(await gripper(open_fraction=1.0)))
-    out = await move_tcp(x=0.0, y=0.19, z=max(z, 0.12), top_down=True)
+    log.append("release: " + _first(await gripper(open_fraction=PICK_OPEN)))
+    out = await move_tcp(x=0.0, y=PARK_Y, z=max(z, 0.12), top_down=True)
     log.append("retreat: " + _first(out))
     return ["RELEASED at " + str([round(x, 3), round(y, 3), round(z, 3)]) + ".\n" + "\n".join(log)] + await _views()
 

@@ -87,6 +87,18 @@ everything else is passed to `claude`.
 In the Robotics-Hackathon D: workspace: `bash scripts/run.sh sim-arm-mcp | sim-agent | sim-replay | sim-judge | sim-selftest | build-workspace`,
 or double-click `Start-Sim-Agent.cmd` (Windows Claude, recordings in `outputs\sim-sessions`).
 
+## SO-101 adaptation (`ROBOT_MODEL=so101`)
+The same simulation, 5-DOF IK, camera ray projection, `pick_at` / `drop_at` skills, and real-arm MCP stack also run on the **6-motor SO-101 follower arm** (`j1..j5` + `j6` gripper):
+- Scene & camera calibration: `sim/layout_so101.json`, `camera_pose/wrist_camera_so101.json` (calibrated to `Innomaker-U20CAM-1080p-S1`, 398×224).
+- MCP servers & prompts: `sim/so101_sim_mcp.py` (`so101-sim`, `OPERATOR_SO101.md`) and `sim/so101_real_mcp.py` (`so101-real`, `OPERATOR_SO101_REAL.md`).
+- Station transport: connects automatically to Station's NormFS WebSocket (`ws://127.0.0.1:8000/api` or `:8889/api`) or TCP (`:8888`), reading both `st3215/inference` and `usbvideo/<hash>` directly.
+```bash
+ROBOT_MODEL=so101 MUJOCO_GL=egl uv run --no-project --with 'mcp>=1.12,<2' --with mujoco --with numpy --with pillow python3 sim/selftest.py
+ROBOT_MODEL=so101 python3 arm_mcp/health.py
+bash sim/run_so101_agent.sh
+bash sim/run_so101_agent_real.sh
+```
+
 ## Known gaps
 Object/bin sizes and positions, camera FOVs and the overview camera pose are estimates; link
 masses come from the CAD (≈0.6 kg arm); the j1/j5/j7 signs are unverified on hardware
