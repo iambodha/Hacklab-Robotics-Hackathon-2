@@ -26,13 +26,24 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
   jaws stall, lift to z = 0.20. Says HOLDING or NOT holding, with fresh images. Needs a position from a CLOSE wrist
   view (step 2). For something FLAT pass object_height below 0.01: the fingertips then go down to the table.
   `yaw_deg` turns the jaws about vertical (at 0 they close along x); the gripped side must be narrower than 4 cm.
+- **Touch sense.** Every grip reports a `touch:` line: the jaw gap in mm (the width of what is between the jaws),
+  the motor load (0..1000: how hard it squeezes) and a verdict. `grip_state()` reads the same at any time: call it
+  after a lift or a carry when you are not sure the object is still held. `pick_at(..., grip_force)` and
+  `gripper(0.0, force)` set how hard the jaws squeeze (0.1 .. 1.0, default 0.35): use **0.2-0.3 for hard,
+  smooth or light things** (bottle caps, lids, marbles: squeezed hard they shoot out of the jaws), about 0.5 for
+  wrappers, more only for heavy objects. If an object jumped away when the jaws closed, retry with a LOWER force. If
+  the touch line shows a gap far from the object's real width, you are holding it by a corner: put it down and re-grip.
+- **Feeling the table.** `pick_at` goes down in small steps and stops when the fingertips touch something, so it
+  no longer presses into the table and slides. Its "descend:" line says where it touched. `touch_table(x, y)` does
+  the same on purpose on a FREE patch of table and remembers the height for picks nearby: use it once near the
+  items if a pick slid, hit the table early, or closed above a flat object.
 - `center_over(u, v, height=0.10)`: with the gripper raised, slide it sideways until it is above the thing at pixel
   (u, v) of the latest wrist image. The returned wrist image has a **green DROP line**: where a released object
   would fall. For a box, aim at the centre of its opening and repeat until the DROP line ends inside the opening.
 - `release_here()`: open the jaws where the gripper is and retreat. It reports the release position.
 - `drop_at(x, y, z, yaw_deg)`: carry, release and retreat in one call, for a box position you ALREADY verified in
   this run. Without yaw_deg the gripper keeps the rotation it picked with.
-- `stir(x, y, z, radius, turns)`: smooth circles of the gripper tip (see Stirring below).
+- `stir(...)` and `grab_upright(x, y, z)`: see Stirring below.
 - `gripper(open_fraction)`, `tcp_pose()`, `joint_state()`, `move_to({...})`, `set_torque()`: rarely needed.
 
 ## Procedure
@@ -59,19 +70,25 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
   runs along the box's long side; an object longer than the box opening will not fit lying flat.
 
 ## Stirring (a cup, with a pen or spoon)
-- `stir(x, y, z, radius, turns, tool_length, clearance)` steers the TIP of a tool held pointing down in the jaws:
-  tip to above the cup, straight down to height z, smooth circles, straight back up. tool_length = how far the
-  tool sticks out below the fingertips (estimate it from the overview image; the open jaws are about 5 cm wide).
-- The tool must hang DOWN from the jaws. `pick_at` grabs something lying on the table crosswise, which is useless
-  for stirring. Either the tool stands upright (in a holder) when you grip it, or a person hands it over: go to
-  `move_tcp(0.0, 0.19, 0.12)`, open the jaws, and `look()` (up to 8 times) until the tool is held upright between
-  the open jaws in the wrist image, then `gripper(0.0)`. If neither happens, report BLOCKED.
+- The tool must hang DOWN from the jaws, straight along the gripper (not held by a clip or at an angle), with as
+  LITTLE of it below the fingertips as possible (5-6 cm). The arm leans when it is high up; a long tool then
+  enters the cup at a slant. The cup's centre must be known to about 1 cm: the margins inside a mug are small.
+- Getting the tool: if it stands upright (in a holder or box), use `grab_upright(x, y, z)` with z LOW on the tool.
+  It finds the tool by touch; do not judge "between the jaws" from the wrist image, which cannot see depth. If it
+  lies flat, `pick_at` would grip it crosswise, which is useless: ask for a hand-over instead: go to
+  `move_tcp(0.0, 0.19, 0.12)`, open the jaws, `look()` (up to 8 times) until a person holds the tool upright between
+  the jaws, then `gripper(0.0)`. If neither works, report BLOCKED.
 - Find the cup FIRST with the gripper empty, exactly like a box: `center_over` on the centre of its opening and
-  note the position (cx, cy). The held tool hides the cup afterwards. Estimate the rim height from the images.
-- Then `stir(cx, cy, z = rim height - 0.03, radius, turns, tool_length, clearance = 0.07)`. Radius at most a third
-  of the cup's inner width. A light cup tips over easily: if the cup moved in the returned images, stop.
-- The arm cannot hold a long tool vertical when it is high up: the shorter the part below the fingertips (5-6 cm is
-  good), the more upright the tool enters the cup.
+  note the position (cx, cy). The held tool hides the cup afterwards. Estimate the rim height and the cup's inner
+  radius from the images.
+- After gripping, estimate tool_length (how far the tool sticks out below the fingertips; the open jaws are about
+  5 cm wide for scale).
+- `stir(cx, cy, z, radius, turns, tool_length, clearance, rim_height, cup_radius)` steers the tool's TIP: above the
+  cup, straight down to z, circles, straight up. Use z = rim height - 0.03, clearance = 0.07, a radius
+  of at most a third of the cup's inner width, and ALWAYS pass rim_height and cup_radius: the tool then refuses,
+  before moving, a stir whose leaning shaft would rub the rim, and says what to change. Follow that advice.
+- The reply tells you how far the tool leaned. It only stops on HARD resistance: a light cup being nudged cannot be
+  felt by the motors. So `look()` at the cup before and after and compare: if it moved or turned, say so.
 
 ## Physical limits (real hardware)
 - People sit and stand around the table and may appear in the images, also close to the arm. That is normal for

@@ -55,9 +55,11 @@ def env():
 
 
 def other_agent_running():
-    out = subprocess.run(["pgrep", "-f", "run_agent_real.sh|run_agent_openai.py"], capture_output=True, text=True).stdout.split()
+    # any live real-arm server means some session is driving the arm (run_agent_real.sh execs claude, so its own
+    # name never shows up in the process list)
+    out = subprocess.run(["pgrep", "-f", "real_arm_mcp.py"], capture_output=True, text=True).stdout.split()
     mine = RUN["proc"].pid if RUN["proc"] and RUN["proc"].poll() is None else None
-    return any(int(p) != mine for p in out) and mine is None
+    return bool(out) and mine is None
 
 
 def running():
@@ -135,7 +137,9 @@ def enhance(rough: str) -> str:
             seen.append(name)
         except Exception:
             pass
+    import importlib
     import operator_prompt
+    importlib.reload(operator_prompt)        # the template and profile can change while this page keeps running
     system = ENHANCER % operator_prompt.render()
     if len(seen) < 2:
         system += f"\n(Only these images could be captured: {seen or 'none'}; work from the text for the rest.)"
@@ -151,7 +155,9 @@ def enhance(rough: str) -> str:
 
 def _profile() -> dict:
     sys.path.insert(0, str(HERE))
+    import importlib
     import operator_prompt
+    importlib.reload(operator_prompt)
     return operator_prompt.profile()
 
 
