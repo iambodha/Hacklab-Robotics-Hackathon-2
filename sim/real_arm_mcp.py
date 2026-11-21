@@ -72,6 +72,33 @@ LO, HI = MODEL.actuator_ctrlrange.T.copy()          # URDF limits (rad), exactly
 KD = mujoco.MjData(MODEL)                            # kinematics-only data for camera poses
 WRIST_ID = MODEL.camera("wrist_cam").id
 
+# arm_mcp.station.bus_frame() calls cli.follow() on every read and never unsubscribes, so a long session piles
+# hundreds of subscriptions onto one Station connection until reads time out (seen after a few minutes of an
+# operator run). Here one subscription per connection is kept and each read takes the next fresh entry from it.
+_state_queues: dict = {}
+
+
+async def _bus_frame_once(cli):
+    stn = am.stn
+    q = _state_queues.get(id(cli))
+    if q is None:
+        _state_queues.clear()
+        q = asyncio.Queue()
+        cli.follow(stn.ST3215_QUEUE, q)
+        _state_queues[id(cli)] = q
+    while not q.empty():                 # drop entries that arrived while nobody was reading
+        q.get_nowait()
+    e = await asyncio.wait_for(q.get(), 5)
+    st = stn.st3215.InferenceStateReader(memoryview(bytes(e.Data)))
+    for bs in st.get_buses() or []:
+        if stn.as_str(bs.get_bus().get_serial_number()) == stn.BUS:
+            return bs.get_motors() or []
+    return None
+
+
+if os.environ.get("ROBOT_SINGLE_SUBSCRIPTION", "1") == "1":
+    am.stn.bus_frame = _bus_frame_once
+
 # Optional calibration override: Station's stored ranges can go stale (21 Nov: this machine's Station kept j6
 # 1688-2408 / j8 1898-2198 while the follower was re-calibrated to 1006-3090 / 1228-2868). ROBOT_RANGES_FILE
 # (JSON {"j1": [lo, hi], ...}, raw ticks) replaces lo/hi/norm/in_range for every read; Station is not changed.

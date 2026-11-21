@@ -1,0 +1,271 @@
+"""Web page to start, watch and stop the autonomous operator on the REAL arm: http://127.0.0.1:8894
+
+  python3 sim/operator_ui.py            # this machine only
+  python3 sim/operator_ui.py --port 8894
+
+It runs sim/run_agent_real.sh (Claude with only the elrobot-real tools) with the task typed into the page, shows both
+cameras, every tool call as it happens (sim/real_sessions/actions.jsonl), the agent's short notes and its final
+report. Stop kills the agent; the servos then hold their last goal. Park sends move_tcp(0.0, 0.19, 0.06).
+Needs Station (:8888) and the camera relay (:8890) running, like run_agent_real.sh. Stdlib only; `uv` for Park.
+Transcripts go to sim/real_sessions/ui_run_<time>.jsonl. The page has no login: keep it on loopback.
+"""
+import argparse
+import json
+import os
+import signal
+import subprocess
+import threading
+import time
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent
+SESS = HERE / "real_sessions"
+CAM_URL = os.environ.get("ROBOT_CAM_URL", "http://127.0.0.1:8890")
+CAMS = {"wrist": os.environ.get("ROBOT_WRIST_CAM", "e091eeda"), "overview": os.environ.get("ROBOT_OVERVIEW_CAM", "5cd55831")}
+RUN = {"proc": None, "file": None, "t0": None, "task": "", "model": "", "stopped": False}
+LOCK = threading.Lock()
+
+DEFAULT_TASK = """Sort the loose items on the white table into the two boxes.
+- GARBAGE (wrappers, foil, paper) goes into the WHITE cardboard box.
+- Everything else goes into the GREY box.
+For a flat or crumpled wrapper: if a pick with its real height closes on nothing, retry with object_height 0.005.
+Box drop points (measured, use as given): WHITE box: drop_at(0.155, 0.225, 0.19). GREY box: drop_at(-0.14, 0.17, 0.18).
+One survey look from move_tcp(0.0, 0.20, 0.22) shows the area in front of the arm. At most 3 pick tries per item.
+If a tool call returns an error with no message, call joint_state once and then retry the same call once.
+When finished, park with move_tcp(0.0, 0.19, 0.06) and report DONE with what went where, or BLOCKED."""
+
+
+def env():
+    e = dict(os.environ)
+    if "NORMA_CORE_REPO" not in e:
+        for c in (REPO / "norma-core", REPO.parent / "norma-core"):
+            if (c / "hardware/elrobot/simulation").exists():
+                e["NORMA_CORE_REPO"] = str(c.resolve())
+                break
+    return e
+
+
+def other_agent_running():
+    out = subprocess.run(["pgrep", "-f", "run_agent_real.sh"], capture_output=True, text=True).stdout.split()
+    mine = RUN["proc"].pid if RUN["proc"] and RUN["proc"].poll() is None else None
+    return any(int(p) != mine for p in out) and mine is None
+
+
+def running():
+    return RUN["proc"] is not None and RUN["proc"].poll() is None
+
+
+def start(task, model, effort):
+    with LOCK:
+        if running() or other_agent_running():
+            return "an operator run is already in progress"
+        SESS.mkdir(exist_ok=True)
+        f = SESS / f"ui_run_{time.strftime('%Y%m%d-%H%M%S')}.jsonl"
+        cmd = ["bash", str(HERE / "run_agent_real.sh"), "--model", model, "--max-turns", "90",
+               "--output-format", "stream-json", "--verbose", "-p", "Task for this run (it replaces the default task): " + task]
+        if effort:
+            cmd[4:4] = ["--effort", effort]
+        RUN.update(file=f, t0=time.time(), task=task, model=f"{model} {effort}".strip(), stopped=False)
+        RUN["proc"] = subprocess.Popen(cmd, cwd=REPO, env=env(), stdin=subprocess.DEVNULL, stdout=open(f, "w"),
+                                       stderr=open(str(f) + ".err", "w"), start_new_session=True)
+    return None
+
+
+def stop():
+    if not running():
+        return "no run in progress"
+    RUN["stopped"] = True
+    try:
+        os.killpg(RUN["proc"].pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    return None
+
+
+PARK = """
+import asyncio, os, sys
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+async def main():
+    p = StdioServerParameters(command="bash", args=[sys.argv[1]], env=dict(os.environ))
+    async with stdio_client(p) as (r, w):
+        async with ClientSession(r, w) as s:
+            await s.initialize()
+            res = await s.call_tool("move_tcp", {"x": 0.0, "y": 0.19, "z": 0.06})
+            print(res.content[0].text.splitlines()[0])
+asyncio.run(main())
+"""
+
+
+def park():
+    if running() or other_agent_running():
+        return "stop the run first"
+    r = subprocess.run(["uv", "run", "-q", "--no-project", "--with", "mcp>=1.12,<2", "python", "-c", PARK, str(HERE / "run_real_server.sh")],
+                       cwd=REPO, env=env(), capture_output=True, text=True, timeout=120)
+    lines = [l for l in r.stdout.splitlines() if l.strip()]
+    return lines[-1] if lines else ("park failed: " + r.stderr.strip()[-200:])
+
+
+def read_transcript():
+    notes, result = [], None
+    try:
+        for line in open(RUN["file"]):
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
+            if d.get("type") == "assistant":
+                for b in d["message"].get("content", []):
+                    if b.get("type") == "text" and b.get("text", "").strip():
+                        notes.append(b["text"].strip()[:400])
+            elif d.get("type") == "result":
+                result = {"text": d.get("result", ""), "seconds": round(d.get("duration_ms", 0) / 1000),
+                          "turns": d.get("num_turns"), "cost": round(d.get("total_cost_usd", 0), 2)}
+    except (OSError, TypeError):
+        pass
+    return notes, result
+
+
+def read_actions():
+    if not RUN["t0"]:
+        return []
+    since = time.strftime("%H:%M:%S", time.localtime(RUN["t0"]))
+    rows = []
+    try:
+        for line in open(SESS / "actions.jsonl").read().splitlines()[-400:]:
+            d = json.loads(line)
+            if d["t"] < since:
+                continue
+            args = {k: (round(v, 3) if isinstance(v, float) else v) for k, v in d["args"].items() if k not in ("step", "dt", "top_down")}
+            res = d["error"] or d["result"]
+            rows.append({"t": d["t"], "tool": d["tool"], "args": json.dumps(args)[:90], "s": d["s"],
+                         "result": (res.splitlines()[0] if res else "")[:160] if d["tool"] != "look" else "(images)", "error": bool(d["error"])})
+    except (OSError, ValueError):
+        pass
+    return rows[-60:]
+
+
+def status():
+    notes, result = read_transcript()
+    return {"running": running(), "other": other_agent_running(), "task": RUN["task"], "model": RUN["model"],
+            "elapsed": round(time.time() - RUN["t0"]) if RUN["t0"] and running() else None, "stopped": RUN["stopped"],
+            "actions": read_actions(), "notes": notes[-6:], "result": result, "default_task": DEFAULT_TASK}
+
+
+_hash = {}
+
+
+def snapshot(name):
+    prefix = CAMS[name]
+    if prefix not in _hash:
+        cams = json.loads(urllib.request.urlopen(CAM_URL + "/api/cameras", timeout=2).read())
+        _hash[prefix] = next(c["hash"] for c in cams if c["hash"].startswith(prefix))
+    return urllib.request.urlopen(f"{CAM_URL}/snapshot/{_hash[prefix]}", timeout=2).read()
+
+
+PAGE = rb"""<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Arm operator</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1d2430;--mut:#667085;--ok:#12805c;--bad:#c0362c;--line:#e4e7ec;--acc:#2456d6}
+@media (prefers-color-scheme:dark){:root{--bg:#111418;--card:#1a1f26;--fg:#e6e9ee;--mut:#98a2b3;--ok:#3ccf91;--bad:#ff6b5e;--line:#2a313b;--acc:#7aa2ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif;padding:16px}
+h1{font-size:18px;margin:0 0 12px}h2{font-size:13px;margin:0 0 8px;color:var(--mut);font-weight:600}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}.wide{grid-column:1/-1}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto}
+textarea{width:100%;height:190px;font:13px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px}
+select,button{font:inherit;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+button{cursor:pointer;font-weight:600}#start{background:var(--acc);color:#fff;border-color:var(--acc)}#stop{color:var(--bad);border-color:var(--bad)}
+button:disabled{opacity:.45;cursor:default}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+img{width:100%;border-radius:8px;background:#000;aspect-ratio:299/224;object-fit:contain}.cams{display:grid;gap:8px;grid-template-columns:1fr 1fr}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:13px}td,th{padding:3px 6px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut)}.bad{color:var(--bad)}.ok{color:var(--ok)}#state{font-weight:600}pre{white-space:pre-wrap;margin:0;font:13px/1.45 system-ui,sans-serif}
+.mut{color:var(--mut)}</style>
+<h1>Arm operator <span id=state class=mut></span></h1>
+<div class=grid>
+<div class=card><h2>Task</h2><textarea id=task></textarea>
+ <div class=row><select id=model><option value=sonnet>Sonnet</option><option value=haiku>Haiku</option><option value=opus>Opus</option></select>
+ <select id=effort><option value=low>effort: low</option><option value="">effort: default</option><option value=medium>effort: medium</option></select>
+ <button id=start>Start</button><button id=stop>Stop</button><button id=park>Park arm</button><span id=msg class=mut></span></div></div>
+<div class=card><h2>Cameras (wrist, overview)</h2><div class=cams><img id=cw alt="wrist camera"><img id=co alt="overview camera"></div></div>
+<div class="card wide"><h2>Result</h2><pre id=result class=mut>No run yet.</pre></div>
+<div class="card wide"><h2>Agent notes</h2><pre id=notes class=mut>-</pre></div>
+<div class="card wide"><h2>Tool calls</h2><table id=acts></table></div></div>
+<script>
+const $=id=>document.getElementById(id), esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+let filled=false;
+async function post(p,b){const r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});const j=await r.json();$('msg').textContent=j.message||'';tick();}
+$('start').onclick=()=>post('/api/start',{task:$('task').value,model:$('model').value,effort:$('effort').value});
+$('stop').onclick=()=>post('/api/stop');
+$('park').onclick=()=>{$('msg').textContent='parking...';post('/api/park');};
+async function tick(){let s;try{s=await (await fetch('/api/status')).json();}catch(e){$('state').textContent='(page lost contact)';return;}
+ if(!filled){$('task').value=s.task||s.default_task;filled=true;}
+ const busy=s.running||s.other;
+ $('state').innerHTML=s.running?`<span class=ok>running ${s.elapsed}s (${esc(s.model)})</span>`:s.other?'<span class=bad>another run is in progress (started outside this page)</span>':'<span class=mut>idle</span>';
+ $('start').disabled=busy;$('stop').disabled=!s.running;$('park').disabled=busy;
+ if(s.result)$('result').innerHTML=`<b>${s.result.seconds} s, ${s.result.turns} turns, $${s.result.cost}</b>\n`+esc(s.result.text),$('result').className='';
+ else if(s.running)$('result').textContent='Running...';else if(s.stopped)$('result').textContent='Stopped by the operator. The servos hold their last goal.';
+ $('notes').textContent=s.notes.length?s.notes.join('\n\n'):'-';
+ $('acts').innerHTML='<tr><th>time</th><th>tool</th><th>arguments</th><th>s</th><th>result</th></tr>'+s.actions.slice().reverse().map(a=>`<tr><td>${a.t}</td><td>${a.tool}</td><td>${esc(a.args)}</td><td>${a.s}</td><td class="${a.error||/ABORT|STOPPED|NOT holding/.test(a.result)?'bad':''}">${esc(a.result)}</td></tr>`).join('');}
+function cams(){const t=Date.now();$('cw').src='/cam/wrist?'+t;$('co').src='/cam/overview?'+t;}
+setInterval(tick,1500);setInterval(cams,700);tick();cams();
+</script>"""
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def send(self, code, body, ctype="application/json"):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        path = self.path.split("?")[0]
+        if path == "/":
+            self.send(200, PAGE, "text/html; charset=utf-8")
+        elif path == "/api/status":
+            self.send(200, json.dumps(status()).encode())
+        elif path in ("/cam/wrist", "/cam/overview"):
+            try:
+                self.send(200, snapshot(path.rsplit("/", 1)[1]), "image/jpeg")
+            except Exception:
+                self.send(503, b"")
+        else:
+            self.send(404, b"{}")
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(n) or b"{}")
+        except ValueError:
+            body = {}
+        if self.path == "/api/start":
+            task = (body.get("task") or "").strip()
+            model = body.get("model") if body.get("model") in ("sonnet", "haiku", "opus") else "sonnet"
+            effort = body.get("effort") if body.get("effort") in ("low", "medium", "high", "") else "low"
+            msg = "the task is empty" if not task else start(task, model, effort)
+        elif self.path == "/api/stop":
+            msg = stop()
+        elif self.path == "/api/park":
+            try:
+                msg = park()
+            except Exception as e:
+                msg = f"park failed: {e}"
+        else:
+            return self.send(404, b"{}")
+        self.send(200, json.dumps({"message": msg or "ok"}).encode())
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description="Web page to run the real-arm operator")
+    ap.add_argument("--port", type=int, default=8894)
+    a = ap.parse_args()
+    print(f"operator page -> http://127.0.0.1:{a.port}", flush=True)
+    ThreadingHTTPServer(("127.0.0.1", a.port), Handler).serve_forever()
