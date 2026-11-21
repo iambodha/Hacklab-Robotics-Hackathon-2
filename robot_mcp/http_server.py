@@ -104,3 +104,24 @@ Any other MCP client: streamable-HTTP URL {url} with header  Authorization: Bear
 (see robot_mcp/README.md for Codex / Cursor / Gemini CLI / Python examples)
 """, flush=True)
     uvicorn.run(app, host=host, port=port, log_level="warning")
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Serve ANY FastMCP server in this repo over HTTP + token, without editing it:
+         python -m robot_mcp.http_server --target arm_mcp.server:server --lan"""
+    import argparse
+    import importlib
+    p = argparse.ArgumentParser(prog="python -m robot_mcp.http_server",
+                                description="Serve a FastMCP server over HTTP with a bearer token.")
+    p.add_argument("--target", default="robot_mcp.server:mcp",
+                   help="module:attribute of a FastMCP instance (default robot_mcp.server:mcp; "
+                        "e.g. arm_mcp.server:server)")
+    p.add_argument("--lan", action="store_true", help="listen on all interfaces")
+    p.add_argument("--port", type=int, default=DEFAULT_PORT)
+    a = p.parse_args(argv)
+    mod, _, attr = a.target.partition(":")
+    serve(getattr(importlib.import_module(mod), attr or "mcp"), lan=a.lan, port=a.port)
+
+
+if __name__ == "__main__":
+    main()

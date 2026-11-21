@@ -110,6 +110,9 @@ python -m robot_mcp --http          # this machine only:  http://127.0.0.1:8765/
 python -m robot_mcp --http --lan    # other laptops too:  http://<laptop-ip>:8765/mcp
 ```
 
+The same wrapper serves the joint-level `arm_mcp` server too, without changing it:
+`python -m robot_mcp.http_server --target arm_mcp.server:server --lan` (tested read-only).
+
 It prints the URL and the token. The token is reused across restarts (stored in
 `robot_mcp/data/http_token.local.json`, gitignored) or set with `ROBOT_MCP_TOKEN`.
 `curl http://<ip>:8765/health` checks reachability without a token.
