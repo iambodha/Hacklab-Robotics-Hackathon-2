@@ -132,6 +132,69 @@ def to_norm(q):
     return (q[:7] - LO[:7]) / (HI[:7] - LO[:7])
 
 
+# --- inverse kinematics: as close to jaws-down as the target allows ------------------------------------
+# build_scene.ArmIK.solve either gets jaws exactly down or, as a fallback, ignores orientation completely; from a
+# folded seed that fallback left the gripper 76 deg from vertical on hardware. Here the lean is stepped up
+# gradually, staying near the current joints first, so the result is the least-tilted reachable pose.
+LEAN_SMALL, LEAN_LARGE = (0, 10, -10, 20, -20, 30, -30), (40, -40, 50, 60, 70)
+
+
+def _target_rot(xyz, lean_deg: float, yaw_deg: float):
+    """TCP rotation whose approach axis (+y) points down, leaned lean_deg away from the base (negative: toward it)."""
+    r = np.asarray(xyz[:2], float)
+    r = r / np.linalg.norm(r) if np.linalg.norm(r) > 1e-6 else np.array([0.0, 1.0])
+    t, yw = np.radians(lean_deg), np.radians(yaw_deg)
+    a = np.array([np.sin(t) * r[0], np.sin(t) * r[1], -np.cos(t)])
+    j = np.array([np.cos(yw), np.sin(yw), 0.0])
+    j = j - (j @ a) * a
+    if np.linalg.norm(j) < 1e-6:
+        j = np.array([-r[1], r[0], 0.0])
+    j /= np.linalg.norm(j)
+    return np.column_stack([j, a, np.cross(j, a)])
+
+
+def _solve_rot(xyz, Rt, q0, restarts: int = 0, seed: int = 3):
+    """Damped least squares to position + rotation Rt. First from q0; with restarts, the solution nearest q0."""
+    m, d = MODEL, IK.data
+    rng = np.random.default_rng(seed)
+    jp, jr = np.zeros((3, m.nv)), np.zeros((3, m.nv))
+    best = None
+    for attempt in range(1 + restarts):
+        q = np.array(q0, float)
+        if attempt:
+            q[:7] = rng.uniform(IK.low[:7], IK.high[:7])
+        for _ in range(300):
+            d.qpos[IK.qids] = q
+            mujoco.mj_kinematics(m, d); mujoco.mj_comPos(m, d)
+            err = np.asarray(xyz) - d.site_xpos[IK.site]
+            mujoco.mj_jacSite(m, d, jp, jr, IK.site)
+            quat = np.zeros(4)
+            mujoco.mju_mat2Quat(quat, (Rt @ d.site_xmat[IK.site].reshape(3, 3).T).reshape(-1))
+            if quat[0] < 0: quat *= -1
+            ln = np.linalg.norm(quat[1:])
+            err_r = quat[1:] * (2 * np.arctan2(ln, quat[0]) / max(ln, 1e-9))
+            if np.linalg.norm(err) < 0.002 and np.linalg.norm(err_r) < 0.02:
+                if best is None or np.abs(q[:7] - q0[:7]).max() < np.abs(best[:7] - q0[:7]).max():
+                    best = q.copy()
+                break
+            jac, e = np.vstack([jp[:, IK.dofs], .1 * jr[:, IK.dofs]]), np.r_[err, .1 * err_r]
+            dq = jac.T @ np.linalg.solve(jac @ jac.T + 1e-4 * np.eye(6), e)
+            q[:7] = np.clip(q[:7] + np.clip(dq, -.08, .08), IK.low[:7] + .001, IK.high[:7] - .001)
+        if attempt == 0 and best is not None:
+            return best
+    return best
+
+
+def _solve_tcp(xyz, q0, yaw_deg: float):
+    """(q, lean_deg) for the least-leaning reachable pose, preferring one near the current joints; (None, None)."""
+    for leans, restarts in ((LEAN_SMALL, 0), (LEAN_SMALL, 12), (LEAN_LARGE, 0), (LEAN_LARGE, 12)):
+        for lean in leans:
+            q = _solve_rot(xyz, _target_rot(xyz, lean, yaw_deg), q0, restarts)
+            if q is not None:
+                return q, lean
+    return None, None
+
+
 # --- motion on real servos ----------------------------------------------------------------------------
 # The ST3215s run P-only position control: under gravity a joint stops short of its goal, and a goal equal to
 # the present position gives no force at all. So (a) every joint we are NOT moving keeps its current goal
@@ -152,6 +215,20 @@ async def _stop_here(st, mids):
     await am._write(0x2A, {**_holds(st), **{mid: st[mid]["raw"] for mid in mids}}, 2)
 
 
+def _flagged(st, plan, grip=False):
+    return {m for m in am.IDS if st[m]["status"] and (m != 8 or (8 in plan and not grip))}
+
+
+async def _faults(now, plan, grip=False):
+    """Motor status flags that are still set on a second read 0.15 s later (one-read glitches are ignored)."""
+    first = _flagged(now, plan, grip)
+    if not first:
+        return []
+    await asyncio.sleep(0.15)
+    again = await am._read()
+    return [(NAMES[m - 1], hex(again[m]["status"])) for m in sorted(first & _flagged(again, plan, grip))]
+
+
 async def _drive(plan: dict, step: float = 0.02, dt: float = 0.12, track_tol: int | None = None,
                  settle: bool = True, contact: bool = True, grip: bool = False) -> str:
     """plan {motor_id: target norm}. Creep, then settle closed-loop. Returns 'reached ...' or 'ABORTED ...'.
@@ -163,6 +240,15 @@ async def _drive(plan: dict, step: float = 0.02, dt: float = 0.12, track_tol: in
     for mid in plan:
         if not st[mid]["in_range"]:
             raise RuntimeError(f"{NAMES[mid - 1]} raw {st[mid]['raw']} is outside its calibrated range; commanding it would snap")
+    over = [m for m in am.IDS if m != 8 and st[m]["status"]]
+    if over:       # a motor overloaded while holding (seen on j2 after minutes stretched out): unload it, then go on
+        await am._write(0x2A, {**_holds(st), **{m: st[m]["raw"] for m in over}}, 2)
+        await asyncio.sleep(0.8)
+        st = await am._read()
+        still = [(NAMES[m - 1], hex(st[m]["status"])) for m in am.IDS if m != 8 and st[m]["status"]]
+        if still:
+            raise RuntimeError(f"motor fault {still} did not clear after unloading: nothing moved. Let the arm rest "
+                               f"(support it, set_torque(false)) or power-cycle the 12 V before continuing")
     raw_goal = {mid: int(round(st[mid]["lo"] + min(1.0, max(0.0, n)) * (st[mid]["hi"] - st[mid]["lo"]))) for mid, n in plan.items()}
     start = {mid: st[mid]["raw"] for mid in plan}
     hold = _holds(st)
@@ -175,12 +261,12 @@ async def _drive(plan: dict, step: float = 0.02, dt: float = 0.12, track_tol: in
         await am._write(0x2A, goals, 2)
         await asyncio.sleep(dt)
         now = await am._read()
-        bad = [(NAMES[m - 1], goals[m], now[m]["raw"], hex(now[m]["status"])) for m in am.IDS
-               if (now[m]["status"] and (m != 8 or 8 in plan and not grip)) or (m in plan and abs(goals[m] - now[m]["raw"]) > track_tol)]
+        bad = [(NAMES[m - 1], goals[m], now[m]["raw"]) for m in plan if abs(goals[m] - now[m]["raw"]) > track_tol]
+        bad = bad or await _faults(now, plan, grip)
         hot = [(NAMES[m - 1], now[m]["load"]) for m in plan if contact and m != 8 and now[m]["load"] > LOAD_ABORT]
         if bad or hot:
             await _stop_here(now, [m for m in plan if m != 8])
-            why = f"tracking/fault {bad}" if bad else f"contact: load over {LOAD_ABORT} {hot}"
+            why = f"tracking error or motor fault {bad}" if bad else f"contact: load over {LOAD_ABORT} {hot}"
             return f"ABORTED at step {k}/{n}: {why}; holding present pose."
     if not settle:
         return f"reached in {n} steps."
@@ -192,9 +278,10 @@ async def _drive(plan: dict, step: float = 0.02, dt: float = 0.12, track_tol: in
         if all(abs(e) <= SETTLE_TOL for e in err.values()):
             return f"reached in {n} steps (+{it} corrections)."
         hot = [(NAMES[m - 1], now[m]["load"]) for m in plan if contact and m != 8 and now[m]["load"] > LOAD_ABORT]
-        if any(now[m]["status"] for m in am.IDS if m != 8 or 8 in plan) or hot:
+        fault = [] if hot else await _faults(now, plan, grip)
+        if fault or hot:
             await _stop_here(now, [m for m in plan if m != 8])
-            return f"ABORTED while settling: {'contact ' + str(hot) if hot else 'motor fault'}; holding present pose."
+            return f"ABORTED while settling: {'contact ' + str(hot) if hot else 'motor fault ' + str(fault)}; holding present pose."
         for m, e in err.items():
             if abs(e) > SETTLE_TOL:
                 c = cmd[m] + round(0.6 * e)
@@ -369,13 +456,21 @@ async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg:
     waypoints.append(target.tolist())
     seed, log, notes = q, [], []
     for wp in waypoints:
-        sol = IK.solve(np.array(wp), top_down=top_down, q0=seed, yaw_deg=yaw_deg)
-        if sol is None and top_down:
+        if top_down:
+            sol, lean = _solve_tcp(np.array(wp), seed, yaw_deg)
+            if sol is not None and lean:
+                notes.append(f"jaws-down unreachable at {np.round(wp, 3).tolist()}: gripper leans {abs(lean)} deg from "
+                             f"vertical ({'away from' if lean > 0 else 'toward'} the base)")
+            if sol is None:                      # last resort: position only, orientation free
+                sol = IK.solve(np.array(wp), top_down=False, q0=seed)
+                if sol is not None:
+                    _, rot = IK.fk(sol)
+                    notes.append(f"no near-vertical pose at {np.round(wp, 3).tolist()}: gripper is "
+                                 f"{np.degrees(np.arccos(np.clip(-rot[2, 1], -1, 1))):.0f} deg from vertical; do not grasp like this")
+        else:
             sol = IK.solve(np.array(wp), top_down=False, q0=seed)
-            if sol is not None:
-                _, rot = IK.fk(sol)
-                notes.append(f"jaws-down unreachable at {np.round(wp, 3).tolist()}: used a gripper tilted "
-                             f"{np.degrees(np.arccos(np.clip(-rot[2, 1], -1, 1))):.0f} deg from vertical")
+        if sol is not None and float(np.abs(to_norm(sol) - to_norm(seed)).max()) > 0.3:
+            notes.append("large change of arm configuration for this move")
         if sol is None:
             return (f"UNREACHABLE: no joint solution for tcp {np.round(wp, 3).tolist()} "
                     f"({'jaws down' if top_down else 'any orientation'}); nothing moved after: {log}\n" + await am.joint_state())

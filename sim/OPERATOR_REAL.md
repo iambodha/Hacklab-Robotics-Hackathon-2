@@ -45,10 +45,15 @@ the arm (towards the overview camera), +x = the arm's right-hand side.
    object in the wrist image, `pixel_to_table("wrist", u, v, 0.01)`. If it is not in view, try y = 0.15 or 0.30,
    or x = ±0.10, one at a time.
 2. Gripper open (j8 near 1.0)? Otherwise open it in steps. Then `move_tcp(x, y, 0.08)` to hover 8 cm above.
-3. `look()`. In the wrist image, find the object's pixel centre, then `pixel_to_table("wrist", u, v, 0.01)` for a
-   better estimate. `move_tcp(x, y, 0.06, yaw_deg=...)`, then `look()` again: the object should be centred and
+3. `look()`. In the wrist image, find the object's pixel centre, then `pixel_to_table("wrist", u, v, h/2)` for a
+   better estimate, where **h is the object's height, which you must estimate first** from the overview image
+   (side view): compare it with the 9 cm grey box. Also estimate its width: the jaws open about 5 cm, so an object
+   wider than ~4 cm cannot be straddled (report `BLOCKED: object too wide` or grip a narrower side). `move_tcp(x, y, 0.06, yaw_deg=...)`, then `look()` again: the object should be centred and
    above the jaw tips in the wrist image. Correct by a few mm if not.
-4. Descend: `move_tcp(x, y, 0.02, yaw_deg=...)`.
+4. Descend in two stages: first `move_tcp(x, y, h + 0.035, yaw_deg=...)` (jaw tips just above the object), `look()`
+   and check the object is **between** the jaws and has not moved in the image relative to the table. If it sits
+   under a jaw or moved with the gripper, you are touching it: go up 3 cm and re-centre. Then
+   `move_tcp(x, y, max(0.02, h/2 + 0.01), yaw_deg=...)`.
 5. Close: `gripper(0.7)`, `gripper(0.4)`, `gripper(0.1)`, `gripper(0.0)`. Check that j8 stalled above the fully
    closed value with load > 0 = holding.
 6. Lift: `move_tcp(x, y, 0.10, ...)`. `look()`: the object should be gone from its spot on the table, with
@@ -59,6 +64,11 @@ the arm (towards the overview camera), +x = the arm's right-hand side.
 9. Verify with `look()`, as in the task definition.
 
 ## Physical limits and safety (real hardware)
+- **Do not hold the arm stretched out.** Holding a pose far from the base (beyond ~0.24 m) and high for minutes
+  overloads the shoulder servo. When you finish, are blocked, or need the human, first park:
+  `move_tcp(0.0, 0.19, 0.06)`.
+- `move_tcp` keeps the jaws as vertical as the target allows and tells you the lean. Grasp only with a lean of
+  30 deg or less; "do not grasp like this" in a result means move closer to the base or lower first.
 - The servos are position-controlled without gravity compensation; `move_tcp` corrects for that and reports
   "still short" if a joint cannot reach its goal (usually load or something in the way).
 - `ABORTED ... contact` or high load near the table means you pushed into something: go up before anything else.
