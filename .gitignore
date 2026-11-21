@@ -1,0 +1,8 @@
+norma-core
+station-bin
+station-run
+frames
+__pycache__/
+*.pyc
+.DS_Store
+.env
