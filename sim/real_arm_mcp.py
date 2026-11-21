@@ -140,6 +140,7 @@ def to_norm(q):
 # closed-loop until the measured position arrives. Contact (motor load) or a fault holds the present pose.
 LOAD_ABORT = int(os.environ.get("ROBOT_LOAD_ABORT", "550"))   # ST3215 present load, 0..1000
 SETTLE_TOL = 6                                                # ticks
+GRIP_SQUEEZE = int(os.environ.get("ROBOT_GRIP_SQUEEZE", "45"))   # ticks the jaw goal stays past a stalled grip
 
 
 def _holds(st):
@@ -152,8 +153,9 @@ async def _stop_here(st, mids):
 
 
 async def _drive(plan: dict, step: float = 0.02, dt: float = 0.12, track_tol: int | None = None,
-                 settle: bool = True, contact: bool = True) -> str:
-    """plan {motor_id: target norm}. Creep, then settle closed-loop. Returns 'reached ...' or 'ABORTED ...'."""
+                 settle: bool = True, contact: bool = True, grip: bool = False) -> str:
+    """plan {motor_id: target norm}. Creep, then settle closed-loop. Returns 'reached ...' or 'ABORTED ...'.
+    A status flag on the gripper motor alone (overload from squeezing an object) never aborts an arm move."""
     track_tol = am.TRACK_TOL if track_tol is None else track_tol
     st = await am._read()
     if any(st[mid]["torque"] == 0 for mid in am.IDS):
@@ -174,7 +176,7 @@ async def _drive(plan: dict, step: float = 0.02, dt: float = 0.12, track_tol: in
         await asyncio.sleep(dt)
         now = await am._read()
         bad = [(NAMES[m - 1], goals[m], now[m]["raw"], hex(now[m]["status"])) for m in am.IDS
-               if now[m]["status"] or (m in plan and abs(goals[m] - now[m]["raw"]) > track_tol)]
+               if (now[m]["status"] and (m != 8 or 8 in plan and not grip)) or (m in plan and abs(goals[m] - now[m]["raw"]) > track_tol)]
         hot = [(NAMES[m - 1], now[m]["load"]) for m in plan if contact and m != 8 and now[m]["load"] > LOAD_ABORT]
         if bad or hot:
             await _stop_here(now, [m for m in plan if m != 8])
@@ -190,7 +192,7 @@ async def _drive(plan: dict, step: float = 0.02, dt: float = 0.12, track_tol: in
         if all(abs(e) <= SETTLE_TOL for e in err.values()):
             return f"reached in {n} steps (+{it} corrections)."
         hot = [(NAMES[m - 1], now[m]["load"]) for m in plan if contact and m != 8 and now[m]["load"] > LOAD_ABORT]
-        if any(now[m]["status"] for m in am.IDS) or hot:
+        if any(now[m]["status"] for m in am.IDS if m != 8 or 8 in plan) or hot:
             await _stop_here(now, [m for m in plan if m != 8])
             return f"ABORTED while settling: {'contact ' + str(hot) if hot else 'motor fault'}; holding present pose."
         for m, e in err.items():
@@ -317,11 +319,17 @@ async def gripper(open_fraction: float) -> str:
     0.35. Closing on an object stalls the jaw short of the target, which is a grip; it does not abort."""
     st = await am._read()
     want = min(1.0, max(0.0, float(open_fraction)))
-    if abs(want - st[8]["norm"]) > am.MAX_DELTA:
+    if abs(want - st[8]["norm"]) > am.MAX_DELTA + 0.03:     # slack: 0.35 -> 0.7 from a measured 0.346 must not be refused
         raise ValueError(f"j8: {st[8]['norm']:.3f} -> {want:.3f} exceeds max delta {am.MAX_DELTA}; close in steps")
-    out = await _drive({8: want}, 0.05, 0.1, track_tol=4096, settle=False, contact=False)
+    out = await _drive({8: want}, 0.05, 0.1, track_tol=4096, settle=False, contact=False, grip=True)
     await asyncio.sleep(0.4)
-    return out + "\n" + am._table(await am._read())
+    st = await am._read()
+    if st[8]["raw"] - st[8]["goal"] > GRIP_SQUEEZE + 15:     # closing stalled on an object: hold it with a bounded
+        await am._write(0x2A, {**_holds(st), 8: st[8]["raw"] - GRIP_SQUEEZE}, 2)   # squeeze, or the servo overloads (0x20)
+        await asyncio.sleep(0.3)
+        st = await am._read()
+        out += f" Jaws stalled on something at {st[8]['norm']:.3f}: holding it with a limited squeeze."
+    return out + "\n" + am._table(st)
 
 
 @server.tool(annotations={"readOnlyHint": True})
