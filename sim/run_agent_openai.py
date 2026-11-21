@@ -154,7 +154,7 @@ async def run(a) -> int:
             while turns < a.max_turns:
                 turns += 1
                 trim_images(messages, a.keep_images)
-                payload = {"model": a.model, "messages": messages, "temperature": a.temperature, "max_tokens": a.max_tokens}
+                payload = {"model": a.model, "messages": messages, "temperature": a.temperature, "max_tokens": a.max_tokens, **a.extra}
                 if native:
                     payload["tools"] = native
                 t = time.time()
@@ -214,6 +214,9 @@ async def run(a) -> int:
                       f"{f' (+{len(images)} images)' if images else ''}", flush=True)
                 log.write({"type": "tool", "tool": call["tool"], "args": call["args"], "model_ms": ms, "result": rtext[:3000], "images": len(images)})
                 content = [{"type": "text", "text": f"Result of {call['tool']}:\n{rtext}"}]
+                if images and a.no_images:
+                    content[0]["text"] += f"\n[{len(images)} camera images were returned but this model endpoint cannot receive images]"
+                    images = []
                 content += [{"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + d}} for d in images]
                 if native and call.get("id"):
                     messages.append({"role": "tool", "tool_call_id": call["id"], "content": rtext})
@@ -244,7 +247,7 @@ def check(a) -> int:
            "2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAIAAgDASIAAhEBAxEB/8QAFQAB"
            "AQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABgf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIR"
            "AxEAPwCdAAYqf//Z")
-    payload = {"model": a.model, "temperature": 0, "max_tokens": 80, "messages": [
+    payload = {"model": a.model, "temperature": 0, "max_tokens": 600, **a.extra, "messages": [
         {"role": "system", "content": 'Reply with exactly one JSON object and nothing else: {"colour": "<the main colour of the image>"}'},
         {"role": "user", "content": [{"type": "text", "text": "What colour is this image?"},
                                      {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + red}}]}]}
@@ -258,7 +261,10 @@ def check(a) -> int:
               f"{'yes' if isinstance(obj, dict) and 'red' in str(obj.get('colour', '')).lower() else 'NOT CONFIRMED (the model may not accept images)'}")
         return 0
     except Exception as e:
-        print(f"  chat failed: {e}")
+        print(f"  chat with an image failed: {e}")
+        if "text" in str(e) and "content type" in str(e):
+            print("  -> this server only accepts text. The arm task needs images: serve the model with a vision-capable "
+                  "server (for MLX: mlx_vlm.server, not mlx_lm.server), or run text-only tests with --no-images.")
         return 1
 
 
@@ -272,11 +278,16 @@ def main() -> None:
     ap.add_argument("--tool-mode", choices=["json", "native"], default=os.environ.get("MODEL_TOOL_MODE", "json"))
     ap.add_argument("--max-turns", type=int, default=70)
     ap.add_argument("--keep-images", type=int, default=int(os.environ.get("MODEL_KEEP_IMAGES", "4")))
-    ap.add_argument("--max-tokens", type=int, default=400)
+    ap.add_argument("--max-tokens", type=int, default=int(os.environ.get("MODEL_MAX_TOKENS", "700")))
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--timeout", type=float, default=180)
+    ap.add_argument("--no-images", action="store_true", default=os.environ.get("MODEL_NO_IMAGES", "") == "1",
+                    help="never send images (for a text-only endpoint; the model is then blind)")
+    ap.add_argument("--extra", default=os.environ.get("MODEL_EXTRA_JSON", "{}"),
+                    help='extra JSON merged into every request, e.g. \'{"chat_template_kwargs": {"enable_thinking": false}}\'')
     ap.add_argument("--log", help="transcript file (default sim/real_sessions/model_run_<time>.jsonl)")
     a = ap.parse_args()
+    a.extra = json.loads(a.extra or "{}")
     if not a.base_url:
         sys.exit("set MODEL_BASE_URL (or --base-url) to the endpoint's /v1 root, e.g. https://<name>.trycloudflare.com/v1")
     if a.check:
