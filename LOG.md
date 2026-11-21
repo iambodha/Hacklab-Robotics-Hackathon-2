@@ -57,6 +57,8 @@ On the machine this log was written on:
 | `scripts/grasp.py probe J DEG ...` | Moves, reports the object's image shift, moves back |
 | `scripts/arm.py pose \| hold \| grip 0..1 \| relax` | Read pose; hold current position with torque on; set gripper opening; torque off (arm drops!) |
 | `scripts/vision.py` | Finds dark blobs (the object) in the gripper camera; prints centre, area, bbox |
+| `scripts/replay.py DATASET.parquet` | Replays an exported dataset through `vision.py` offline (run via `uv ... --with pyarrow`, see below) |
+| `scripts/history_index.py [HH:MM:SS ...]` | Finds Station history frame pointers for given times, for dataset export |
 | `scripts/record_demo.py [secs] [name]` | Records a teleop demo: follower joints at 10 Hz + both cameras at 2 Hz into `demos/<name>/` |
 
 ### `scripts/camera.py` — how camera frames come out of Station
@@ -177,6 +179,19 @@ Caveats:
 - Episodes are cut by command activity, not by task, so they include idle and setup stretches. 9 of 15 were dropped for too few commands; one ~3-minute stretch was dropped for a 172 s frame gap (possibly the teleop demo; not checked).
 - The last two episodes show the table rearranged with other objects (snack wrappers, a black box), so they don't match the task label.
 - For a clean dataset, tag the start and end of each pick-and-place run in the web UI (see `norma-core/docs/datasets/export-parquet/datasets-export.md`).
+
+## Iterating scripts offline with `replay.py`
+
+`uv run --no-project --with pyarrow python scripts/replay.py datasets/<x>.parquet --every 4`
+runs `vision.py` over recorded gripper frames and prints gripper opening/current per frame
+(542 frames in 14 s). Open-loop only: tests what scripts see and judge, not motion.
+
+First findings (21 Nov, on `pick-place-2026-11-21.parquet`):
+- In the dataset, image 0 is the gripper camera and frames are 224x224 (not 299x224 as live).
+- The object was detected in 442 of 542 frames; misses are mostly while the arm swings during teleop.
+- **The export does not contain the successful scripted grasp** (12:36–12:41): no episode has a close with more than 6 mA. The teleop demo is episode 1 (closes at 28 s, 45 s, 47 s).
+- Holding under teleop looks different from holding under a script: teleop closes stopped at 0.22–0.29 opening with 1–5 mA, because mirroring copies the leader's position instead of squeezing. The scripted grasp showed 0.06 opening and 39 mA; empty scripted closes 0.03 and 0–2 mA. So `verify()` for a grasp should check "commanded closed, but stopped above ~0.05" or "current above ~15 mA", not current alone.
+- After a successful close the object is hidden by the jaws, so "no blob" right after closing is consistent with holding.
 
 ## Current state when this session ended (21 Nov, ~13:00)
 
