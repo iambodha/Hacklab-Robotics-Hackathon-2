@@ -23,7 +23,6 @@ The bus serials and camera queue hashes below are specific to this hardware.
 
 On the machine this log was written on:
 
-
 - Station v0.1.0-beta.10 (macOS ARM64) in `station-bin/`; config, data and log in `station-run/`.
 - Start it with `scripts/run-station.sh` (loopback only; add `--lan` to expose it).
 - Web UI http://localhost:8889, TCP API `localhost:8888`.
@@ -53,6 +52,12 @@ On the machine this log was written on:
 | `scripts/calibrate_manual.py [BUS]` | Guided manual calibration: reset (with retries), you sweep by hand, freeze, compare spans. Defaults to the leader |
 | `scripts/scene_cam.py [camera_id] [port]` | Live browser view of a camera at http://127.0.0.1:8890, relayed from Station |
 | `scripts/run-station.sh [--lan]` | Starts Station |
+| `scripts/grasp.py step J DEG [J DEG ...]` | **Main control tool.** Moves joints by degrees (servo direction), closed loop, aborts on contact; prints where the object moved in the gripper camera |
+| `scripts/grasp.py goto J STEPS [J STEPS ...]` | Same, to absolute servo positions |
+| `scripts/grasp.py probe J DEG ...` | Moves, reports the object's image shift, moves back |
+| `scripts/arm.py pose \| hold \| grip 0..1 \| relax` | Read pose; hold current position with torque on; set gripper opening; torque off (arm drops!) |
+| `scripts/vision.py` | Finds dark blobs (the object) in the gripper camera; prints centre, area, bbox |
+| `scripts/record_demo.py [secs] [name]` | Records a teleop demo: follower joints at 10 Hz + both cameras at 2 Hz into `demos/<name>/` |
 
 ### `scripts/camera.py` — how camera frames come out of Station
 
@@ -115,8 +120,51 @@ Calibrated ranges after the manual sweep (steps):
 - Move a joint: `st3215.Command(target_bus_serial=..., write=ST3215WriteCommand(motor_id, address=0x2A, value=<2 bytes LE>))`, wrapped in a `DriverCommand` of type `STC_ST3215_COMMAND`, sent with `send_commands`. Clamp to the calibrated range first.
 - Mirroring and calibration use the same `send_commands` path (see the scripts).
 
+## Direct control — what we learned (afternoon, 21 Nov)
+
+- **Teleop must be off** (`teleop.py stop`) before scripts move the follower, or mirroring fights them. Then `arm.py hold` so it doesn't drop.
+- **Plain goal writes stop short.** The follower servos run P-only (P=16, I=0, D=0), so a joint commanded 45 steps away settles about 30 short. `grasp.py` closes the loop: it keeps nudging the goal until the measured position arrives. Use it, not raw writes.
+- **Contact abort:** `CUR_LIMIT = 260` mA in `arm.py`. Any joint 1–7 above that stops the move and holds position. A "did not fully arrive" note with a joint stuck short usually means something is touching the table.
+- **The URDF model is not trustworthy for this arm.** `arm.py`'s FK/IK (`pose` tip xyz, `move`, `fwd`) uses `norma-core`'s `elrobot_follower.urdf`, but its joint directions don't match what the cameras show. Ignore the tip xyz; don't use `move`/`fwd`. Steer by camera with `grasp.py` instead.
+- **Joint directions observed in the top-down grasp pose** (servo steps):
+  - j1 (base) decrease → object moves left in the gripper image (about 5 px per degree at grasp height). j1 decrease also turns the arm towards the white box.
+  - j2 (shoulder) increase → gripper goes **down**. Hover 1778, grasp height 1919, clearance 1640.
+  - j3 (elbow) decrease → reaches further out.
+- **Gripper:** `arm.py grip 0.8` opens. Close by writing goal `range_min + 40` to motor 8. Holding the object shows ~20–40 mA on motor 8; an empty close shows 0–2 mA and ends at ~0.03 opening.
+
+### The grasp that worked
+
+Approaching at a slant failed six times: the jaws closed just above the object every time.
+A teleop demonstration (`demos/grasp1/`, gitignored, local only) showed the grasp is top-down,
+with j4 bent to ~1220 instead of ~2160. Replaying that pose then worked first time:
+
+1. `teleop.py stop`, `arm.py hold`
+2. Fold into the top-down pose with the arm raised (the fold was done at j2 ≈ 1030, arm up; folding j4 with the arm low is untested): `grasp.py goto 2 1030`, then `grasp.py goto 4 1240 3 3166 6 2632`, then `grasp.py goto 2 1700`, then `grasp.py goto 1 2226 5 2116 7 1680 6 2551 3 3084`
+3. `arm.py grip 0.8`, `grasp.py goto 2 1778` (hover)
+4. Centre the object between the jaws in the gripper camera with small j1 steps (`grasp.py step 1 -1.2` etc.; `vision.py` gives the pixel centre; jaws' centre is x≈150 in a 299 px frame)
+5. `grasp.py goto 2 1919` (descend), close the gripper, check motor 8 current > 15 mA
+6. `grasp.py goto 2 1780` (lift)
+
+Demo grasp moment: t≈111–118 s in `demos/grasp1/states.jsonl` (gripper 0.76 → 0.22).
+
+### Placing on the white box
+
+From the lifted grasp pose: `goto 2 1640` (clearance), base j1 decreased ~29° in steps
+(`step 1 -12`, `step 1 -8 3 -10`, `step 1 -6 2 12`), lowered with j2 (`step 2 10`, `step 2 8 1 -3`)
+until the box filled the gripper view, `arm.py grip 0.85`, then `step 2 -14` to lift clear.
+The object landed on the open cardboard box near its edge closest to the arm.
+
+## Current state when this session ended (21 Nov, ~13:00)
+
+- Station running (`scripts/run-station.sh`), both arms calibrated and frozen.
+- **Teleop OFF.** Follower torque ON, holding just above the white box, gripper open (0.85).
+  Pose: j1 1828, j2 1820, j3 2974, j4 1222, j5 2113, j6 2548, j7 1682, j8 2604.
+- The black object is on the white box.
+- To hand control back to the leader: `python3 scripts/teleop.py start` (the follower will jump to the leader's pose, so put the leader in a similar pose first).
+
 ## Open items
 
-- Build the Claude bridge (MCP server): get camera frame, read joints, move joints within range.
-- No direct joint move from a script has been tested yet; only mirroring and calibration.
-- Third camera not detected; camera resolution stuck at 320x240.
+- Build the Claude bridge (MCP server) around `grasp.py` + `vision.py` + `camera.py`: get frame, find object, step joints, grip.
+- Automate the grasp recipe above into one script (centre with j1 from `vision.py`, descend, close, verify by current).
+- Fix or replace the kinematic model so moves can be planned in centimetres (ArUco markers + OpenCV for camera height was proposed).
+- Third camera not detected; frames are 299x224 (`resize_target: 224`).
