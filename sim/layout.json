@@ -1,0 +1,36 @@
+{
+  "_notes": [
+    "Estimated from the overview/wrist camera photos (2026-11-21); replace with tape-measured values.",
+    "Units: metres and degrees. Origin: centre of the arm base footprint on the table top (z = 0).",
+    "+y: direction the arm points at zero pose, towards the overview camera. Seen from that camera, image-left is +x.",
+    "Object pos is [x, y, z] of the body centre at rest; yaw rotates about z. Masses in kg.",
+    "table/bin sizes are full lengths; object 'parts' and 'fixed' sizes are MuJoCo half-sizes (cylinder: [radius, half-height]).",
+    "Rebuild after editing: python3 sim/build_scene.py"
+  ],
+  "table": {"size": [1.2, 0.8], "thickness": 0.03, "height": 0.75, "back_edge_y": -0.08, "rgba": [0.88, 0.88, 0.87, 1]},
+  "arm_rgba": [0.12, 0.12, 0.13, 1],
+  "rest_pose": [0, 0.5, -1.3, -0.9, 0, 0, 0, 0],
+  "bins": [
+    {
+      "name": "grey_box", "pos": [0.24, 0.06], "yaw": 6, "size": [0.18, 0.13, 0.09], "wall": 0.004,
+      "rgba": [0.27, 0.28, 0.30, 1], "inner_rgba": [0.62, 0.62, 0.60, 1],
+      "flaps": [{"side": "back", "length": 0.13, "angle": 100}]
+    }
+  ],
+  "objects": [
+    {
+      "name": "black_cube", "pos": [0.025, 0.16, 0.01], "yaw": 15, "mass": 0.006,
+      "parts": [{"type": "box", "size": [0.01, 0.01, 0.01], "rgba": [0.06, 0.06, 0.07, 1]}],
+      "randomize": {"x": [-0.09, 0.09], "y": [0.13, 0.25], "yaw": [-45, 45]}
+    }
+  ],
+  "fixed": [],
+  "cameras": [
+    {"name": "overview_cam", "pos": [0.0, 0.6, 0.4], "lookat": [0.0, 0.1, 0.0], "fovy": 62},
+    {"name": "top_cam", "pos": [0.0, 0.2, 0.95], "lookat": [0.0, 0.19, 0.0], "fovy": 55},
+    {"name": "side_cam", "pos": [-1.1, 0.34, 0.5], "lookat": [0.05, 0.1, 0.17], "fovy": 45}
+  ],
+  "wrist_camera": {"pose_file": "camera_pose/wrist_camera.json", "fovy": 72},
+  "image_size": [299, 224],
+  "reach": {"show_rings": false, "samples": 150000, "top_down_tolerance_deg": 30, "position_tolerance": 0.015, "bin_drop_clearance": 0.05}
+}
