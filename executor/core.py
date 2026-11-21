@@ -115,11 +115,11 @@ class Ctx:
 class Executor:
     def __init__(self, backend: Backend, kin: Kinematics | None = None, recorder: RecorderLink | None = None,
                  locator: Locator | None = None, layout: str = "default", tool: str = "none",
-                 table_memory_path: Path | None = None, max_frame_age: float = 1.0):
+                 table_memory_path: Path | None = None, max_frame_age: float = 1.0, events: EventLog | None = None):
         self.backend = backend
         self.kin = kin or Kinematics()
         self.skills = dict(SKILLS)
-        self.events = EventLog()
+        self.events = events or EventLog()
         self.rec = recorder or RecorderLink("local")
         self.scene = load_scene_calib()
         self.scene_version = (f"{self.scene.get('version')}:{self.scene.get('created')}" if self.scene else None)

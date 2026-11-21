@@ -27,7 +27,7 @@ class FakeBackend(Backend):
     def __init__(self, start_norm: dict[int, float] | None = None, kin=None, speed: float = 0.6, fps: float = 30.0,
                  stall: dict | None = None, fault_after: dict | None = None, frozen: set | None = None,
                  table_z: float | None = None, object_norm: float | None = None, step_delay: float = 0.0,
-                 ranges: dict | None = None):
+                 ranges: dict | None = None, realtime: bool = False):
         self.ranges = dict(ranges or RANGES)
         self.pos = {m: 0.5 for m in self.motor_ids}
         self.pos[8] = 0.9
@@ -37,6 +37,7 @@ class FakeBackend(Backend):
         self.stall, self.fault_after = dict(stall or {}), dict(fault_after or {})
         self.frozen, self.table_z, self.object_norm = set(frozen or ()), table_z, object_norm
         self.step_delay = step_delay
+        self.realtime = realtime              # console demo: sleeps take real time (tests: virtual only)
         self.t = 1000.0
         self.status = {m: 0 for m in self.motor_ids}
         self.load = {m: 40 for m in self.motor_ids}
@@ -51,7 +52,7 @@ class FakeBackend(Backend):
 
     # --- clock -------------------------------------------------------------------
     def now(self) -> float:
-        return self.t
+        return time.monotonic() if self.realtime else self.t
 
     def advance(self, s: float) -> None:
         with self.lock:
@@ -63,6 +64,11 @@ class FakeBackend(Backend):
                 self.trace.append((self.t, dict(self.pos)))
 
     def sleep(self, s: float) -> None:
+        if self.realtime:
+            time.sleep(s)
+            self.advance(s)
+            self.t = time.monotonic()
+            return
         self.advance(s)
         if self.step_delay:
             time.sleep(self.step_delay)
@@ -108,14 +114,15 @@ class FakeBackend(Backend):
                 out[m] = {"raw": raw, "goal": self._ticks(m, self.goal[m]), "lo": lo, "hi": hi,
                           "norm": round((raw - lo) / (hi - lo), 4), "in_range": lo <= raw <= hi, "torque": 1,
                           "status": self.status[m], "temp": 31, "volt": 12.4, "load": self.load[m]}
-            return MotorRead(self.t, out)
+            return MotorRead(self.now(), out)
 
     def frames(self) -> dict[str, FrameSample]:
         with self.lock:
             out = {}
             joints = [round(self.pos[m], 4) for m in self.motor_ids]
+            now = self.now()
             for r in self.cameras:
-                seq, t = int(self.t * self.fps), int(self.t * self.fps) / self.fps
+                seq, t = int(now * self.fps), int(now * self.fps) / self.fps
                 if r in self.frozen:
                     seq, t = self._frozen_at.setdefault(r, (seq, t))
                 out[r] = FrameSample(r, f"fake/{r}", seq, t, self._jpeg[r], joints)
