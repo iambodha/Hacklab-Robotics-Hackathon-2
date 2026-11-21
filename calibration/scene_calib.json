@@ -1,0 +1,476 @@
+{
+ "version": 1,
+ "created": "2026-11-22T00:20:41+01:00",
+ "world_frame": "follower base_link origin on table plane, z up, x forward at j1=0",
+ "table": {
+  "plane_world": [
+   0,
+   0,
+   1,
+   0
+  ],
+  "extent_xy": [
+   [
+    -0.054,
+    -0.4382
+   ],
+   [
+    0.5418,
+    0.3898
+   ]
+  ],
+  "extent_source": "bounding box of the markers + 3 cm (not the real table edge)",
+  "height_m": 0.0
+ },
+ "markers": {
+  "dictionary": "DICT_4X4_50",
+  "size_m": 0.1,
+  "items": [
+   {
+    "id": 20,
+    "role": "top",
+    "T_world_marker": [
+     [
+      -0.009613,
+      -0.999954,
+      0.0,
+      0.461339
+     ],
+     [
+      0.999954,
+      -0.009613,
+      0.0,
+      -0.357689
+     ],
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "rms_mm": 1.81,
+    "reproj_px": 0.641,
+    "sigma_centre_mm": 25.28
+   },
+   {
+    "id": 22,
+    "role": "base",
+    "T_world_marker": [
+     [
+      -0.065548,
+      -0.997849,
+      0.0,
+      0.02914
+     ],
+     [
+      0.997849,
+      -0.065548,
+      0.0,
+      0.306658
+     ],
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "rms_mm": 5.097,
+    "reproj_px": 0.68,
+    "sigma_centre_mm": 0.0
+   },
+   {
+    "id": 23,
+    "role": "base",
+    "T_world_marker": [
+     [
+      -0.003018,
+      -0.999995,
+      0.0,
+      0.056668
+     ],
+     [
+      0.999995,
+      -0.003018,
+      0.0,
+      -0.355846
+     ],
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "rms_mm": 5.349,
+    "reproj_px": 0.599,
+    "sigma_centre_mm": 23.82
+   }
+  ],
+  "seen_by_wrist": [
+   20
+  ]
+ },
+ "cameras": {
+  "overview": {
+   "queue": "usbvideo/9ea4cacd5be94751e1eea7be90bcf628",
+   "image_size": [
+    299,
+    224
+   ],
+   "K_normalized": {
+    "fx": 0.485183,
+    "fy": 0.647633,
+    "cx": 0.498328,
+    "cy": 0.497768
+   },
+   "dist": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "intrinsics_source": "estimated from the coplanar markers (fx=fy, centred principal point, no distortion)",
+   "sigma_f_rel": 0.04996210910100446,
+   "T_world_cam": [
+    [
+     -0.03043,
+     0.712648,
+     -0.700861,
+     0.643111
+    ],
+    [
+     0.999456,
+     0.012781,
+     -0.030399,
+     -0.019168
+    ],
+    [
+     -0.012706,
+     -0.701405,
+     -0.712649,
+     0.384288
+    ],
+    [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ]
+   ],
+   "reproj_px": 0.641,
+   "fovy_deg": 75.34
+  },
+  "wrist": {
+   "queue": "usbvideo/28ff0ca87978e8f993c2ac64a84d188a",
+   "image_size": [
+    299,
+    224
+   ],
+   "K_normalized": {
+    "fx": 0.482459,
+    "fy": 0.643997,
+    "cx": 0.498328,
+    "cy": 0.497768
+   },
+   "dist": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "intrinsics_source": "estimated jointly with the arm base from FK + markers (rough)",
+   "T_link_cam": [
+    [
+     0.999967,
+     -0.003511,
+     0.007382,
+     0.001517
+    ],
+    [
+     -0.008175,
+     -0.429537,
+     0.903012,
+     0.022752
+    ],
+    [
+     0.0,
+     -0.903043,
+     -0.429551,
+     0.06075
+    ],
+    [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ]
+   ],
+   "link": "Gripper_Base_v1_1",
+   "source": "CAD (camera_pose/wrist_camera.json)"
+  }
+ },
+ "arm": {
+  "bus": "5B61033301",
+  "urdf": "norma-core/hardware/elrobot/simulation/elrobot_follower.urdf",
+  "joint_mapping": "q = mid(URDF limits) + (raw - mid(calibrated range)) * 2*pi/4096 (see camera_pose/HANDOFF.md); signs of j1/j5/j7 unverified",
+  "T_world_base": [
+   [
+    0.0,
+    1.0,
+    0.0,
+    0.0
+   ],
+   [
+    -1.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    1.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ]
+  ],
+  "base_on_table": {
+   "source": "wrist (FK from Station joint ticks + CAD camera mount + markers seen by the wrist)",
+   "sigma_mm": 23.143058679114937,
+   "sigma_yaw_deg": 2.5230246540246473,
+   "caveat": "statistical sigma only; joint zero offsets/signs and wrist intrinsics are not calibrated, so treat as +-2 cm / +-3 deg until checked"
+  },
+  "joints_at_calibration": {
+   "j1": {
+    "raw": 2006,
+    "lo": 1056,
+    "hi": 3040
+   },
+   "j2": {
+    "raw": 1015,
+    "lo": 975,
+    "hi": 3121
+   },
+   "j3": {
+    "raw": 1907,
+    "lo": 879,
+    "hi": 3217
+   },
+   "j4": {
+    "raw": 3196,
+    "lo": 880,
+    "hi": 3216
+   },
+   "j5": {
+    "raw": 1854,
+    "lo": 126,
+    "hi": 3970
+   },
+   "j6": {
+    "raw": 1944,
+    "lo": 1005,
+    "hi": 3091
+   },
+   "j7": {
+    "raw": 2204,
+    "lo": 109,
+    "hi": 3987
+   },
+   "j8": {
+    "raw": 2169,
+    "lo": 1225,
+    "hi": 2871
+   }
+  }
+ },
+ "quality": {
+  "overview_reproj_px": 0.641,
+  "per_marker": {
+   "20": {
+    "reproj_px": 0.640958095386047,
+    "rms_mm": 1.8099231448163755,
+    "jitter_px": 0.15786533127355712,
+    "frames": 59,
+    "sigma_centre_mm": 25.280060897236993
+   },
+   "22": {
+    "reproj_px": 0.6795894848629302,
+    "rms_mm": 5.096877617722198,
+    "jitter_px": 0.15638079976378003,
+    "frames": 60,
+    "sigma_centre_mm": 0.0
+   },
+   "23": {
+    "reproj_px": 0.598922812193028,
+    "rms_mm": 5.349174509055182,
+    "jitter_px": 0.21229896515137783,
+    "frames": 60,
+    "sigma_centre_mm": 23.816222058879653
+   }
+  },
+  "held_out": [
+   {
+    "held_out": 20,
+    "fit_with": [
+     22,
+     23
+    ],
+    "side_err_mm": [
+     13.0,
+     29.51,
+     11.69,
+     25.35
+    ],
+    "diag_err_mm": [
+     25.55,
+     31.29
+    ],
+    "side_err_mm_max": 29.506281110579984,
+    "diag_err_mm_max": 31.28867991676712,
+    "rms_mm": 23.981243991881815,
+    "centre_shift_mm": 51.60750243742379
+   },
+   {
+    "held_out": 22,
+    "fit_with": [
+     20,
+     23
+    ],
+    "side_err_mm": [
+     2.65,
+     -2.21,
+     -1.25,
+     -1.93
+    ],
+    "diag_err_mm": [
+     -8.82,
+     6.46
+    ],
+    "side_err_mm_max": 2.647940078560937,
+    "diag_err_mm_max": 8.815979515139682,
+    "rms_mm": 4.772685686488972,
+    "centre_shift_mm": 11.453434886956776
+   },
+   {
+    "held_out": 23,
+    "fit_with": [
+     20,
+     22
+    ],
+    "side_err_mm": [
+     -2.95,
+     -2.39,
+     -1.45,
+     -16.17
+    ],
+    "diag_err_mm": [
+     -13.83,
+     -2.82
+    ],
+    "side_err_mm_max": 16.165532893370944,
+    "diag_err_mm_max": 13.83345799550731,
+    "rms_mm": 8.917293967891768,
+    "centre_shift_mm": 8.65631714775301
+   }
+  ],
+  "wrist_check": {
+   "markers": {
+    "20": {
+     "px": 1.677709528707365,
+     "mm": 12.635027585799737
+    }
+   },
+   "note": "marker seen by both cameras: overview-fit corners vs wrist pixel->table through FK. Only an independent check when the base is measured or the arm pose differs from the one used for the wrist estimate."
+  },
+  "wrist_base_estimate": {
+   "T_world_base_est": [
+    [
+     0.0,
+     1.0,
+     0.0,
+     0.0
+    ],
+    [
+     -1.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     1.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ]
+   ],
+   "rms_px": 1.6777095287073582,
+   "sigma_mm": 23.143058679114937,
+   "sigma_yaw_deg": 2.5230246540246473,
+   "sigma_f_rel": 0.05858268010081016
+  },
+  "pixel_footprint_mm": {
+   "20": 2.9,
+   "23": 6.42,
+   "22": 6.41
+  }
+ },
+ "T_world_table_internal": [
+  [
+   -0.065548,
+   -0.997849,
+   0.0,
+   0.02914
+  ],
+  [
+   0.997849,
+   -0.065548,
+   0.0,
+   0.306658
+  ],
+  [
+   0.0,
+   0.0,
+   1.0,
+   0.0
+  ],
+  [
+   0.0,
+   0.0,
+   0.0,
+   1.0
+  ]
+ ]
+}
