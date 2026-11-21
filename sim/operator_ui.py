@@ -135,7 +135,9 @@ def enhance(rough: str) -> str:
             seen.append(name)
         except Exception:
             pass
+    import importlib
     import operator_prompt
+    importlib.reload(operator_prompt)        # the template and profile can change while this page keeps running
     system = ENHANCER % operator_prompt.render()
     if len(seen) < 2:
         system += f"\n(Only these images could be captured: {seen or 'none'}; work from the text for the rest.)"
@@ -151,7 +153,9 @@ def enhance(rough: str) -> str:
 
 def _profile() -> dict:
     sys.path.insert(0, str(HERE))
+    import importlib
     import operator_prompt
+    importlib.reload(operator_prompt)
     return operator_prompt.profile()
 
 
