@@ -72,6 +72,24 @@ LO, HI = MODEL.actuator_ctrlrange.T.copy()          # URDF limits (rad), exactly
 KD = mujoco.MjData(MODEL)                            # kinematics-only data for camera poses
 WRIST_ID = MODEL.camera("wrist_cam").id
 
+# Optional calibration override: Station's stored ranges can go stale (21 Nov: this machine's Station kept j6
+# 1688-2408 / j8 1898-2198 while the follower was re-calibrated to 1006-3090 / 1228-2868). ROBOT_RANGES_FILE
+# (JSON {"j1": [lo, hi], ...}, raw ticks) replaces lo/hi/norm/in_range for every read; Station is not changed.
+RANGES_FILE = os.environ.get("ROBOT_RANGES_FILE")
+if RANGES_FILE:
+    _ranges = {NAMES.index(k) + 1: (int(v[0]), int(v[1]))
+               for k, v in json.loads(Path(RANGES_FILE).read_text()).items() if k in NAMES}
+    _station_read = am._read
+
+    async def _read_with_ranges() -> dict:
+        st = await _station_read()
+        for mid, (lo, hi) in _ranges.items():
+            m = st[mid]
+            m.update(lo=lo, hi=hi, norm=round((m["raw"] - lo) / (hi - lo), 4), in_range=lo <= m["raw"] <= hi)
+        return st
+
+    am._read = _read_with_ranges   # arm_mcp's joint_state / set_torque / _table pick this up too
+
 server = FastMCP("elrobot-real")
 LOG_DIR.mkdir(exist_ok=True)
 SESSION_LOG = LOG_DIR / "actions.jsonl"
