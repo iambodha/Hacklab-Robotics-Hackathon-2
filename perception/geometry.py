@@ -101,7 +101,7 @@ def ray_plane(o, d, plane=(0, 0, 1, 0)):
     den = d @ n
     with np.errstate(divide="ignore", invalid="ignore"):
         t = -(o @ n + c) / den
-    P = o + t[:, None] * d
+        P = o + t[:, None] * d
     P[(np.abs(den) < 1e-12) | (t <= 0)] = np.nan
     return P
 

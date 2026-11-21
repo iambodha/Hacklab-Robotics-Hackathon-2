@@ -42,16 +42,48 @@ async def _capture(n: int) -> dict:
     return {"overview": ov, "wrist": wr, "joints": j0, "joints_after": j1}
 
 
-def capture_live(n: int, save_dir: Path | None) -> dict:
+async def _capture_wrist_poses(n_poses: int, timeout_s: float = 240, still_s: float = 1.5, min_ticks: int = 60):
+    """The user moves the limp arm BY HAND (torque stays off; nothing is commanded). A pose is recorded
+    when the joints have been still for still_s and differ from every recorded pose by > min_ticks."""
+    import time
+    from . import station_io as sio
+    cli = await sio.connect()
+    poses, last, still_since, t0 = [], None, None, time.time()
+    print(f"Wrist poses: move the arm by hand so the wrist camera sees one or more markers from {n_poses} different "
+          f"poses (vary base rotation and wrist tilt), and hold each still for ~2 s.")
+    while len(poses) < n_poses and time.time() - t0 < timeout_s:
+        j = await sio.read_joints(cli)
+        if last is not None and _joints_moved(last, j, tol=4) is None:
+            still_since = still_since or time.time()
+        else:
+            still_since = None
+        last = j
+        new = all(_joints_moved(p["joints"], j, tol=min_ticks) for p in poses)
+        if still_since and time.time() - still_since > still_s and new:
+            frames = await sio.grab_jpegs(cli, "wrist", 15)
+            if _joints_moved(j, await sio.read_joints(cli), tol=4) is None:
+                poses.append({"joints": j, "jpegs": frames})
+                print(f"  pose {len(poses)}/{n_poses} recorded")
+        await asyncio.sleep(0.3)
+    return poses
+
+
+def capture_live(n: int, save_dir: Path | None, wrist_poses: int = 0) -> dict:
     cap = asyncio.run(_capture(n))
+    extra = asyncio.run(_capture_wrist_poses(wrist_poses)) if wrist_poses else []
     if save_dir:
         save_dir.mkdir(parents=True, exist_ok=True)
         for cam in ("overview", "wrist"):
             for k, b in enumerate(cap[cam][:: max(1, n // 10)]):      # keep at most ~10 per camera
                 (save_dir / f"{cam}_{k:02d}.jpg").write_bytes(b)
-        (save_dir / "joints.json").write_text(json.dumps({"joints": cap["joints"], "joints_after": cap["joints_after"]}))
+        for p, pose in enumerate(extra):
+            for k, b in enumerate(pose["jpegs"][::3]):
+                (save_dir / f"pose{p + 1:02d}_wrist_{k:02d}.jpg").write_bytes(b)
+        (save_dir / "joints.json").write_text(json.dumps({"joints": cap["joints"], "joints_after": cap["joints_after"],
+                                                          "poses": [p["joints"] for p in extra]}))
     return {"overview": [aruco_decode(b) for b in cap["overview"]], "wrist": [aruco_decode(b) for b in cap["wrist"]],
-            "joints": cap["joints"], "joints_after": cap["joints_after"]}
+            "joints": cap["joints"], "joints_after": cap["joints_after"],
+            "wrist_poses": [{"joints": p["joints"], "frames": [aruco_decode(b) for b in p["jpegs"]]} for p in extra]}
 
 
 def aruco_decode(b: bytes) -> np.ndarray:
@@ -60,9 +92,11 @@ def aruco_decode(b: bytes) -> np.ndarray:
 
 def load_dir(d: Path) -> dict:
     j = json.loads((d / "joints.json").read_text()) if (d / "joints.json").exists() else {}
+    poses = [{"joints": pj, "frames": [cv2.imread(str(p)) for p in sorted(d.glob(f"pose{k + 1:02d}_wrist_*.jpg"))]}
+             for k, pj in enumerate(j.get("poses", []))]
     return {"overview": [cv2.imread(str(p)) for p in sorted(d.glob("overview_*.jpg"))],
             "wrist": [cv2.imread(str(p)) for p in sorted(d.glob("wrist_*.jpg"))],
-            "joints": j.get("joints"), "joints_after": j.get("joints_after")}
+            "joints": j.get("joints"), "joints_after": j.get("joints_after"), "wrist_poses": poses}
 
 
 # ---- arm base / world frame ----------------------------------------------------------------------------
@@ -148,13 +182,23 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
     T_base_wcam = wrist.T_base_wristcam(joints) if joints else None
     intr_wr = load_intrinsics("wrist")
     wrist_est = None
-    if T_base_wcam is not None and any(i in fit.markers for i in wr_med) and not moved:
-        T_tm = {i: fit.T_table_marker(i) for i in fit.markers}
-        wrist_est = wrist.solve_base_from_wrist({i: wr_med[i] for i in wr_med if i in T_tm}, T_tm, T_base_wcam,
-                                                size, W, H, intr=intr_wr, base_z=base_z)
+    T_tm = {i: fit.T_table_marker(i) for i in fit.markers}
+    w_obs, w_T = [], []
+    if T_base_wcam is not None and any(i in T_tm for i in wr_med) and not moved:
+        w_obs.append({i: wr_med[i] for i in wr_med if i in T_tm})
+        w_T.append(T_base_wcam)
+    for pose in data.get("wrist_poses") or []:
+        pm, _, _ = aruco.average_corners([f for f in pose["frames"] if f is not None], name)
+        pm = {i: c for i, c in pm.items() if i in T_tm}
+        if pm:
+            w_obs.append(pm)
+            w_T.append(wrist.T_base_wristcam(pose["joints"]))
+    if w_obs:
+        wrist_est = wrist.solve_base_from_wrist(w_obs, T_tm, w_T, size, W, H, intr=intr_wr, base_z=base_z)
         if intr_wr is None:
             wrist_est["intr"]["source"] = "estimated jointly with the arm base from FK + markers (rough)"
-        log(f"wrist estimate of the arm base: {np.round(wrist_est['T_table_base'][:3, 3], 4).tolist()} (table frame), "
+        log(f"wrist estimate of the arm base from {len(w_obs)} pose(s): "
+            f"{np.round(wrist_est['T_table_base'][:3, 3], 4).tolist()} (table frame), "
             f"rms {wrist_est['rms_px']:.2f} px, sigma {wrist_est['sigma_mm']:.1f} mm / {wrist_est['sigma_yaw_deg']:.2f} deg")
     dists = ab.get("measured_dist_to_base_marker_centres_m")
     if src in ("measured", "auto") and dists and len(base_ids) == 2:
@@ -187,6 +231,7 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
 
     # --- quality ---
     holdout = accuracy.held_out(med, size, W, H, intr_ov, sig, full=fit)
+    holdout_fixed = accuracy.held_out(med, size, W, H, fit.intr, sig, full=fit) if intr_ov is None else None
     per_marker = {}
     for i in sorted(med):
         Pw = g.apply(T_world_table, accuracy.backproject_table(fit, med[i]))      # observed corners on the table
@@ -253,7 +298,12 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
                 "T_world_base": _m(T_world_base), "base_on_table": base_info,
                 "joints_at_calibration": joints},
         "quality": {"overview_reproj_px": round(fit.rms_px(), 3), "per_marker": per_marker,
-                    "held_out": holdout, "wrist_check": wrist_check,
+                    "held_out": holdout,
+                    "held_out_fixed_intrinsics": holdout_fixed,
+                    "held_out_note": "held_out: camera (and f, if not board-calibrated) refitted without the marker, then "
+                                     "its sides/diagonals measured on the table. held_out_fixed_intrinsics: same with f "
+                                     "fixed to the full-fit value (optimistic: f saw every marker).",
+                    "wrist_check": wrist_check,
                     "wrist_base_estimate": None if wrist_est is None else {
                         "T_world_base_est": _m(T_world_table @ wrist_est["T_table_base"]), "rms_px": wrist_est["rms_px"],
                         "sigma_mm": wrist_est["sigma_mm"], "sigma_yaw_deg": wrist_est["sigma_yaw_deg"],
@@ -295,6 +345,8 @@ def main():
     src.add_argument("--live", action="store_true", help="grab frames from Station")
     src.add_argument("--frames-dir", type=Path)
     ap.add_argument("--frames", type=int, default=60, help="frames per camera (live)")
+    ap.add_argument("--wrist-poses", type=int, default=0,
+                    help="also record N extra hand-placed arm poses with markers in the wrist view (live)")
     ap.add_argument("--fit-k1", action="store_true", help="also fit radial distortion k1 (needs markers spread over the image)")
     ap.add_argument("--config", type=Path, default=CONFIG_PATH)
     ap.add_argument("--out", type=Path, default=SCENE_PATH)
@@ -302,7 +354,7 @@ def main():
     a = ap.parse_args()
     cfg = json.loads(a.config.read_text())
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-    data = capture_live(a.frames, ROOT / "frames" / f"calib-{stamp}") if a.live else load_dir(a.frames_dir)
+    data = capture_live(a.frames, ROOT / "frames" / f"calib-{stamp}", a.wrist_poses) if a.live else load_dir(a.frames_dir)
     res = calibrate(data, cfg, fit_k1=a.fit_k1)
     c = res["calib"]
     from .annotate import annotate_overview, annotate_wrist
@@ -333,9 +385,10 @@ def print_report(c: dict):
     print(f"overview: f = {ov['K_normalized']['fx'] * 299:.1f} px ({ov['intrinsics_source']}), fovy {ov['fovy_deg']} deg, "
           f"position {np.round(np.array(ov['T_world_cam'])[:3, 3], 4).tolist()} m")
     print(f"arm base: {c['arm']['base_on_table']['source']}")
-    for r in q["held_out"]:
-        print(f"  held-out marker {r['held_out']}: sides {r['side_err_mm']} mm, diagonals {r['diag_err_mm']} mm, "
-              f"rms {r['rms_mm']:.2f} mm" + (f", centre shift {r['centre_shift_mm']:.1f} mm" if "centre_shift_mm" in r else ""))
+    for key, title in (("held_out", "held-out"), ("held_out_fixed_intrinsics", "held-out, f fixed")):
+        for r in q.get(key) or []:
+            print(f"  {title} marker {r['held_out']}: sides {r['side_err_mm']} mm, diagonals {r['diag_err_mm']} mm, "
+                  f"rms {r['rms_mm']:.2f} mm" + (f", centre shift {r['centre_shift_mm']:.1f} mm" if "centre_shift_mm" in r else ""))
     if q["wrist_check"]:
         print(f"wrist check: {q['wrist_check']['markers']}")
 

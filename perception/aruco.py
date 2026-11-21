@@ -54,7 +54,8 @@ def _bilinear(img: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
                      borderMode=cv2.BORDER_REPLICATE)
 
 
-def refine_edges(gray: np.ndarray, c: np.ndarray, iters: int = 2, half: float = 2.5, bits: int = 4) -> np.ndarray:
+def refine_edges(gray: np.ndarray, c: np.ndarray, iters: int = 2, half: float = 2.5, bits: int = 4,
+                 max_shift: float = 3.0) -> np.ndarray:
     """Sub-pixel marker corners from the black square's four edges.
 
     For each side, sample profiles across the edge (inside = black square, outside = white border),
@@ -62,6 +63,7 @@ def refine_edges(gray: np.ndarray, c: np.ndarray, iters: int = 2, half: float = 
     points (total least squares) and intersect neighbouring lines. Falls back to the input corners
     if a side is too short or the contrast is too low."""
     c = c.astype(float).copy()
+    c0 = c.copy()
     for _ in range(iters):
         centre = c.mean(0)
         lines = []
@@ -88,18 +90,27 @@ def refine_edges(gray: np.ndarray, c: np.ndarray, iters: int = 2, half: float = 
                 if hi - lo < 25:
                     continue
                 mid = (lo + hi) / 2
-                below = np.nonzero(pr[::-1] < mid)[0]       # first dark sample seen from the white side
-                if not len(below) or below[0] == 0:
+                # rising (dark inside -> bright border) mid-level crossings. Normally the outermost one (the
+                # profile ends on the white border); if the profile ends dark (thin border, then a dark
+                # background, e.g. a marker at the table edge) the one nearest the initial edge.
+                up = np.nonzero((pr[:-1] < mid) & (pr[1:] >= mid))[0]
+                if not len(up):
                     continue
-                i0 = len(offs) - 1 - below[0]               # dark sample; i0 + 1 is bright
+                i0 = int(up[-1] if pr[-1] >= mid else up[np.argmin(np.abs(offs[up] + offs[up + 1]))])
                 f = (mid - pr[i0]) / (pr[i0 + 1] - pr[i0] + 1e-9)
                 pts.append(base[j] + (offs[i0] + f * (offs[i0 + 1] - offs[i0])) * n)
             if len(pts) < 3:
                 return c
             pts = np.array(pts)
-            m = pts.mean(0)
-            _, _, vt = np.linalg.svd(pts - m)
-            d = vt[0]
+            for _ in range(2):                              # total least squares, then drop outliers and refit
+                m = pts.mean(0)
+                _, _, vt = np.linalg.svd(pts - m)
+                d = vt[0]
+                res = np.abs((pts - m) @ np.array([-d[1], d[0]]))
+                keep = res <= max(0.25, 3 * np.median(res))
+                if keep.all() or keep.sum() < 3:
+                    break
+                pts = pts[keep]
             lines.append((m, d))
         new = []
         for k in range(4):
@@ -110,8 +121,8 @@ def refine_edges(gray: np.ndarray, c: np.ndarray, iters: int = 2, half: float = 
             tt = np.linalg.solve(A, p2 - p1)
             new.append(p1 + tt[0] * d1)
         new = np.array(new)
-        if np.abs(new - c).max() > 3:                    # refinement ran away: keep OpenCV's corners
-            return c
+        if np.linalg.norm(new - c0, axis=1).max() > max_shift:   # ran away: keep OpenCV's corners
+            return c0
         c = new
     return c
 
