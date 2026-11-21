@@ -1,0 +1,29 @@
+{
+  "file": "/mnt/d/Robotics-Hackathon/outputs/realsim/table_texture.png",
+  "extent_x": [
+    -0.903,
+    0.347
+  ],
+  "extent_y": [
+    -0.032,
+    0.768
+  ],
+  "size_m": [
+    1.25,
+    0.8
+  ],
+  "center": [
+    -0.278,
+    0.368
+  ],
+  "mm_per_px": 1.0,
+  "arm_frame": {
+    "base_table_xy": [
+      0.247,
+      0.318
+    ],
+    "yaw_deg": 0.0,
+    "source": "SfM sparse-point centroid of the base housing (phone video walk01); +-1 cm until tape-checked"
+  },
+  "note": "image right = +x_arm, image up = +y_arm"
+}

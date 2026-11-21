@@ -5,7 +5,7 @@
 # Claude gets ONLY the elrobot-sim tools: no shell/file tools, no other MCP servers, empty working dir.
 # Arguments are parsed by hand (no param block): PowerShell would otherwise prefix-match Claude
 # flags such as -p against script/common parameters. -Sim* options are ours, the rest go to claude.
-$SimDistro = 'Ubuntu'; $SimRecordDir = ''; $SimServerEnv = ''; $SimRunSh = ''; $SimPort = 8891; $SimNoBrowser = $false
+$SimDistro = 'Ubuntu'; $SimRecordDir = ''; $SimServerEnv = ''; $SimRunSh = ''; $SimPort = 8891; $SimNoBrowser = $false; $SimPrompt = ''
 $ClaudeArgs = @()
 for ($i = 0; $i -lt $args.Count; $i++) {
     switch -CaseSensitive ($args[$i]) {
@@ -15,6 +15,7 @@ for ($i = 0; $i -lt $args.Count; $i++) {
         '-SimRunSh'     { $SimRunSh = $args[++$i] }       # WSL path of a run.sh that knows 'sim-arm-mcp'
         '-SimPort'      { $SimPort = [int]$args[++$i] }
         '-SimNoBrowser' { $SimNoBrowser = $true }
+        '-SimPrompt'    { $SimPrompt = $args[++$i] }       # operator prompt file (default OPERATOR.md)
         default         { $ClaudeArgs += [string]$args[$i] }
     }
 }
@@ -56,7 +57,7 @@ Write-Host "elrobot-sim: Claude operator (robot tools only). Recordings: $SimRec
 Push-Location $work
 try {
     & claude '--tools=' --strict-mcp-config --mcp-config $config --allowedTools 'mcp__elrobot-sim' `
-        --append-system-prompt-file (Join-Path $here 'OPERATOR.md') @ClaudeArgs
+        --append-system-prompt-file $(if ($SimPrompt) { $SimPrompt } else { Join-Path $here 'OPERATOR.md' }) @ClaudeArgs
 } finally {
     Pop-Location
     Remove-Item -Force $config -ErrorAction SilentlyContinue

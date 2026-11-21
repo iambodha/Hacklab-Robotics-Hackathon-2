@@ -13,7 +13,8 @@ overload trip: a servo held at its torque limit for ROBOT_SIM_OVERLOAD_S seconds
 reports status 0x20 and goes limp until it is unloaded.
 
 Env: ROBOT_SIM_GUI=1 (MuJoCo viewer), ROBOT_MAX_DELTA (0.35), ROBOT_TRACK_TOL (250),
-ROBOT_GRIPPER_JOINT (j8), ROBOT_SIM_LAYOUT (sim/layout.json), ROBOT_SIM_SEED,
+ROBOT_GRIPPER_JOINT (j8), ROBOT_SIM_LAYOUT (sim/layout.json), ROBOT_SIM_SEED, ROBOT_SIM_RANDOMIZE (1: random start),
+ROBOT_SIM_SKILLS (1; 0 hides task skills such as stir_spoon),
 ROBOT_SIM_OVERLOAD_S (2.0; 0 disables), ROBOT_SIM_TRUTH_LOG (optional JSONL of ground
 truth for a human judge; keep it out of the agent's reach).
 Recording (human side, recorder.py): ROBOT_SIM_RECORD (1; 0 disables), ROBOT_SIM_RECORD_DIR
@@ -54,6 +55,7 @@ TRUTH_LOG = os.environ.get('ROBOT_SIM_TRUTH_LOG')
 IMG_SCALE = int(os.environ.get('ROBOT_SIM_IMG_SCALE', '2'))  # upscale 299x224 frames for the model's eyes
 GRID = os.environ.get('ROBOT_SIM_GRID', '1') == '1'          # labelled pixel grid on look() images
 KINEMATICS = os.environ.get('ROBOT_SIM_KINEMATICS', '1') == '1'  # tcp_pose / move_tcp / pixel_to_table tools
+SKILLS = os.environ.get('ROBOT_SIM_SKILLS', '1') == '1'          # task skills (stir_spoon)
 NAMES = [f'j{i}' for i in range(1, 9)]
 TICKS_PER_RAD = 4096 / (2 * np.pi)
 # Hashes of the real Station camera queues (camera_pose/HANDOFF.md), so prompts carry over.
@@ -61,12 +63,17 @@ CAMERAS = [('wrist_cam', '322ab5514b8e14014c3743c1abfd4a07', 'sim-wrist-uvc'),
            ('overview_cam', '8c697f6e0c79a3d2fab2a4ea977ee738', 'sim-overview')]
 
 
+def spec_quat(spec):
+    return build_scene.object_quat(spec)
+
+
 class SimArm:
     def __init__(self):
-        scene = HERE / 'generated/workspace.xml'
+        out_dir = HERE / 'generated' if LAYOUT.name == 'layout.json' else HERE / 'generated' / LAYOUT.stem
+        scene = out_dir / 'workspace.xml'
         sources = [LAYOUT, HERE / 'build_scene.py']
         if not scene.exists() or scene.stat().st_mtime < max(p.stat().st_mtime for p in sources):
-            build_scene.build(LAYOUT, HERE / 'generated', report=False)
+            build_scene.build(LAYOUT, out_dir, report=False)
         self.layout = json.loads(LAYOUT.read_text())
         self.model = mujoco.MjModel.from_xml_path(str(scene))
         self.data = mujoco.MjData(self.model)
@@ -82,7 +89,7 @@ class SimArm:
         self.saturated_s = np.zeros(m.nu)
         self.lock = threading.RLock()
         self.rng = np.random.default_rng(int(os.environ['ROBOT_SIM_SEED']) if 'ROBOT_SIM_SEED' in os.environ else None)
-        self.reset(randomize=False)
+        self.reset(randomize=os.environ.get('ROBOT_SIM_RANDOMIZE') == '1')
         self.viewer = None
         if GUI:
             from mujoco import viewer as mjviewer
@@ -109,6 +116,7 @@ class SimArm:
                 while d.time < target and steps < 50:
                     mujoco.mj_step(m, d); steps += 1
                     if steps % 10 == 0: self._servo_protection(10 * m.opt.timestep)
+                    self._track_stir(m.opt.timestep)
                 if target - d.time > 0.5:  # fell behind: accept a slower-than-real-time clock
                     wall0, sim0 = time.monotonic(), d.time
             if self.viewer is not None and time.monotonic() - last_sync > 1 / 30:
@@ -130,6 +138,46 @@ class SimArm:
             if abs(self.data.qvel[self.dofs[i]]) < 0.05:
                 self.data.ctrl[i] = self.data.qpos[self.qids[i]]
                 self.status[i] = 0; self._set_torque(i, True)
+
+    def _track_stir(self, dt):
+        """Ground truth for the judge (layout 'stir'): how far the tool tip travels around the cup axis while it is
+        inside the cup. Never shown to the agent."""
+        cfg = self.layout.get('stir')
+        if not cfg:
+            return
+        cup = self.data.body(cfg['cup'])
+        tip = self.data.site(cfg['tool_tip']).xpos
+        rel = tip - cup.xpos
+        axis = cup.xmat.reshape(3, 3)[:, 2]
+        st = self.stir
+        st['cup_tilt_deg'] = float(np.degrees(np.arccos(np.clip(axis[2], -1, 1))))
+        inside = np.hypot(rel[0], rel[1]) < cfg['inner_radius'] + 0.004 and rel[2] < cfg['rim_height'] / 2
+        if not inside:
+            st['last'] = None
+            return
+        ang = float(np.arctan2(rel[1], rel[0]))
+        st['inside_s'] += dt
+        if st['last'] is not None:
+            d = (ang - st['last'][0] + np.pi) % (2 * np.pi) - np.pi
+            st['signed_rad'] += d
+            st['abs_rad'] += abs(d)
+            st['path_m'] += float(np.linalg.norm(tip - st['last'][1]))
+        st['last'] = (ang, tip.copy())
+        st['n'] += 1
+        if st['n'] % 20 == 0 and len(st['pts']) < 20000:   # bowl path inside the cup, every 40 ms (cup frame)
+            st['pts'].append(rel[:2].copy())
+
+    def stir_summary(self):
+        st = self.stir
+        loops = 0.0
+        if len(st['pts']) > 10:   # loops of the bowl around the centre of its own path (stirring off the cup axis counts)
+            pts = np.array(st['pts'])
+            a = np.unwrap(np.arctan2(*(pts - pts.mean(0)).T[::-1]))
+            loops = float(np.abs(np.diff(a)).sum() / (2 * np.pi))
+        return {'loops': round(loops, 2),
+                'net_turns': round(st['signed_rad'] / (2 * np.pi), 2), 'total_turns': round(st['abs_rad'] / (2 * np.pi), 2),
+                'tip_path_in_cup_m': round(st['path_m'], 3), 'tip_inside_s': round(st['inside_s'], 1),
+                'cup_tilt_deg': round(st['cup_tilt_deg'], 1)}
 
     def _set_torque(self, i, on):
         self.torque[i] = on
@@ -175,11 +223,7 @@ class SimArm:
         """Camera JPEG at the Station resolution, upscaled IMG_SCALE x with a labelled pixel grid
         (coordinates are in the returned image, as used by pixel_to_table)."""
         w, h = self.layout['image_size']
-        if self.renderer is None:
-            self.renderer = mujoco.Renderer(self.model, h, w)
-        with self.lock:
-            self.renderer.update_scene(self.data, camera=cam, scene_option=self.vis_option)
-        im = PILImage.fromarray(self.renderer.render())
+        im = PILImage.fromarray(self.frame(cam))
         if IMG_SCALE != 1:
             im = im.resize((w * IMG_SCALE, h * IMG_SCALE), PILImage.BICUBIC)
         if GRID:
@@ -193,6 +237,15 @@ class SimArm:
         buf = io.BytesIO()
         im.save(buf, format='JPEG', quality=85)
         return buf.getvalue()
+
+    def frame(self, cam):
+        """Raw camera image (h, w, 3) at the Station resolution: what look() shows, without upscale or grid."""
+        w, h = self.layout['image_size']
+        if self.renderer is None:
+            self.renderer = mujoco.Renderer(self.model, h, w)
+        with self.lock:
+            self.renderer.update_scene(self.data, camera=cam, scene_option=self.vis_option)
+        return self.renderer.render().copy()
 
     # --- the arm's own kinematics + camera calibration (no knowledge of objects) ---------
     def measured_q(self):
@@ -216,6 +269,8 @@ class SimArm:
             mujoco.mj_resetDataKeyframe(self.model, self.data, self.model.key('rest').id)
             for i in range(self.model.nu): self._set_torque(i, True)
             self.status[:] = 0; self.saturated_s[:] = 0
+            self.stir = {'signed_rad': 0.0, 'abs_rad': 0.0, 'path_m': 0.0, 'inside_s': 0.0, 'cup_tilt_deg': 0.0,
+                         'last': None, 'n': 0, 'pts': []}
             if randomize:
                 for spec in self.layout['objects']:
                     r = spec.get('randomize')
@@ -223,6 +278,22 @@ class SimArm:
                     adr = self.model.jnt_qposadr[self.model.joint(f"{spec['name']}_free").id]
                     self.data.qpos[adr:adr+2] = [self.rng.uniform(*r['x']), self.rng.uniform(*r['y'])]
                     self.data.qpos[adr+3:adr+7] = build_scene.yaw_quat(self.rng.uniform(*r.get('yaw', [0, 0])))
+                for spec in self.layout['objects']:  # e.g. a spoon standing in a cup moves with the cup
+                    lead = spec.get('follow')
+                    if not lead: continue
+                    lead_spec = next(o for o in self.layout['objects'] if o['name'] == lead)
+                    la = self.model.jnt_qposadr[self.model.joint(f'{lead}_free').id]
+                    adr = self.model.jnt_qposadr[self.model.joint(f"{spec['name']}_free").id]
+                    lead_new = self.data.qpos[la:la+2].copy()
+                    rel = np.array(spec['pos'][:2]) - lead_spec['pos'][:2]
+                    turn = 0.0
+                    if spec.get('face_base'):  # keep the handle pointing at the arm base, as an operator would
+                        turn = np.arctan2(-lead_new[1], -lead_new[0]) - np.arctan2(-lead_spec['pos'][1], -lead_spec['pos'][0])
+                    c, s_ = np.cos(turn), np.sin(turn)
+                    self.data.qpos[adr:adr+2] = lead_new + [c * rel[0] - s_ * rel[1], s_ * rel[0] + c * rel[1]]
+                    qz, q0 = np.array([np.cos(turn / 2), 0, 0, np.sin(turn / 2)]), np.array(spec_quat(spec))
+                    out = np.zeros(4); mujoco.mju_mulQuat(out, qz, q0)
+                    self.data.qpos[adr+3:adr+7] = out
             mujoco.mj_forward(self.model, self.data)
 
     def truth(self):
@@ -231,14 +302,19 @@ class SimArm:
             out = {}
             for spec in self.layout['objects']:
                 p = self.data.body(spec['name']).xpos.copy()
+                rot = self.data.body(spec['name']).xmat.reshape(3, 3)
+                yaw = float(np.degrees(np.arctan2(rot[1, 0], rot[0, 0])))
                 inside = None
                 for b in self.layout['bins']:
                     body = self.data.body(b['name'])
                     local = body.xmat.reshape(3, 3).T @ (p - body.xpos)
                     if abs(local[0]) < b['size'][0]/2 and abs(local[1]) < b['size'][1]/2 and local[2] < b['size'][2]:
                         inside = b['name']
-                out[spec['name']] = {'xyz': [round(float(v), 4) for v in p], 'in_bin': inside}
-            return {'sim_time': round(float(self.data.time), 2), 'objects': out}
+                out[spec['name']] = {'xyz': [round(float(v), 4) for v in p], 'yaw_deg': round(yaw, 1), 'in_bin': inside}
+            res = {'sim_time': round(float(self.data.time), 2), 'objects': out}
+            if self.layout.get('stir'):
+                res['stir'] = self.stir_summary()
+            return res
 
 
 arm = SimArm()
@@ -377,12 +453,14 @@ CAMERA_NAMES = {'wrist': 'wrist_cam', 'overview': 'overview_cam'}
 async def tcp_pose() -> str:
     """Where the gripper is, from the measured joints and the arm's kinematic model (like FK on
     the real arm): the TCP (point between the fingertip pads) in the base frame, whether the jaws
-    point down, and the jaw axis direction."""
+    point down, and the jaw axis direction (yaw, and its angle from level: a tilted closing axis
+    puts one jaw under a held object, so it may not drop out when the jaws open)."""
     pos, rot = arm.ik.fk(arm.measured_q())
     approach, jaw = rot[:, 1], rot[:, 0]
     tilt = np.degrees(np.arccos(np.clip(-approach[2], -1, 1)))
+    level = np.degrees(np.arcsin(np.clip(abs(jaw[2]), 0, 1)))
     return (f'tcp xyz = [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}] m; jaws point {tilt:.0f} deg from straight down; '
-            f'jaw closing axis yaw = {np.degrees(np.arctan2(jaw[1], jaw[0])):.0f} deg.\n{FRAME}')
+            f'jaw closing axis yaw = {np.degrees(np.arctan2(jaw[1], jaw[0])):.0f} deg ({level:.0f} deg from level).\n{FRAME}')
 
 
 async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg: float = 0.0,
@@ -407,13 +485,21 @@ async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg:
     waypoints.append(target.tolist())
     seed, log, notes = q, [], []
     for wp in waypoints:
-        sol = arm.ik.solve(np.array(wp), top_down=top_down, q0=seed, yaw_deg=yaw_deg)
-        if sol is None and top_down:  # jaws-down is impossible here (too high/far): accept a tilted gripper
+        if top_down:  # least-tilted reachable pose, as on the real arm (real_arm_mcp.py)
+            sol, lean = arm.ik.solve_least_lean(np.array(wp), seed, yaw_deg)
+            if sol is not None and lean:
+                notes.append(f'jaws-down unreachable at {np.round(wp, 3).tolist()}: gripper leans {abs(lean)} deg from '
+                             f'vertical ({"away from" if lean > 0 else "toward"} the base)')
+            if sol is None:  # last resort: position only, orientation free
+                sol = arm.ik.solve(np.array(wp), top_down=False, q0=seed)
+                if sol is not None:
+                    _, rot = arm.ik.fk(sol)
+                    notes.append(f'no near-vertical pose at {np.round(wp, 3).tolist()}: gripper is '
+                                 f'{np.degrees(np.arccos(np.clip(-rot[2, 1], -1, 1))):.0f} deg from vertical; do not grasp like this')
+        else:
             sol = arm.ik.solve(np.array(wp), top_down=False, q0=seed)
-            if sol is not None:
-                _, rot = arm.ik.fk(sol)
-                notes.append(f'jaws-down unreachable at {np.round(wp, 3).tolist()}: used a gripper tilted '
-                             f'{np.degrees(np.arccos(np.clip(-rot[2, 1], -1, 1))):.0f} deg from vertical')
+        if sol is not None and float(np.abs(arm.norm(sol)[:7] - arm.norm(seed)[:7]).max()) > 0.3:
+            notes.append('large change of arm configuration for this move')
         if sol is None:
             return (f'UNREACHABLE: no joint solution for tcp {np.round(wp, 3).tolist()} '
                     f'({"jaws down" if top_down else "any orientation"}); nothing moved after: {log}\n' + arm.table())
@@ -450,10 +536,30 @@ async def pixel_to_table(camera: str, u: float, v: float, height: float = 0.0) -
             f'({t:.2f} m from the camera, {np.hypot(p[0], p[1]):.3f} m from the arm base).\n{FRAME}')
 
 
+async def camera_info() -> str:
+    """Camera calibration as JSON, the same model pixel_to_table uses: per camera ('wrist',
+    'overview') the look() image size, pinhole intrinsics fx, fy, cx, cy in look() pixels, and the
+    camera pose in the base frame in the OpenCV convention (x right, y down, z forward):
+    p_base = R_base_cam @ p_cam + t_base_cam. The wrist pose follows the current joints."""
+    w, h = arm.layout['image_size']
+    out = {}
+    for name, cam in CAMERA_NAMES.items():
+        cid = arm.model.camera(cam).id
+        with arm.lock:
+            pos, mat = arm.data.cam_xpos[cid].copy(), arm.data.cam_xmat[cid].reshape(3, 3).copy()
+        f = (h / 2) / np.tan(np.radians(arm.model.cam_fovy[cid]) / 2) * IMG_SCALE
+        out[name] = {'width': w * IMG_SCALE, 'height': h * IMG_SCALE, 'fx': f, 'fy': f,
+                     'cx': w * IMG_SCALE / 2, 'cy': h * IMG_SCALE / 2,
+                     'R_base_cam': (mat @ np.diag([1.0, -1.0, -1.0])).round(6).tolist(),
+                     't_base_cam': pos.round(6).tolist()}
+    return json.dumps(out)
+
+
 if KINEMATICS:
     server.tool(annotations={'readOnlyHint': True})(recorded(tcp_pose))
     server.tool(annotations={'destructiveHint': True})(recorded(move_tcp))
     server.tool(annotations={'readOnlyHint': True})(recorded(pixel_to_table))
+    server.tool(annotations={'readOnlyHint': True})(recorded(camera_info))
 
 
 @server.tool(annotations={'destructiveHint': True})
@@ -462,6 +568,28 @@ async def gripper(open_fraction: float) -> str:
     """Set the gripper jaws (j8) to a normalized target: higher = more open. Closing on an object
     stalls the jaw short of the target, which is a grip; it does not abort for the gripper."""
     return await _move({GRIPPER: open_fraction}, 0.05, 0.1, 4096)
+
+
+async def stir_spoon(cup_x: float, cup_y: float, handle_azimuth_deg: float | None = None, rim_height: float = 0.09,
+                     inner_radius: float = 0.03, spoon_length: float = 0.145, turns: int = 3,
+                     radius: float = 0.009) -> list:
+    """SKILL: stir a drink with the spoon that stands in a cup. Give the cup centre (x, y) in the base frame, e.g.
+    pixel_to_table on the middle of the cup opening at the rim height, and the direction the spoon handle sticks
+    out of the cup as an azimuth in the base frame (degrees: 0 = +x, 90 = +y; omit it when the handle points
+    towards the arm base, the only side the arm can grasp it from). The skill grasps the handle along its own
+    axis (retrying with small variations if the jaws close on nothing), swings the spoon upright, moves its bowl
+    in `turns` horizontal circles of `radius` around the cup axis, then lets go (the spoon stays in the cup) and
+    lifts the gripper away. rim_height / inner_radius: cup geometry (m); spoon_length: bowl centre to handle end.
+    Returns what it did step by step plus fresh camera images."""
+    import stir_skill
+    status, log = await stir_skill.StirSkill(arm, move_tcp, gripper).run(
+        cup_x, cup_y, handle_azimuth_deg, rim_height, inner_radius, spoon_length, int(min(max(turns, 1), 10)),
+        float(min(max(radius, 0.003), 0.02)))
+    return [status + chr(10) + chr(10).join(log)] + (await look())[:4]
+
+
+if SKILLS:
+    server.tool(annotations={'destructiveHint': True})(recorded(stir_spoon))
 
 
 @server.tool(annotations={'destructiveHint': True})

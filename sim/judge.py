@@ -14,5 +14,10 @@ for row in rows if '--all' in sys.argv else rows[-1:]:
     objs = ', '.join(f"{k} {v['xyz']} in_bin={v['in_bin']}" for k, v in row['objects'].items())
     print(f"{row['wall']} t={row['sim_time']}s {row['tool']} {json.dumps(row['args'])} | {objs}")
 calls = sum(r['tool'] != 'operator_reset_scene' for r in rows)
-done = all(v['in_bin'] for v in rows[-1]['objects'].values()) if rows else False
+if rows and 'stir' in rows[-1]:  # stir task: the spoon bowl circles >= 2 times inside the cup, cup upright
+    st = rows[-1]['stir']
+    print('stir:', json.dumps(st))
+    done = max(st.get('loops', 0), st['total_turns']) >= 2 and st['cup_tilt_deg'] < 15
+else:
+    done = all(v['in_bin'] for v in rows[-1]['objects'].values()) if rows else False
 print(f'{len(rows)} logged calls ({calls} agent actions); task complete: {done}')

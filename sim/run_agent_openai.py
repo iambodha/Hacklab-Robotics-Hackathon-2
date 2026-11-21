@@ -135,7 +135,9 @@ async def run(a) -> int:
     SESS.mkdir(exist_ok=True)
     log = Log(Path(a.log) if a.log else SESS / f"model_run_{time.strftime('%Y%m%d-%H%M%S')}.jsonl")
     url, t0, turns, usage = a.base_url.rstrip("/") + "/chat/completions", time.time(), 0, {"in": 0, "out": 0}
-    params = StdioServerParameters(command="bash", args=[str(HERE / "run_real_server.sh")], cwd=str(HERE.parent), env=dict(os.environ))
+    # OPERATOR_SERVER_SH / OPERATOR_PROMPT run another operator surface, e.g. system2/run_server.sh + system2/PLANNER.md.
+    server_sh = os.environ.get("OPERATOR_SERVER_SH", str(HERE / "run_real_server.sh"))
+    params = StdioServerParameters(command="bash", args=[server_sh], cwd=str(HERE.parent), env=dict(os.environ))
     final = "BLOCKED: the run ended without a report"
     async with stdio_client(params) as (r, w):
         async with ClientSession(r, w) as mcp:
@@ -143,7 +145,8 @@ async def run(a) -> int:
             tools = (await mcp.list_tools()).tools
             names = {t.name for t in tools}
             import operator_prompt
-            system = operator_prompt.render()
+            system = (Path(os.environ["OPERATOR_PROMPT"]).read_text() if os.environ.get("OPERATOR_PROMPT")
+                      else operator_prompt.render())
             if a.tool_mode == "json":
                 system += PROTOCOL % tool_doc(tools)
             messages = [{"role": "system", "content": system},

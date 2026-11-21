@@ -24,8 +24,9 @@ It gets no object poses, no simulator state and no IK.
 Besides the `arm_mcp` joint tools, the server offers what HANDOFF.md task 4 plans for the real arm.
 They draw only on the arm's own URDF and camera calibration, never on object state:
 `tcp_pose()` (FK of the measured joints), `move_tcp(x, y, z, top_down, yaw_deg)` (IK, executed through the
-same bounded `move_to` steps; it travels high and falls back to a tilted gripper where jaws-down is
-unreachable), and `pixel_to_table(camera, u, v, height)` (pixel ray → table point). `look()` images are
+same bounded `move_to` steps; it travels high and, where jaws-down is unreachable, takes the least-leaning
+pose on the current arm configuration, with real_arm_mcp.py's lean search), `pixel_to_table(camera, u, v, height)`
+(pixel ray → table point) and `camera_info()` (the same calibration as JSON). `look()` images are
 upscaled 2× with a labelled pixel grid (`ROBOT_SIM_IMG_SCALE`, `ROBOT_SIM_GRID`). With
 `ROBOT_SIM_KINEMATICS=0` only the hardware-identical joint tools remain.
 
