@@ -402,20 +402,38 @@ async def move_to(targets: dict[str, float], step: float = 0.02, dt: float = 0.1
 @server.tool(annotations={"destructiveHint": True})
 @recorded
 async def gripper(open_fraction: float) -> str:
-    """Set the gripper jaws (j8) to a normalized target: higher = more open. Each call may change it by at most
-    0.35. Closing on an object stalls the jaw short of the target, which is a grip; it does not abort."""
+    """Set the gripper jaws (j8) to a normalized target in ONE call: 1.0 = fully open, 0.0 = closed. Closing stops
+    by itself when the jaws stall on an object and then holds it with a limited squeeze: the result says
+    "Jaws stalled on something" and j8 stays above its fully closed value (~0.03)."""
     st = await am._read()
-    want = min(1.0, max(0.0, float(open_fraction)))
-    if abs(want - st[8]["norm"]) > am.MAX_DELTA + 0.03:     # slack: 0.35 -> 0.7 from a measured 0.346 must not be refused
-        raise ValueError(f"j8: {st[8]['norm']:.3f} -> {want:.3f} exceeds max delta {am.MAX_DELTA}; close in steps")
-    out = await _drive({8: want}, 0.05, 0.1, track_tol=4096, settle=False, contact=False, grip=True)
-    await asyncio.sleep(0.4)
+    if any(st[mid]["torque"] == 0 for mid in am.IDS):
+        raise RuntimeError("torque is off on some motors: call set_torque(true) first")
+    if not st[8]["in_range"]:
+        raise RuntimeError("j8 is outside its calibrated range; commanding it would snap")
+    lo, hi = st[8]["lo"], st[8]["hi"]
+    target = int(round(lo + min(OPEN_MAX, max(0.0, float(open_fraction))) * (hi - lo)))   # the jaws stop mechanically near 0.96
+    start, hold = st[8]["raw"], _holds(st)
+    n = max(1, int(abs(target - start) / (0.06 * (hi - lo)) + 0.999))
+    prev, still = start, 0
+    for k in range(1, n + 1):
+        goal = int(round(start + (target - start) * k / n))
+        await am._write(0x2A, {**hold, 8: goal}, 2)
+        await asyncio.sleep(0.1)
+        now = (await am._read())[8]["raw"]
+        still = still + 1 if abs(now - prev) < 6 else 0
+        if target < start and now - goal > 200 and still >= 3:    # closing, far behind and not moving for 0.3 s: stalled
+            break
+        prev = now
+    await asyncio.sleep(0.35)
     st = await am._read()
-    if st[8]["raw"] - st[8]["goal"] > GRIP_SQUEEZE + 15:     # closing stalled on an object: hold it with a bounded
-        await am._write(0x2A, {**_holds(st), 8: st[8]["raw"] - GRIP_SQUEEZE}, 2)   # squeeze, or the servo overloads (0x20)
+    out = f"gripper at {st[8]['norm']:.3f}."
+    if st[8]["raw"] - st[8]["goal"] > GRIP_SQUEEZE + 15:     # stalled on an object: hold it with a bounded squeeze,
+        await am._write(0x2A, {**_holds(st), 8: st[8]["raw"] - GRIP_SQUEEZE}, 2)   # or the servo overloads (0x20)
         await asyncio.sleep(0.3)
         st = await am._read()
-        out += f" Jaws stalled on something at {st[8]['norm']:.3f}: holding it with a limited squeeze."
+        out = f"Jaws stalled on something at {st[8]['norm']:.3f}: holding it with a limited squeeze."
+    elif st[8]["goal"] - st[8]["raw"] > 25:                  # opened against the mechanical stop: stop pushing
+        await am._write(0x2A, {**_holds(st), 8: st[8]["raw"]}, 2)
     return out + "\n" + am._table(st)
 
 
@@ -524,6 +542,75 @@ async def pixel_to_table(camera: str, u: float, v: float, height: float = 0.0) -
     p = origin + t * d
     return (f"{camera} pixel ({u:.0f}, {v:.0f}) -> table point [{p[0]:.3f}, {p[1]:.3f}, {p[2]:.3f}] "
             f"({t:.2f} m from the camera, {np.hypot(p[0], p[1]):.3f} m from the arm base).\n{FRAME}")
+
+
+async def _views(which=("wrist", "overview")) -> list:
+    out = []
+    for label, prefix in (("wrist", WRIST_CAM), ("overview", OVERVIEW_CAM)):
+        if label in which:
+            data, note = await _fresh_frame(prefix)
+            out += [f"{label} camera {note}", Image(data=_grid(data), format="jpeg")] if data else [f"{label} camera: {note}"]
+    return out
+
+
+def _first(text: str) -> str:
+    lines = text.splitlines()
+    return lines[0] + "".join(" " + l for l in lines[1:3] if l.startswith("NOTE"))
+
+
+def _stopped(text: str) -> bool:
+    return text.startswith(("ABORTED", "UNREACHABLE"))
+
+
+OPEN_MAX = float(os.environ.get("ROBOT_GRIPPER_OPEN_MAX", "0.96"))
+CLOSED_NORM = float(os.environ.get("ROBOT_GRIPPER_CLOSED", "0.045"))   # j8 above this after closing = holding something
+CARRY_Z = float(os.environ.get("ROBOT_CARRY_Z", "0.20"))
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+async def pick_at(x: float, y: float, object_height: float = 0.02, yaw_deg: float = 0.0) -> list:
+    """Pick up a small object whose centre is at (x, y) on the table (base frame, from pixel_to_table on a CLOSE
+    wrist view): open the jaws, hover above it, descend, close until the jaws stall, lift to z = 0.20. One call
+    replaces move/close/lift. object_height is the object's height in metres; yaw_deg turns the jaws about
+    vertical (the jaws close along x at 0). Returns what happened, whether something is held, and fresh images.
+    Stops at the first refused or aborted move and says where the arm is."""
+    log = []
+    st = await am._read()
+    if st[8]["norm"] < 0.88:
+        log.append("open: " + _first(await gripper(open_fraction=1.0)))
+    for name, z in (("hover", max(object_height + 0.05, 0.07)), ("descend", max(MIN_Z, object_height / 2 + 0.008))):
+        out = await move_tcp(x=x, y=y, z=z, top_down=True, yaw_deg=yaw_deg)
+        log.append(f"{name}: " + _first(out))
+        if _stopped(out) or "do not grasp" in out:
+            return ["PICK STOPPED before closing.\n" + "\n".join(log)] + await _views()
+    log.append("close: " + _first(await gripper(open_fraction=0.0)))
+    out = await move_tcp(x=x, y=y, z=CARRY_Z, top_down=True, yaw_deg=yaw_deg)
+    log.append("lift: " + _first(out))
+    st = await am._read()
+    held = st[8]["norm"] > CLOSED_NORM
+    verdict = (f"HOLDING something (j8 {st[8]['norm']:.3f}, load {st[8]['load']}): check the wrist image shows it between the jaws."
+               if held else f"NOT holding (j8 closed fully to {st[8]['norm']:.3f}): the object is still on the table; re-localize and retry.")
+    if _stopped(out):
+        verdict = "LIFT STOPPED. " + verdict
+    return [verdict + "\n" + "\n".join(log)] + await _views()
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+async def drop_at(x: float, y: float, z: float = 0.19) -> list:
+    """Carry what the gripper holds to (x, y) at height z (it first rises to z, then travels level), open the jaws
+    to release it, then retreat at the same height to above the parking spot (0.0, 0.19). Use z at least 6 cm above
+    a box rim. Returns what happened and fresh images."""
+    log = []
+    out = await move_tcp(x=x, y=y, z=z, top_down=True)
+    log.append("carry: " + _first(out))
+    if _stopped(out):
+        return ["DROP STOPPED before releasing (still holding).\n" + "\n".join(log)] + await _views()
+    log.append("release: " + _first(await gripper(open_fraction=1.0)))
+    out = await move_tcp(x=0.0, y=0.19, z=max(z, 0.12), top_down=True)
+    log.append("retreat: " + _first(out))
+    return ["RELEASED at " + str([round(x, 3), round(y, 3), round(z, 3)]) + ".\n" + "\n".join(log)] + await _views()
 
 
 if __name__ == "__main__":
