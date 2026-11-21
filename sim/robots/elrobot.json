@@ -142,7 +142,9 @@
     "probe_wait_s": 0.3,
     "probe_moved_fraction": 0.6,
     "empty_closed_norm": 0.013,
-    "thin_margin": 0.006
+    "thin_margin": 0.003,
+    "thin_load_margin": 20,
+    "empty_memory": 6
   },
   "ik": {
     "leans_small": [

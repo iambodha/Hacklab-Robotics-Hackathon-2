@@ -533,7 +533,7 @@ def _touch(st, force: float | None = None, probed: bool | None = None) -> str:
     return (f"touch: jaws at {g['norm']:.3f} (gap about {_jaw_width(g['norm']) * 1000:.0f} mm), motor load {g['load']}/1000{f}, "
             f"{g['temp']} C -> " + ("HOLDING something thin (a sheet: napkin, paper, foil)" if thin else
                                     "HOLDING something about that wide" if holding else
-                                    "closed on nothing" if g["norm"] < THIN_MIN or (g["norm"] <= CLOSED_NORM and probed is not True) else "open" if is_open else
+                                    "closed on nothing" if g["norm"] < _thin_min() or (g["norm"] <= CLOSED_NORM and probed is not True) else "open" if is_open else
                                     "NOTHING between the jaws (they closed further when tested: the object slipped out)" if probed is False
                                     else "partly closed, not gripping"))
 
@@ -544,14 +544,20 @@ async def _probe_hold() -> tuple[bool, dict]:
     alone cannot tell.) Returns (holding, state); the grip is restored to its limited squeeze afterwards."""
     st = await am._read()
     g = st[GRIP_ID]
-    if g["norm"] >= GR.open_enough or g["norm"] < THIN_MIN:  # open, or closed as far as empty jaws go
+    if g["norm"] >= GR.open_enough or g["norm"] < _thin_min():  # open, or closed as far as empty jaws go
         return False, st
     raw0 = g["raw"]
     await am._write(GOAL_REG, {**_holds(st), GRIP_ID: raw0 - GR.probe_ticks}, 2)
     await asyncio.sleep(GR.probe_wait_s)
     st = await am._read()
     moved = raw0 - st[GRIP_ID]["raw"]
-    holding = moved < GR.probe_moved_fraction * GR.probe_ticks and st[GRIP_ID]["norm"] >= THIN_MIN
+    holding = moved < GR.probe_moved_fraction * GR.probe_ticks and st[GRIP_ID]["norm"] >= _thin_min()
+    if holding and st[GRIP_ID]["norm"] <= CLOSED_NORM:
+        # Thin regime: empty jaws at their end stop cannot close further either, so position alone is not proof.
+        # A sheet between the pads also raises the motor load (measured: 124-128 held against 92-96 empty).
+        empty_loads = [e[1] for e in _EMPTY if e[1] is not None]
+        if empty_loads and g["load"] < float(np.median(empty_loads)) + GR.thin_load_margin:
+            holding = False
     if holding:                                            # back to the gentle hold
         await am._write(GOAL_REG, {**_holds(st), GRIP_ID: st[GRIP_ID]["raw"] - GR.squeeze_min_ticks}, 2)
     return holding, st
@@ -608,6 +614,7 @@ async def gripper(open_fraction: float, force: float | None = None) -> str:
         if held:
             return (f"Jaws closed on something thin at {st[G]['norm']:.3f} (empty jaws close to about {GR.empty_closed_norm}).\n"
                     + _touch(st, force, True) + "\n" + am._table(st))
+        _note_empty(st[G]["norm"], st[G]["load"])                                    # this is what empty jaws read
         await am._write(GOAL_REG, {**_holds(st), G: st[G]["raw"]}, 2)                # closed on nothing: stop pushing the jaws together
         out = f"gripper closed fully at {st[G]['norm']:.3f}: nothing between the jaws."
     else:
@@ -629,7 +636,7 @@ async def grip_state() -> str:
     limit = next((int.from_bytes(bytes(m.get_state())[GR.torque_limit_register:GR.torque_limit_register + 2], "little")
                   for m in motors or [] if int(m.get_id()) == GRIP_ID), None)
     g = st[GRIP_ID]
-    probed = held if (THIN_MIN <= g["norm"] < GR.open_enough) else None
+    probed = held if (_thin_min() <= g["norm"] < GR.open_enough) else None
     return _touch(st, None, probed) + f"\ntorque limit {limit}/{GR.torque_full}."
 
 
@@ -1008,7 +1015,22 @@ def _stopped(text: str) -> bool:
 
 
 CLOSED_NORM = env("ROBOT_GRIPPER_CLOSED", GR.closed_norm)   # jaws above this after closing = clearly holding something
-THIN_MIN = GR.empty_closed_norm + GR.thin_margin            # between this and CLOSED_NORM: maybe something thin (a sheet)
+# Thin things (one layer of tissue) keep the jaws only a hair further apart than empty jaws: measured 0.017-0.018
+# against 0.012-0.013 empty, with the motor load 30 higher. So "empty" is learned from the closes that met nothing,
+# and a close that ends a little wider than that is treated as a thin hold.
+_EMPTY: list = [(GR.empty_closed_norm, None)]               # (jaw position, motor load) of recent empty closes
+
+
+def _thin_min() -> float:
+    return float(np.median([e[0] for e in _EMPTY])) + GR.thin_margin
+
+
+def _note_empty(norm: float, load: int) -> None:
+    _EMPTY.append((float(norm), int(load)))
+    del _EMPTY[:-GR.empty_memory]
+
+
+THIN_MIN = GR.empty_closed_norm + GR.thin_margin            # starting value; _thin_min() is the live one
 FLAT_Z = env("ROBOT_FLAT_PICK_Z", PK.flat_z)               # TCP height for flat objects (fingertips at the table)
 
 
@@ -1051,7 +1073,7 @@ async def pick_at(x: float, y: float, object_height: float = PK.default_height, 
         await gripper(open_fraction=1.0)
         out = await move_tcp(x=x, y=y, z=PK.backoff_z, top_down=True, yaw_deg=yaw_deg)
         log.append("back off: " + _first(out))
-        why = (f"the jaws closed fully to {st[GRIP_ID]['norm']:.3f}" if st[GRIP_ID]["norm"] < THIN_MIN else
+        why = (f"the jaws closed fully to {st[GRIP_ID]['norm']:.3f}" if st[GRIP_ID]["norm"] < _thin_min() else
                "the jaws touched the object but it slipped out when squeezed: try a lower grip_force, or grip a different part of it")
         return [f"NOT holding ({why}). The jaws are open again and the gripper is {PK.backoff_z * 100:.0f} cm above "
                 f"the pick point: find the object in the wrist image below, re-localize and retry.\n" + "\n".join(log)] + await _views()
