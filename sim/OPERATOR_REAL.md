@@ -21,8 +21,8 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
   z = height. `view` is "latest" (the image taken where the arm is now) or "left" / "centre" / "right" for a
   survey image. height = half the object's height (0.01 for a 2 cm item, 0.003 for something flat); for the centre
   of a box opening use about 0.10. From a survey image expect errors of 2-3 cm: good enough to fly there, not to grasp.
-- `move_tcp(x, y, z)`: move the gripper tip there, jaws as vertical as possible. Long moves rise first and travel
-  level. z must be >= 0.012.
+- `move_tcp(x, y, z, yaw_deg)`: move the gripper tip there, jaws as vertical as possible. Long moves rise first and
+  travel level. z must be >= 0.012. Without yaw_deg the gripper keeps its current rotation.
 - `pick_at(x, y, object_height, yaw_deg=0)`: the whole pick in one call: open, hover, descend, close until the
   jaws stall, lift to z = 0.20. Says HOLDING or NOT holding, with fresh images. Needs a position from a CLOSE wrist
   view (step 2). For something FLAT pass object_height below 0.01: the fingertips then go down to the table.
@@ -31,21 +31,32 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
   (u, v) of the latest wrist image. The returned wrist image has a **green DROP line**: where a released object
   would fall. For a box, aim at the centre of its opening and repeat until the DROP line ends inside the opening.
 - `release_here()`: open the jaws where the gripper is and retreat. It reports the release position.
-- `drop_at(x, y, z)`: carry, release and retreat in one call, for a box position you ALREADY verified in this run
-  (the position `release_here()` reported).
+- `drop_at(x, y, z, yaw_deg)`: carry, release and retreat in one call, for a box position you ALREADY verified in
+  this run. Without yaw_deg the gripper keeps the rotation it picked with.
 - `gripper(open_fraction)`, `tcp_pose()`, `joint_state()`, `move_to({...})`, `set_torque()`: rarely needed.
 
 ## Procedure
 1. `survey()`. List the items and the boxes you can see and decide what goes where. Get a rough position for each
-   with `pixel_to_table(..., view=...)`. If a box named in the task is not in any survey image, say so (BLOCKED).
-2. For each item: `move_tcp(x, y, 0.09)`, `look()`, `pixel_to_table` on its centre in that close image
+   with `pixel_to_table(..., view=...)`. If a box named in the task is not in any survey image, or it is more than
+   about 0.35 m from the base, say so (BLOCKED) before picking anything up.
+2. **Fix each box's drop position FIRST, while the gripper is EMPTY** (a held object hides the box from the wrist
+   camera): `move_tcp(bx, by, 0.20)` to the box's rough position, `look()`, then `center_over(u, v)` on the centre
+   of the box opening. Stop as soon as it answers "already above it" or the green DROP line ends inside the
+   opening: do not keep correcting, and do not override it with your own estimate. Note the gripper position it
+   reports: that is this box's drop position for the whole run. If the jaws are closed and empty, open them first.
+3. For each item: `move_tcp(x, y, 0.09)`, `look()`, `pixel_to_table` on its centre in that close image
    (view="latest"), then `pick_at(x, y, h, yaw_deg)`. If NOT holding, re-localize from the image it returns and
    retry (at most 3 tries per item, then skip it and say so).
-3. First drop into a box: `move_tcp(bx, by, 0.20)` to the box's rough position, `look()`, then
-   `center_over(u, v)` on the centre of the box opening until the green DROP line ends inside the opening, then
-   `release_here()`. Note the release position it reports.
-4. Later drops into the same box: `drop_at(x, y, z)` with that noted position.
+4. Drop: `drop_at(bx, by, 0.20)` with the box's noted position. Check in the returned images that the item is gone
+   from the gripper and not lying beside the box. (`release_here()` is for when you are already above the box.)
 5. When everything is done: `move_tcp(0.0, 0.19, 0.06)` to park, then a final `look()`.
+
+## Long objects (pens, tools, sticks)
+- Grip at the MIDDLE with the jaws across the body: `yaw_deg` = the direction the object's length points on the
+  table, measured from the +x axis, plus 90. A pen lying along y (pointing away from the arm) needs yaw_deg 0; a
+  pen lying along x needs yaw_deg 90. Gripped at one end it hangs, swings and hides the camera view.
+- The gripper keeps that rotation while carrying. For the drop, pass `yaw_deg` to `drop_at` so the object's length
+  runs along the box's long side; an object longer than the box opening will not fit lying flat.
 
 ## Physical limits (real hardware)
 - People sit and stand around the table and may appear in the images, also close to the arm. That is normal for

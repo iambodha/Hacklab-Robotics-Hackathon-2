@@ -166,6 +166,12 @@ def to_norm(q):
 LEAN_SMALL, LEAN_LARGE = (0, 10, -10, 20, -20, 30, -30), (40, -40, 50, 60, 70)
 
 
+def _yaw_now(q) -> float:
+    """Current rotation of the jaw closing axis about vertical, in degrees (what yaw_deg sets)."""
+    _, rot = IK.fk(q)
+    return float(np.degrees(np.arctan2(rot[1, 0], rot[0, 0])))
+
+
 def _target_rot(xyz, lean_deg: float, yaw_deg: float):
     """TCP rotation whose approach axis (+y) points down, leaned lean_deg away from the base (negative: toward it)."""
     r = np.asarray(xyz[:2], float)
@@ -230,6 +236,7 @@ def _solve_tcp(xyz, q0, yaw_deg: float):
 # closed-loop until the measured position arrives. Contact (motor load) or a fault holds the present pose.
 LOAD_ABORT = int(os.environ.get("ROBOT_LOAD_ABORT", "550"))   # ST3215 present load, 0..1000
 SETTLE_TOL = 6                                                # ticks
+MAX_TICKS_PER_STEP = float(os.environ.get("ROBOT_MAX_TICKS_PER_STEP", "45"))   # about 33 deg/s at dt = 0.12 s
 GRIP_SQUEEZE = int(os.environ.get("ROBOT_GRIP_SQUEEZE", "45"))   # ticks the jaw goal stays past a stalled grip
 
 
@@ -280,7 +287,10 @@ async def _drive(plan: dict, step: float = 0.02, dt: float = 0.12, track_tol: in
     start = {mid: st[mid]["raw"] for mid in plan}
     hold = _holds(st)
     span = {mid: st[mid]["hi"] - st[mid]["lo"] for mid in plan}
-    n = max([1] + [int(abs(raw_goal[m] - start[m]) / (step * span[m]) + 0.999) for m in plan])
+    # Speed limit per joint in servo ticks, not only as a fraction of its range: j5 and j7 have almost twice the
+    # range of the others, so a pure fraction drove them twice as fast and they fell behind (tracking abort on any
+    # large gripper rotation).
+    n = max([1] + [int(abs(raw_goal[m] - start[m]) / min(step * span[m], MAX_TICKS_PER_STEP) + 0.999) for m in plan])
     for k in range(1, n + 1):
         goals = dict(hold)
         for m in plan:
@@ -529,20 +539,23 @@ async def tcp_pose() -> str:
 
 @server.tool(annotations={"destructiveHint": True})
 @recorded
-async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg: float = 0.0,
+async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg: float | None = None,
                    step: float = 0.02, dt: float = 0.12) -> str:
     """Move the gripper TCP (between the fingertip pads) to (x, y, z) in the base frame using the arm's inverse
     kinematics, executed with move_to in bounded steps (same refusals and tracking aborts). top_down=True keeps
     the jaws pointing straight down (where impossible it uses the nearest tilted pose and says so); yaw_deg turns
-    the jaw closing axis about vertical. If the target is more than 3 cm away sideways, it travels at a safe
+    the jaw closing axis about vertical (0 = jaws close along x); leave it out to KEEP the gripper's current
+    rotation, so something you picked up at an angle stays at that angle. If the target is more than 3 cm away sideways, it travels at a safe
     height (max(target, 0.08 m)), lifting first, then descends. The gripper opening is not changed.
     Table top is z = 0; on the real arm the TCP may not go below z = 0.012 (fingertips at the table)."""
     target = np.array([x, y, z], float)
     if not (MIN_Z <= z <= 0.45 and np.hypot(x, y) <= 0.45):
-        raise ValueError(f"target {target.round(3).tolist()} is outside the workspace "
-                         f"(z {MIN_Z}..0.45 m, radius <= 0.45 m)")
+        return (f"UNREACHABLE: {target.round(3).tolist()} is outside the arm's workspace (z {MIN_Z}..0.45 m, at most "
+                f"0.45 m from the base; this point is {np.hypot(x, y):.2f} m away). Nothing moved.")
     q, _ = await measured()
     cur, _ = IK.fk(q)
+    if yaw_deg is None:
+        yaw_deg = _yaw_now(q)
     waypoints = []
     if np.hypot(*(target[:2] - cur[:2])) > 0.03:
         safe = max(z, 0.08)
@@ -700,12 +713,13 @@ async def pick_at(x: float, y: float, object_height: float = 0.02, yaw_deg: floa
 
 @server.tool(annotations={"destructiveHint": True})
 @recorded
-async def drop_at(x: float, y: float, z: float = 0.19) -> list:
+async def drop_at(x: float, y: float, z: float = 0.19, yaw_deg: float | None = None) -> list:
     """Carry what the gripper holds to (x, y) at height z (it first rises to z, then travels level), open the jaws
     to release it, then retreat at the same height to above the parking spot (0.0, 0.19). Use z at least 6 cm above
-    a box rim. Returns what happened and fresh images."""
+    a box rim. yaw_deg turns the gripper for the release (leave it out to keep the current rotation): for a long
+    object choose it so the object's length runs along the box's long side. Returns what happened and fresh images."""
     log = []
-    out = await move_tcp(x=x, y=y, z=z, top_down=True)
+    out = await move_tcp(x=x, y=y, z=z, top_down=True, yaw_deg=yaw_deg)
     log.append("carry: " + _first(out))
     if _stopped(out):
         return ["DROP STOPPED before releasing (still holding).\n" + "\n".join(log)] + await _views()
@@ -731,7 +745,7 @@ async def survey() -> list:
     if st[8]["norm"] < 0.88 and st[8]["norm"] <= CLOSED_NORM + 0.01:   # closed and empty jaws hide the middle of the view
         await gripper(open_fraction=1.0)
     for name, x, y, z in SURVEY_POSES:
-        r = await move_tcp(x=x, y=y, z=z, top_down=True)
+        r = await move_tcp(x=x, y=y, z=z, top_down=True, yaw_deg=0.0)
         if _stopped(r):
             out.append(f"{name} pose not reached: {_first(r)}")
             continue
@@ -757,6 +771,14 @@ async def center_over(u: float, v: float, height: float = 0.10) -> list:
     image until the DROP line ends inside the box opening, then call release_here()."""
     q, _ = await measured()
     tcp, _ = IK.fk(q)
+    line = _drop_line(q)
+    if line:
+        a, b = np.array(line[0]), np.array(line[-1])
+        ab, ap = b - a, np.array([float(u), float(v)]) - a
+        t = float(np.clip(ap @ ab / max(ab @ ab, 1e-9), -0.3, 1.3))
+        if float(np.linalg.norm(ap - t * ab)) <= 14:
+            return [f"already above it: pixel ({u:.0f}, {v:.0f}) lies on the DROP line, so a released object falls there. "
+                    f"Did not move. Gripper is at [{tcp[0]:.3f}, {tcp[1]:.3f}, {tcp[2]:.3f}]."] + await _views(("wrist",))
     origin, d = _ray(*_wrist_pose(q), float(u), float(v))
     if d[2] > -1e-3:
         return [f"the ray through ({u}, {v}) does not go down: pick a pixel on the box opening"]
