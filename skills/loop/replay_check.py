@@ -60,7 +60,7 @@ def main(argv=None) -> dict:
     ev = evaluate(before, after, H=H, board=board, execution_id="replay", strokes=strokes, target=trace["task"]["region"])
     rec_val = trace["outcome"]["value"]
     same = (ev.outcome.success == trace["outcome"]["success"] and
-            (math.isnan(rec_val) and math.isnan(ev.outcome.value) or abs(ev.outcome.value - rec_val) < 1e-9))
+            (math.isnan(rec_val) and math.isnan(ev.outcome.value) or abs(ev.outcome.value - rec_val) < 1e-5))   # records round to 6 decimals
     res = {"reproduced": bool(same), "replayed_value": ev.outcome.value, "recorded_value": rec_val,
            "frames_t": [tb, ta], "counterfactual": []}
     # counterfactual on the recorded stain
