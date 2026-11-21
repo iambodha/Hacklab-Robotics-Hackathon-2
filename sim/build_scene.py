@@ -301,14 +301,17 @@ def marker_pose(item):
     return T
 
 
-def marker_texture(dictionary, marker_id, out_dir, px=240):
-    """PNG of an ArUco marker (black square incl. its 1-cell border = the nominal size), generated with OpenCV."""
+def marker_texture(dictionary, marker_id, out_dir, px=240, levels=(0.0, 1.0)):
+    """PNG of an ArUco marker (black square incl. its 1-cell border = the nominal size), generated with OpenCV;
+    levels = (ink, paper) grey levels in 0..1 (printed markers are not pure black and white under room light)."""
     import cv2
-    path = Path(out_dir) / 'markers' / f'{dictionary}_{marker_id}.png'
+    ink, paper = (int(round(255 * v)) for v in levels)
+    path = Path(out_dir) / 'markers' / f'{dictionary}_{marker_id}_{ink}_{paper}.png'
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         d = cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, dictionary))
-        cv2.imwrite(str(path), cv2.cvtColor(cv2.aruco.generateImageMarker(d, int(marker_id), px), cv2.COLOR_GRAY2BGR))
+        img = cv2.aruco.generateImageMarker(d, int(marker_id), px).astype(np.float32) / 255
+        cv2.imwrite(str(path), cv2.cvtColor((ink + img * (paper - ink)).astype(np.uint8), cv2.COLOR_GRAY2BGR))
     return path
 
 
@@ -316,9 +319,10 @@ def add_markers(root, spec, out_dir):
     """ArUco markers as visual-only textured planes lying on the table, with the white paper margin around them."""
     asset, world = root.find('asset'), root.find('worldbody')
     s, margin = spec['size_m'], spec.get('paper_margin_m', 0.012)
+    levels = spec.get('levels', [0.0, 1.0])
     for item in spec['items']:
         T, mid = marker_pose(item), item['id']
-        tex = marker_texture(spec['dictionary'], mid, out_dir)
+        tex = marker_texture(spec['dictionary'], mid, out_dir, levels=levels)
         ET.SubElement(asset, 'texture', name=f'aruco_tex_{mid}', type='2d', file=str(tex.resolve()))
         ET.SubElement(asset, 'material', name=f'aruco_mat_{mid}', texture=f'aruco_tex_{mid}', texuniform='false',
                       texrepeat='1 1', specular='0.1', shininess='0.2', reflectance='0')
@@ -326,7 +330,7 @@ def add_markers(root, spec, out_dir):
         mujoco.mju_mat2Quat(quat, T[:3, :3].flatten())
         body = ET.SubElement(world, 'body', name=f'aruco_{mid}', pos=fmt(T[:3, 3]), quat=fmt(quat))
         ET.SubElement(body, 'geom', name=f'aruco_{mid}_paper', type='box', size=fmt([s/2 + margin, s/2 + margin, 0.0002]),
-                      pos='0 0 0.0003', rgba=fmt(spec.get('paper_rgba', [0.93, 0.93, 0.92, 1])), group='0', **NO_CONTACT)
+                      pos='0 0 0.0003', rgba=fmt(spec.get('paper_rgba', [levels[1]] * 3 + [1])), group='0', **NO_CONTACT)
         ET.SubElement(body, 'geom', name=f'aruco_{mid}', type='plane', size=fmt([s/2, s/2, 0.01]), pos='0 0 0.0006',
                       material=f'aruco_mat_{mid}', group='0', **NO_CONTACT)
         for k, (cx_, cy_) in enumerate([(-1, 1), (1, 1), (1, -1), (-1, -1)]):  # OpenCV corner order: TL, TR, BR, BL

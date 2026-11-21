@@ -14,11 +14,22 @@
     "height": 0.75,
     "rgba": [0.8, 0.69, 0.57, 1],
     "floor_rgba": [0.42, 0.36, 0.3, 1],
-    "src": "estimate"
+    "src": "estimate",
+    "calib_extent_inside": false,
+    "texture": "assets/home_table_texture.png",
+    "specular": 0.05,
+    "texture_meta": {
+      "size_px": [460, 342],
+      "mm_per_px": 2.0,
+      "seen_fraction": 0.849,
+      "filled_fraction": 0.361,
+      "src": "fit_appearance",
+      "from": "/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/twin/sim/layouts/home_estimate/overview.jpg"
+    }
   },
   "lighting": {
     "headlight": {
-      "ambient": [0.45, 0.45, 0.45],
+      "ambient": [0.751, 0.751, 0.751],
       "diffuse": [0, 0, 0],
       "specular": [0, 0, 0]
     },
@@ -29,12 +40,13 @@
         "directional": true,
         "pos": [0.0, 0.3, 2.0],
         "dir": [0.1, 0.2, -1.0],
-        "diffuse": [0.35, 0.35, 0.35],
-        "specular": [0.05, 0.05, 0.05],
+        "diffuse": [0.25, 0.25, 0.25],
+        "specular": [0.03, 0.03, 0.03],
         "castshadow": true
       }
     ],
-    "src": "fixed"
+    "src": "fit_appearance",
+    "_about": "gain fitted to the real overview (table colour error 0.16 -> 0.12 rgb)"
   },
   "arm_rgba": [0.12, 0.12, 0.13, 1],
   "arm": {
@@ -51,11 +63,11 @@
     {
       "name": "cam_stand_pole",
       "type": "cylinder",
-      "pos": [0.0362, 0.704, 0.1243],
-      "size": [0.008, 0.2243],
+      "pos": [0.0248, 0.6772, 0.1451],
+      "size": [0.008, 0.2451],
       "yaw": 0,
       "rgba": [0.05, 0.05, 0.05, 1],
-      "src": "estimate",
+      "src": "scene_calib",
       "_about": "overview camera stand just beyond the near edge, under the camera: the wrist camera sees it rise from the table edge; the overview camera does not see it"
     }
   ],
@@ -66,45 +78,49 @@
       {
         "id": 20,
         "role": "top",
-        "T": [[-0.99984, 0.01783, 0.0, 0.35771], [-0.01783, -0.99984, 0.0, 0.47511], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
-        "src": "estimate"
+        "T": [[-0.99998, 0.00588, 0.0, 0.35794], [-0.00588, -0.99998, 0.0, 0.46118], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "src": "scene_calib",
+        "rms_mm": 1.439
       },
       {
         "id": 21,
         "role": "top",
-        "T": [[-1.0, -0.00116, 0.0, -0.29647], [0.00116, -1.0, 0.0, 0.47852], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "T": [[-0.99979, 0.02072, 0.0, -0.30356], [-0.02072, -0.99979, 0.0, 0.45907], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
         "src": "estimate",
-        "note": "id hidden in the overview (cable over the bits): parallelogram from the other three"
+        "note": "id hidden in the overview (cable over the bits): parallelogram from the other three moved with markers [20, 22, 23] onto scene_calib"
       },
       {
         "id": 22,
         "role": "base",
-        "T": [[-0.99975, -0.0222, 0.0, -0.3015], [0.0222, -0.99975, 0.0, 0.0561], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
-        "src": "estimate"
+        "T": [[-0.99804, 0.06262, 0.0, -0.30188], [-0.06262, -0.99804, 0.0, 0.03188], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "src": "scene_calib",
+        "rms_mm": 4.566
       },
       {
         "id": 23,
         "role": "base",
-        "T": [[-1.0, 0.0009, 0.0, 0.35269], [-0.0009, -1.0, 0.0, 0.05269], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
-        "src": "estimate"
+        "T": [[-0.99988, 0.01579, 0.0, 0.3499], [-0.01579, -0.99988, 0.0, 0.06111], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "src": "scene_calib",
+        "rms_mm": 1.522
       }
-    ]
+    ],
+    "levels": [0.133, 0.723]
   },
   "cameras": [
     {
       "name": "overview_cam",
-      "fovy": 73.827,
-      "src": "estimate",
-      "T_cv": [[-0.99985, 0.0139, 0.01044, 0.03467], [0.0016, 0.67151, -0.741, 0.67403], [-0.01731, -0.74087, -0.67143, 0.34867], [0.0, 0.0, 0.0, 1.0]],
+      "fovy": 74.24,
+      "src": "scene_calib",
+      "T_cv": [[-0.99958, -0.01506, 0.02475, 0.02368], [-0.02807, 0.71494, -0.69863, 0.64721], [-0.00718, -0.69903, -0.71506, 0.39026], [0.0, 0.0, 0.0, 1.0]],
       "queue": "usbvideo/9ea4cacd5be94751e1eea7be90bcf628",
       "K_normalized": {
-        "fx": 0.49864934527729,
-        "fy": 0.6656078314192397,
-        "cx": 0.5,
-        "cy": 0.5
+        "fx": 0.494907,
+        "fy": 0.660612,
+        "cx": 0.498328,
+        "cy": 0.497768
       },
-      "dist": [-0.05795821628329199, 0, 0, 0, 0],
-      "reproj_px": 0.609
+      "dist": [0.0, 0.0, 0.0, 0.0, 0.0],
+      "reproj_px": 0.536
     },
     {
       "name": "top_cam",
@@ -121,13 +137,19 @@
   ],
   "wrist_camera": {
     "pose_file": "camera_pose/wrist_camera.json",
-    "fovy": 73.827,
-    "src": "estimate",
-    "K_normalized": null,
-    "dist": null,
+    "fovy": 75.729,
+    "src": "scene_calib",
+    "K_normalized": {
+      "fx": 0.481789,
+      "fy": 0.643102,
+      "cx": 0.498328,
+      "cy": 0.497768
+    },
+    "dist": [0.0, 0.0, 0.0, 0.0, 0.0],
     "queue": "usbvideo/28ff0ca87978e8f993c2ac64a84d188a",
     "pose_source": "CAD (camera_pose/wrist_camera.json)",
-    "pitch_offset_deg": 0.15
+    "T_link_cam": [[0.999967, -0.003511, 0.007382, 0.001517], [-0.008175, -0.429537, 0.903012, 0.022752], [0.0, -0.903043, -0.429551, 0.06075], [0.0, 0.0, 0.0, 1.0]],
+    "link": "Gripper_Base_v1_1"
   },
   "image_size": [299, 224],
   "reach": {
@@ -138,8 +160,9 @@
     "bin_drop_clearance": 0.05
   },
   "T_sim_world": {
-    "value": [[0.0, -1.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
-    "src": "estimate",
+    "value": [[-0.0, -1.0, -0.0, -0.0], [1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+    "src": "scene_calib",
     "_about": "p_sim = T_sim_world @ p_world (contract world: x forward; sim/URDF: y forward)"
-  }
+  },
+  "_synced_from": ["/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/perception/calibration/scene_calib.json"]
 }

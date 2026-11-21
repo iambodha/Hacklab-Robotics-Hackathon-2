@@ -46,6 +46,16 @@ def load_model(layout_file: Path):
     return mujoco.MjModel.from_xml_path(str(xml)), layout
 
 
+def load_model_from(layout: dict, layout_file: Path):
+    """Model of an (edited) layout dict without writing the layout or its generated scene."""
+    import xml.etree.ElementTree as ET
+    out = build_scene.generated_dir(layout_file) / "scratch"
+    out.mkdir(parents=True, exist_ok=True)
+    root = build_scene.build_xml(layout, out)
+    build_scene.add_rest_keyframe(root, layout)
+    return mujoco.MjModel.from_xml_string(ET.tostring(root, encoding="unicode")), layout
+
+
 def camera_K(model, cam_id, W, H):
     f = H / 2 / math.tan(math.radians(model.cam_fovy[cam_id]) / 2)
     return np.array([[f, 0, W / 2], [0, f, H / 2], [0, 0, 1.0]])

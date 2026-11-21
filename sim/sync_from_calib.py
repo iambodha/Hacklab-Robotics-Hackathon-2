@@ -46,6 +46,27 @@ def t_sim_world(calib: dict) -> np.ndarray:
     return np.linalg.inv(T)
 
 
+def rigid2d(src_xy, dst_xy) -> np.ndarray:
+    """4x4 rotation about z + translation (least squares, Kabsch in 2D) taking src points onto dst points."""
+    a, b = np.asarray(src_xy, float), np.asarray(dst_xy, float)
+    ca, cb = a.mean(0), b.mean(0)
+    h = (a - ca).T @ (b - cb)
+    ang = math.atan2(h[0, 1] - h[1, 0], h[0, 0] + h[1, 1])
+    M = np.eye(4)
+    M[:2, :2] = [[math.cos(ang), -math.sin(ang)], [math.sin(ang), math.cos(ang)]]
+    M[:2, 3] = cb - M[:2, :2] @ ca
+    return M
+
+
+def covers(table: dict, c_xy, size, yaw_deg) -> bool:
+    """Does the layout table contain the rectangle (centre, size, yaw)?"""
+    a, b = math.radians(yaw_deg), math.radians(table.get("yaw", 0.0))
+    corners = [np.asarray(c_xy) + np.array([[math.cos(a), -math.sin(a)], [math.sin(a), math.cos(a)]]) @ [sx * size[0] / 2, sy * size[1] / 2]
+               for sx in (-1, 1) for sy in (-1, 1)]
+    Rb = np.array([[math.cos(b), math.sin(b)], [-math.sin(b), math.cos(b)]])
+    return all((np.abs(Rb @ (p - table["center"])) <= np.asarray(table["size"]) / 2 + 1e-3).all() for p in corners)
+
+
 def fovy_of(cam: dict) -> float | None:
     if cam.get("fovy_deg"):
         return float(cam["fovy_deg"])
@@ -72,8 +93,14 @@ def apply_calib(calib: dict, layout: dict, src: str = "scene_calib", force: bool
             c_w, size, yaw_w = [(x0 + x1) / 2, (y0 + y1) / 2], [x1 - x0, y1 - y0], 0.0
         c_s = T_sw @ [c_w[0], c_w[1], 0, 1]
         yaw_s = yaw_w + math.degrees(math.atan2(T_sw[1, 0], T_sw[0, 0]))
-        layout["table"].update(center=r(c_s[:2], 4), size=r(size, 4), yaw=round(yaw_s, 3), src=src)
-        changes.append(f"table: centre {r(c_s[:2], 3)} size {r(size, 3)} yaw {yaw_s:.1f} deg")
+        if "not the real table edge" in str(tbl.get("extent_source", "")) and "size" in layout["table"]:
+            # only a lower bound (marker bounding box): keep the measured edges, note the check
+            inside = covers(layout["table"], c_s[:2], size, yaw_s)
+            layout["table"]["calib_extent_inside"] = inside
+            changes.append(f"table: scene_calib extent is the marker bounding box; kept the edge estimate (covers it: {inside})")
+        else:
+            layout["table"].update(center=r(c_s[:2], 4), size=r(size, 4), yaw=round(yaw_s, 3), src=src)
+            changes.append(f"table: centre {r(c_s[:2], 3)} size {r(size, 3)} yaw {yaw_s:.1f} deg")
 
     mk = calib.get("markers")
     if mk and mk.get("items"):
@@ -86,7 +113,20 @@ def apply_calib(calib: dict, layout: dict, src: str = "scene_calib", force: bool
             items.append({"id": it["id"], "role": it.get("role", "other"), "T": r(T), "src": src,
                           **({"rms_mm": it["rms_mm"]} if "rms_mm" in it else {})})
             changes.append(f"marker {it['id']}: {r(T[:3, 3], 3)}")
-        items += [v for k, v in old.items() if k not in {it["id"] for it in items}]
+        # Markers only the estimate has (e.g. one whose id a cable hides): carry them with the rigid 2D motion that
+        # takes the estimate's other markers onto the calibrated ones.
+        new_ids = {it["id"] for it in items}
+        common = [k for k in new_ids if k in old and old[k].get("src") != src and "T" in old[k]]
+        extra = [v for k, v in old.items() if k not in new_ids]
+        if extra and len(common) >= 2:
+            M = rigid2d([np.asarray(old[k]["T"])[:2, 3] for k in common],
+                        [np.asarray(next(it for it in items if it["id"] == k)["T"])[:2, 3] for k in common])
+            for v in extra:
+                v = dict(v, T=r(M @ np.asarray(v["T"], float)), note=(v.get("note", "") + f" moved with markers {sorted(common)} onto {src}").strip())
+                items.append(v)
+                changes.append(f"marker {v['id']}: carried along ({v['src']}) -> {r(np.asarray(v['T'])[:3, 3], 3)}")
+        else:
+            items += extra
         layout["markers"] = {**layout.get("markers", {}), "dictionary": mk["dictionary"], "size_m": mk["size_m"],
                              "items": sorted(items, key=lambda it: it["id"])}
 
@@ -122,7 +162,7 @@ def apply_calib(calib: dict, layout: dict, src: str = "scene_calib", force: bool
             w["fovy"] = round(fovy_of(wr), 3)
         w.update(src=src, K_normalized=wr.get("K_normalized"), dist=wr.get("dist"), queue=wr.get("queue"),
                  pose_source=wr.get("source"))
-        changes.append(f"wrist_camera: fovy {w['fovy']} pose {'calibrated' if wr.get('T_link_cam') else 'CAD'}")
+        changes.append(f"wrist_camera: fovy {w['fovy']} pose from {wr.get('source', 'CAD') if wr.get('T_link_cam') else 'CAD'}")
     return layout, changes
 
 
