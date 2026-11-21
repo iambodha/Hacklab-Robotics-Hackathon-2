@@ -256,5 +256,132 @@ async def project_to_wrist(x: float, y: float, z: float, assumed_hfov_deg: float
     return (f"pixel {uv[0].round(1).tolist()}, depth {depth[0]:.3f} m" + ("" if inside else " (outside view)")) + _note(intr)
 
 
+# ---------------------------------------------------------------------------
+# Scene perception (perception/, calibration/scene_calib.json). Read-only: frames come from Station's
+# usbvideo queues, joints from the motor bus; nothing is ever sent to the arm. World frame: follower
+# base_link origin on the table, z up, x = arm forward at j1=0, metres. Needs opencv-contrib-python.
+
+_located: list[dict] = []          # objects located this session, shown by scene_map / annotated_view
+
+
+def _perc():
+    root = str(Path(__file__).resolve().parent.parent)
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    from perception import locate
+    return locate
+
+
+def _locator():
+    loc = _perc()
+    if not loc.scene_file_exists():
+        raise RuntimeError("no calibration/scene_calib.json yet: run `python -m perception.calib_scene --live`")
+    return loc.Locator(loc.reload())
+
+
+async def _joints() -> dict:
+    st = await _read()
+    return {NAMES[i]: {"raw": st[mid]["raw"], "lo": st[mid]["lo"], "hi": st[mid]["hi"]} for i, mid in enumerate(IDS)}
+
+
+async def _frame(cam: str):
+    from perception import station_io as sio
+    jpg = (await sio.grab_jpegs(await _client(), cam, 1))[0]
+    return sio.decode_jpeg(jpg)
+
+
+def _json(d) -> str:
+    return json.dumps(d, indent=1, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o))
+
+
+@server.tool(annotations={"readOnlyHint": True})
+async def calibration_status() -> str:
+    """What the scene calibration knows and how good it is: markers, camera intrinsics source,
+    overview camera pose, how the arm base / world frame was found, hold-one-out accuracy (mm),
+    mm per pixel at each marker. World frame: arm base on the table, x forward, y left, z up, metres."""
+    return _json(_locator().sc.status())
+
+
+@server.tool(annotations={"readOnlyHint": True})
+async def locate(camera: str = "overview", u: float | None = None, v: float | None = None,
+                 bbox: list[float] | None = None, color: str | None = None, height_m: float = 0.0,
+                 label: str | None = None) -> str:
+    """MEASURE where something is on the table (world metres), from what you recognised in a camera image.
+    camera: "overview" or "wrist" (299x224 pixels, u = column, v = row, as in annotated_view's ruler).
+    Give a pixel (u, v) for a point, and/or bbox [u0, v0, u1, v1] around an object; optional color
+    (red/orange/yellow/green/blue/purple/black/white) helps segmentation. height_m: the object's height
+    if known (0 = flat); a tall object located with height 0 is biased away from the camera, the
+    result tells you by how much per cm. Returns centre_xy, size_m [long, short], yaw_deg (long side vs +x),
+    sigma_centre_mm, or for a bare pixel the table point xyz with sigma_mm."""
+    loc = _locator()
+    joints = await _joints() if camera == "wrist" else None
+    if bbox is None and color is None:
+        if u is None or v is None:
+            raise ValueError("give a pixel (u, v), a bbox, or a color")
+        r = loc.pixel_to_table(camera, u, v, height_m, joints)
+    else:
+        img = await _frame(camera)
+        r = loc.locate_object(camera, img, bbox=bbox, pixel=None if u is None else (u, v), color=color,
+                              height_m=height_m, joints=joints)
+    if r.get("ok"):
+        _located.append({"label": label or color or "object", "camera": camera, "time": time.strftime("%H:%M:%S"),
+                         **{k: r[k] for k in ("xyz", "centre_xy", "size_m", "yaw_deg", "polygon_xy", "sigma_mm",
+                                              "sigma_centre_mm") if k in r}})
+        del _located[:-20]
+    return _json(r)
+
+
+@server.tool(annotations={"readOnlyHint": True})
+async def triangulate(overview_u: float, overview_v: float, wrist_u: float, wrist_v: float) -> str:
+    """3D point (world metres) of one physical point seen at a pixel in BOTH cameras (e.g. the top of
+    an object), using the overview calibration and the live wrist pose from FK. Gives ray_gap_mm
+    (how well the two rays meet) and sigma_mm."""
+    return _json(_locator().triangulate((overview_u, overview_v), (wrist_u, wrist_v), await _joints()))
+
+
+@server.tool(annotations={"readOnlyHint": True})
+async def project_point(x: float, y: float, z: float = 0.0) -> str:
+    """Where world point (x, y, z) in metres appears in each camera (pixel u, v in 299x224, depth, in_view).
+    Use it to check a plan: e.g. project a target before moving to it."""
+    loc = _locator()
+    out = {"overview": loc.world_to_pixel("overview", [x, y, z])}
+    if loc.sc.intr("wrist") is not None:
+        out["wrist"] = loc.world_to_pixel("wrist", [x, y, z], await _joints())
+    return _json(out)
+
+
+@server.tool(annotations={"readOnlyHint": True})
+async def scene_map() -> str:
+    """The measured scene in world metres: table extent, markers, arm base, both cameras (position,
+    view direction, footprint on the table), gripper TCP, and objects located so far this session."""
+    loc = _locator()
+    joints = await _joints()
+    return _json(loc.scene_map(joints, _located))
+
+
+@server.tool(annotations={"readOnlyHint": True})
+async def annotated_view(camera: str = "overview") -> list:
+    """Live camera frame with what the maths sees drawn in: a 5 cm table grid (orange lines every 10 cm,
+    labelled with world x), world axes at the arm base (x red, y green, z blue), calibrated markers (red)
+    vs detected (green), the wrist camera's view footprint and TCP (magenta, overview only), and objects
+    located this session (yellow). Upscaled x3; the ruler on the border is in 299x224 pixels for locate()."""
+    import cv2
+    from perception import annotate, aruco
+    loc = _locator()
+    img = await _frame(camera)
+    joints = await _joints()
+    obs = aruco.detect(img, loc.sc.d["markers"]["dictionary"])
+    extra = [{"polygon": [[*p, 0.0] for p in o["polygon_xy"]]} if "polygon_xy" in o else
+             {"point": o["xyz"], "label": o["label"]} for o in _located]
+    extra += [{"point": [*o["centre_xy"], 0.0], "label": o["label"]} for o in _located if "centre_xy" in o]
+    if camera == "wrist":
+        out = annotate.annotate_wrist(loc.sc, img, joints, obs, extra)
+    else:
+        out = annotate.annotate_overview(loc.sc, img, obs, joints, extra)
+    ok, buf = cv2.imencode(".jpg", out, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    return [f"{camera} annotated, captured {time.strftime('%H:%M:%S')}, markers detected {sorted(obs)}",
+            Image(data=buf.tobytes(), format="jpeg")]
+
+
 if __name__ == "__main__":
     server.run()

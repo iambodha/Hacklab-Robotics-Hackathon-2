@@ -18,7 +18,7 @@ import cv2
 import numpy as np
 
 from . import geometry as g
-from .scene import Scene
+from .scene import SCENE_PATH, Scene
 
 DEFAULT_PIXEL_SIGMA = 1.0          # px: how well a pixel is usually pointed at (Claude, a click, a bbox centre)
 _SCENE: Scene | None = None
@@ -29,6 +29,10 @@ def scene() -> Scene:
     if _SCENE is None:
         _SCENE = Scene.load()
     return _SCENE
+
+
+def scene_file_exists() -> bool:
+    return SCENE_PATH.exists()
 
 
 def reload() -> Scene:
@@ -59,7 +63,10 @@ class Locator:
         b = self.sc.d["arm"].get("base_on_table", {})
         s_b, s_yaw = float(b.get("sigma_mm") or 20.0), math.radians(float(b.get("sigma_yaw_deg") or 3.0))
         r = 0.3 if xyz is None else float(np.linalg.norm(np.asarray(xyz)[:2]))
-        return float(math.sqrt(s_b ** 2 + (1000 * r * s_yaw) ** 2 + s_ov ** 2))
+        # wrist intrinsics not board-calibrated: a relative focal error f_rel scales off-axis distances
+        f_rel = float(self.sc.d["cameras"]["wrist"].get("sigma_f_rel") or 0.0)
+        s_f = 1000 * 0.15 * f_rel                                    # ~15 cm typical off-axis distance in view
+        return float(math.sqrt(s_b ** 2 + (1000 * r * s_yaw) ** 2 + s_ov ** 2 + s_f ** 2))
 
     # ---- basic maps ------------------------------------------------------------------------------------
     def pixel_to_table(self, cam: str, u: float, v: float, z: float = 0.0, joints: dict | None = None,

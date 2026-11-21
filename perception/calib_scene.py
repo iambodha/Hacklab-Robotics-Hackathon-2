@@ -243,6 +243,7 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
                       "K_normalized": _kn(intr_w_out) if intr_w_out else None,
                       "dist": g.dist_vec(intr_w_out).round(6).tolist() if intr_w_out else None,
                       "intrinsics_source": (intr_w_out or {}).get("source", "charuco" if intr_wr else None),
+                      "sigma_f_rel": None if intr_wr or not wrist_est else wrist_est.get("sigma_f_rel"),
                       "T_link_cam": _m(np.array(wcam_cfg["T_link_camera"])), "link": "Gripper_Base_v1_1",
                       "source": "CAD (camera_pose/wrist_camera.json)"},
         },
