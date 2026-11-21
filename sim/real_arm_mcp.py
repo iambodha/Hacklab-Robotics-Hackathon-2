@@ -578,7 +578,7 @@ async def gripper(open_fraction: float, force: float | None = None) -> str:
     G = GRIP_ID
     if not st[G]["in_range"]:
         raise RuntimeError(f"{GRIP_NAME} is outside its calibrated range; commanding it would snap")
-    force = float(min(1.0, max(0.1, GR.force_default if force is None else force)))
+    force = float(min(1.0, max(GR.force_min, GR.force_default if force is None else force)))
     lo, hi = st[G]["lo"], st[G]["hi"]
     target = int(round(lo + min(OPEN_MAX, max(0.0, float(open_fraction))) * (hi - lo)))   # the jaws stop mechanically before 1.0
     start, hold = st[G]["raw"], _holds(st)
@@ -721,7 +721,7 @@ async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg:
         log.append(np.round(wp, 3).tolist())
     pos, _ = IK.fk((await measured())[0])
     off = float(np.linalg.norm(pos - target))
-    notes.append(f"tcp is {off * 1000:.0f} mm from the target") if off > 0.005 else None
+    notes.append(f"tcp is {off * 1000:.0f} mm from the target") if off > MO.off_target_note else None
     note = ("\nNOTE: " + "; ".join(notes)) if notes else ""
     return f"reached via {log}; tcp now [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}].{note}\n" + await am.joint_state()
 
@@ -1058,7 +1058,7 @@ async def pick_at(x: float, y: float, object_height: float = PK.default_height, 
     felt = _table_tcp_z(x, y)                                   # table height felt near here earlier, if any
     table = TS.nominal_table_tcp_z if felt is None else felt     # gripper height at which the fingertips touch the table
     # flat: go down until touching. Otherwise: fingertips a little below the object's middle, never into the table.
-    goal_z = table - TS.max_below if flat else max(table + 0.002, table - TS.nominal_table_tcp_z + object_height / 2 + PK.grasp_above_mid)
+    goal_z = table - TS.max_below if flat else max(table + PK.table_clearance, table - TS.nominal_table_tcp_z + object_height / 2 + PK.grasp_above_mid)
     text, hit = await _descend_guarded(x, y, goal_z, _yaw_now((await measured())[0]))
     log.append("descend: " + text + ("" if felt is None else f" (table felt at {felt:.3f} near here)"))
     if text.startswith("ABORTED"):
@@ -1123,7 +1123,7 @@ async def survey() -> list:
     position, call pixel_to_table("wrist", u, v, height, view=<name of that image>)."""
     out: list = []
     st = await am._read()
-    if st[GRIP_ID]["norm"] < GR.open_enough and st[GRIP_ID]["norm"] <= CLOSED_NORM + 0.01:   # closed and empty jaws hide the middle of the view
+    if st[GRIP_ID]["norm"] < GR.open_enough and st[GRIP_ID]["norm"] <= CLOSED_NORM + GR.survey_closed_margin:   # closed and empty jaws hide the middle of the view
         await gripper(open_fraction=1.0)
     for name, x, y, z in SURVEY_POSES:
         r = await move_tcp(x=x, y=y, z=z, top_down=True, yaw_deg=P.poses.survey_yaw)
@@ -1248,7 +1248,7 @@ async def stir(x: float, y: float, z: float, radius: float = ST.default_radius, 
         # the way in: the gripper leans more the higher it is, so check the shaft against the rim at several depths
         def worst_on_the_way():
             w, seed2 = (0.0, 0.0, 0.0), above
-            for d in np.linspace(0.0, rim_height - z, 6)[1:]:
+            for d in np.linspace(0.0, rim_height - z, ST.rim_check_samples)[1:]:
                 sol = _solve_tip([x, y, rim_height - d], L, seed2, yaw)
                 if sol is None:
                     continue
