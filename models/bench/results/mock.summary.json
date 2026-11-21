@@ -1,0 +1,43 @@
+{
+ "items": 29,
+ "errors": 0,
+ "calls": 33,
+ "latency_p50_s": 0.0,
+ "latency_p95_s": 0.0,
+ "cost_total_usd": null,
+ "cost_per_call_usd": null,
+ "markers": {
+  "n_gt": 10,
+  "found": 1.0,
+  "err_px299_p50": 3.79,
+  "err_px299_p90": 6.661,
+  "err_mm_p50": 22.3,
+  "err_mm_max": 36.6,
+  "false_points": 0
+ },
+ "objects": {
+  "present": 15,
+  "hit_rate": 1.0,
+  "missed": 0,
+  "hallucinated": 0,
+  "err_px299_p50": 2.17,
+  "err_px299_p90": 3.578,
+  "box_iou_mean": 1.0
+ },
+ "grasp": {
+  "n": 12,
+  "accuracy": 0.833,
+  "negatives": 5,
+  "false_success_rate": 0.4,
+  "unknown": 0
+ },
+ "stain": {
+  "n": 9,
+  "accuracy": 1.0,
+  "negatives": 6,
+  "false_success_rate": 0.0,
+  "unknown": 0,
+  "residual_iou_mean": 1.0,
+  "residual_err_mm_p50": 0.0
+ }
+}

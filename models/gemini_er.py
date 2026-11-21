@@ -485,7 +485,11 @@ def _jsonable(x):
 
 
 def cost_usd(model: str, usage: dict) -> float | None:
-    pin, pout = PRICES.get(model, PRICES[DEFAULT_MODEL])
+    if usage.get("cost_usd") is not None:             # transports that are billed differently report it themselves
+        return round(float(usage["cost_usd"]), 6)
+    if model not in PRICES:
+        return None
+    pin, pout = PRICES[model]
     i, o, th = usage.get("prompt_tokens"), usage.get("output_tokens"), usage.get("thinking_tokens")
     if i is None and o is None:
         return None

@@ -1,0 +1,18 @@
+{
+ "items": 9,
+ "errors": 0,
+ "calls": 9,
+ "latency_p50_s": 0.002,
+ "latency_p95_s": 0.039,
+ "cost_total_usd": 0.0,
+ "cost_per_call_usd": 0.0,
+ "stain": {
+  "n": 9,
+  "accuracy": 0.667,
+  "negatives": 6,
+  "false_success_rate": 0.0,
+  "unknown": 0,
+  "residual_iou_mean": 0.464,
+  "residual_err_mm_p50": 4.35
+ }
+}
