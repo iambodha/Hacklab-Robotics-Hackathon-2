@@ -19,7 +19,7 @@ tasks and recovery strategy, it is never in the per-step control loop.
 
 ```
 AI agent (any MCP client)
-   |  MCP tools (stdio)
+   |  MCP tools (stdio, or HTTP + token: --http [--lan])
 robot_mcp.server
    |-- core.py        Observation types, RobotAdapter interface, Operations
    |-- skills.py      home / goto / pick / place / pick_and_place (verified)
@@ -87,7 +87,8 @@ Five responsibilities, kept separate on purpose:
 pip install -r robot_mcp/requirements.txt
 git clone --depth 1 https://github.com/norma-core/norma-core.git   # repo root, gitignored
 # station running: scripts/run-station.sh   (normfs :8888)
-python -m robot_mcp        # stdio server
+python -m robot_mcp                 # stdio server (a local MCP client launches it)
+python -m robot_mcp --http [--lan]  # HTTP + token, for any MCP client by URL (see below)
 ```
 
 `mcp-config.example.json` shows the `.mcp.json` block for Claude Code.
@@ -97,6 +98,40 @@ Env vars: `STATION_HOST`, `NORMA_CORE_REPO`, `ROBOT_BUS_SERIAL`,
 
 Develop without hardware: `ROBOT_MCP_ENABLE_MOCK=1` adds a `mock` robot that
 simulates the same joint space (and an object between the jaws).
+
+## Connecting any model (MCP over HTTP)
+
+MCP is an open protocol, so nothing here is Claude-specific: any MCP client works, whatever
+model sits behind it. Locally a client can launch the server over stdio (above). To share one
+arm with several tools or laptops, run it over HTTP with a shared token:
+
+```bash
+python -m robot_mcp --http          # this machine only:  http://127.0.0.1:8765/mcp
+python -m robot_mcp --http --lan    # other laptops too:  http://<laptop-ip>:8765/mcp
+```
+
+It prints the URL and the token. The token is reused across restarts (stored in
+`robot_mcp/data/http_token.local.json`, gitignored) or set with `ROBOT_MCP_TOKEN`.
+`curl http://<ip>:8765/health` checks reachability without a token.
+
+| Client | Config |
+|---|---|
+| Claude Code (tested) | `claude mcp add --transport http robot http://<ip>:8765/mcp --header "Authorization: Bearer <token>"` |
+| Python `mcp` client, any model in your own loop (tested) | `streamablehttp_client("http://<ip>:8765/mcp", headers={"Authorization": "Bearer <token>"})` |
+| Codex CLI (`~/.codex/config.toml`, not tested here) | `[mcp_servers.robot]` with `url = "http://<ip>:8765/mcp"` and `bearer_token_env_var = "ROBOT_MCP_TOKEN"` |
+| Cursor (`.cursor/mcp.json`, not tested here) | `{"mcpServers": {"robot": {"url": "http://<ip>:8765/mcp", "headers": {"Authorization": "Bearer <token>"}}}}` |
+| Gemini CLI (`settings.json`, not tested here) | `{"mcpServers": {"robot": {"httpUrl": "http://<ip>:8765/mcp", "headers": {"Authorization": "Bearer <token>"}}}}` |
+
+Check the untested ones against each tool's current docs; key names change between versions.
+
+Security, hackathon grade:
+- Every request needs `Authorization: Bearer <token>` (401 otherwise).
+- Plain HTTP: someone sniffing the same Wi-Fi can read the token. Trusted networks only.
+- Station's own ports (8888 API, 8889 web UI) have no authentication and stay on localhost;
+  only this server's clamped, step-limited tool surface is exposed.
+- All clients share one server process, so the per-arm motion lock still allows only one
+  motion at a time. It does not stop two agents taking turns on the arm; agree who drives.
+- Venue Wi-Fi often blocks laptop-to-laptop traffic; test `/health` from a teammate first.
 
 ## First run on hardware
 

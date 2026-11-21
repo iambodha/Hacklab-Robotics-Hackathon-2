@@ -233,8 +233,23 @@ async def teach_grid_point(robot_id: str, label: str, u: float, v: float) -> str
             f"Pose: {pose}")
 
 
-def main() -> None:
-    mcp.run()
+def main(argv: list[str] | None = None) -> None:
+    import argparse
+    p = argparse.ArgumentParser(prog="python -m robot_mcp",
+                                description="MCP server for the robot arms (stdio by default).")
+    p.add_argument("--http", action="store_true",
+                   help="serve over HTTP with a bearer token instead of stdio, so any MCP client "
+                        "(any model) can connect by URL")
+    p.add_argument("--lan", action="store_true",
+                   help="with --http: listen on all interfaces so other laptops can connect "
+                        "(default: this machine only)")
+    p.add_argument("--port", type=int, default=None, help="with --http: port (default 8765)")
+    a = p.parse_args(argv)
+    if not a.http:
+        mcp.run()
+        return
+    from . import http_server
+    http_server.serve(mcp, lan=a.lan, port=a.port or http_server.DEFAULT_PORT)
 
 
 if __name__ == "__main__":
