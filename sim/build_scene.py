@@ -223,8 +223,16 @@ class ArmIK:
         self.low, self.high = model.actuator_ctrlrange.T
         self.down = np.array([[1., 0, 0], [0, 0, 1], [0, -1, 0]])  # tcp +y (approach) pointing at the table
 
-    def solve(self, xyz, top_down=True, q0=None, attempts=16, seed=3):
+    def fk(self, q):
+        """Measured joints (rad) -> (tcp xyz, tcp rotation matrix) in the base frame."""
+        self.data.qpos[self.qids] = q
+        mujoco.mj_kinematics(self.model, self.data)
+        return self.data.site_xpos[self.site].copy(), self.data.site_xmat[self.site].reshape(3, 3).copy()
+
+    def solve(self, xyz, top_down=True, q0=None, attempts=16, seed=3, yaw_deg=0.0):
         rng = np.random.default_rng(seed)
+        c, s = math.cos(math.radians(yaw_deg)), math.sin(math.radians(yaw_deg))
+        down = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]]) @ self.down  # jaw closing axis rotated about vertical
         jp, jr = np.zeros((3, self.model.nv)), np.zeros((3, self.model.nv))
         for attempt in range(attempts):
             q = (np.zeros(self.model.nu) if q0 is None else q0.copy()) if attempt == 0 else rng.uniform(self.low, self.high)
@@ -235,7 +243,7 @@ class ArmIK:
                 mujoco.mj_jacSite(self.model, self.data, jp, jr, self.site)
                 if top_down:
                     quat = np.zeros(4)
-                    mujoco.mju_mat2Quat(quat, (self.down @ self.data.site_xmat[self.site].reshape(3, 3).T).reshape(-1))
+                    mujoco.mju_mat2Quat(quat, (down @ self.data.site_xmat[self.site].reshape(3, 3).T).reshape(-1))
                     if quat[0] < 0: quat *= -1
                     length = np.linalg.norm(quat[1:])
                     err_r = quat[1:] * (2*np.arctan2(length, quat[0])/max(length, 1e-9))

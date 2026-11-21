@@ -34,12 +34,18 @@ $work = Join-Path $env:TEMP "elrobot-sim-agent-$PID"
 New-Item -ItemType Directory -Force -Path $work | Out-Null
 
 if (-not $SimNoBrowser) {
-    Start-Job -ArgumentList $SimPort -ScriptBlock {
-        param($port)
-        for ($i = 0; $i -lt 120; $i++) {
-            foreach ($p in $port..($port + 3)) {
-                try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 "http://localhost:$p/api/live" | Out-Null
-                      Start-Process "http://localhost:$p/"; return } catch {}
+    # Open the dashboard of THIS run's session (another sim server may already hold the default port).
+    Start-Job -ArgumentList $SimRecordDir, (Get-Date) -ScriptBlock {
+        param($dir, $since)
+        for ($i = 0; $i -lt 240; $i++) {
+            $s = Get-ChildItem -Path $dir -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.CreationTime -ge $since.AddSeconds(-2) } | Sort-Object Name | Select-Object -Last 1
+            $meta = if ($s) { Join-Path $s.FullName 'session.json' }
+            if ($meta -and (Test-Path $meta)) {
+                $url = (Get-Content -Raw $meta | ConvertFrom-Json).dashboard
+                if ($url) {
+                    try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 1 "$($url)api/live" | Out-Null; Start-Process $url; return } catch {}
+                }
             }
             Start-Sleep -Milliseconds 500
         }

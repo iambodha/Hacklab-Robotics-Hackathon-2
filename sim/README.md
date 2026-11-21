@@ -18,6 +18,20 @@ It gets no object poses, no simulator state and no IK.
 | `judge.py` | Human-side ground truth (where the cube is, whether it is in the box). |
 | `selftest.py` | Harness self-test: a privileged-IK pick-and-place through the tool functions. |
 
+## Robot-knowledge tools (ROBOT_SIM_KINEMATICS=1, default)
+Besides the `arm_mcp` joint tools, the server offers what HANDOFF.md task 4 plans for the real arm.
+They draw only on the arm's own URDF and camera calibration, never on object state:
+`tcp_pose()` (FK of the measured joints), `move_tcp(x, y, z, top_down, yaw_deg)` (IK, executed through the
+same bounded `move_to` steps; it travels high and falls back to a tilted gripper where jaws-down is
+unreachable), and `pixel_to_table(camera, u, v, height)` (pixel ray → table point). `look()` images are
+upscaled 2× with a labelled pixel grid (`ROBOT_SIM_IMG_SCALE`, `ROBOT_SIM_GRID`). With
+`ROBOT_SIM_KINEMATICS=0` only the hardware-identical joint tools remain.
+
+Results (Claude Code, `OPERATOR.md`, 2026-11-21): **Sonnet** completed the pick-and-place twice in a row,
+with the default cube placement in about 62 s and a randomized placement in about 95 s, including recovering
+from a misjudged first grasp. **Haiku** was faster per step but misjudged the box position and dropped the
+cube off the table. Use `--model sonnet` (the `Start-Sim-Agent.cmd` default).
+
 ## How it matches the real arm
 - **Joints:** `n = (q - lower)/(upper - lower)` for j1..j7 (the direct mapping that
   `camera_pose/check_joint_mapping.py` supports). **j8 jaws: 1 = open.** Raw ticks are
