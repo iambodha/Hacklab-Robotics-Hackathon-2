@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "elrobot-hardware": {
+      "command": "wsl.exe",
+      "args": [
+        "-d", "Ubuntu", "--",
+        "env",
+        "STATION_HOST=localhost",
+        "ROBOT_BUS_SERIAL=5B61033301",
+        "ROBOT_GRIPPER_JOINT=j8",
+        "bash", "/mnt/d/Robotics-Hackathon/scripts/run.sh", "arm-mcp"
+      ]
+    }
+  }
+}
