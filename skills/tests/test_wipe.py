@@ -16,11 +16,11 @@ def test_limits_come_from_profile():
 
 def test_boustrophedon_lanes_and_spacing():
     p = plan_coverage(Region(0.2, -0.05, 0.32, 0.05), 0.03, 0.8, 10, LIM)
-    assert p.axis == "x" and p.lanes == p.lanes_needed == 4 and not p.capped
+    assert p.axis == "x" and p.lanes == p.lanes_needed == 5 and not p.capped
     ys = [s.start[1] for s in p.strokes]
-    assert math.isclose(ys[0], -0.05 + 0.015) and math.isclose(ys[-1], 0.05 - 0.015)
+    assert math.isclose(ys[0], -0.05 + 0.012) and math.isclose(ys[-1], 0.05 - 0.012)     # inset beta * w_hat / 2
     assert p.spacing <= 0.8 * 0.03 + 1e-9
-    assert [s.start[0] < s.end[0] for s in p.strokes] == [True, False, True, False]       # alternating direction
+    assert [s.start[0] < s.end[0] for s in p.strokes] == [True, False, True, False, True]  # alternating direction
     assert all(math.isclose(s.length, 0.12 + 0.02) for s in p.strokes)
 
 

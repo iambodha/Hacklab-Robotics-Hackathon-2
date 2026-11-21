@@ -1,8 +1,8 @@
 """Boustrophedon coverage planner for a rectangular region of the table (world frame, metres).
 
 Lanes are parallel to the stroke axis. With an effective cleaning width w_hat and spacing s = beta * w_hat, the
-outermost lane centres sit w_hat / 2 inside the region edges and the lanes in between are evenly spaced at most s
-apart. Each lane is one wipe stroke (one pass of the existing wipe tool), alternating direction. Strokes run a
+outermost lane centres sit s / 2 inside the region edges and the lanes in between are evenly spaced at most s
+apart (so beta < 1 is a safety margin at the edges as well as an overlap between lanes). Each lane is one wipe stroke (one pass of the existing wipe tool), alternating direction. Strokes run a
 little past the region (`overshoot`) so the ends are covered. A stroke budget caps the number of strokes; if the
 lanes needed do not fit, the budget's lanes are spread evenly over the region and the plan says so (`capped`).
 """
@@ -82,15 +82,17 @@ class WipePlan:
                 "passes": self.passes, "notes": self.notes}
 
 
-def lane_offsets(cross: float, w_hat: float, spacing: float, max_lanes: int | None = None) -> tuple[list[float], int]:
-    """Lane-centre offsets from the region's low edge across a cross-width `cross`, and the lanes needed."""
-    if cross <= w_hat:
+def lane_offsets(cross: float, spacing: float, max_lanes: int | None = None) -> tuple[list[float], int]:
+    """Lane-centre offsets from the region's low edge across a cross-width `cross`, and the lanes needed. The
+    outer lanes sit spacing/2 inside the edges (the same safety factor beta as between lanes)."""
+    inset = spacing / 2
+    if cross <= 2 * inset:
         return [cross / 2], 1
-    need = math.ceil((cross - w_hat) / spacing - 1e-9) + 1
+    need = math.ceil((cross - 2 * inset) / spacing - 1e-9) + 1
     n = need if max_lanes is None else max(1, min(need, max_lanes))
     if n == 1:
         return [cross / 2], need
-    return [w_hat / 2 + i * (cross - w_hat) / (n - 1) for i in range(n)], need
+    return [inset + i * (cross - 2 * inset) / (n - 1) for i in range(n)], need
 
 
 def plan_coverage(region: Region, w_hat: float, beta: float, budget: int, limits: dict, axis: str = "auto",
@@ -109,7 +111,7 @@ def plan_coverage(region: Region, w_hat: float, beta: float, budget: int, limits
     if seg_len < min_len:
         seg_len, notes = min_len, notes + [f"strokes lengthened to the tool's minimum {min_len} m"]
     spacing_target = beta * w_hat
-    offs, need = lane_offsets(cross, w_hat, spacing_target, max(1, budget // segments))
+    offs, need = lane_offsets(cross, spacing_target, max(1, budget // segments))
     capped = len(offs) < need
     if capped:
         notes.append(f"budget {budget} allows {len(offs)} of {need} lanes: lanes spread wider than beta*w_hat")
