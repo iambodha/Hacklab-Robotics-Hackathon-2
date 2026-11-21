@@ -317,7 +317,13 @@
       0.024,
       -0.024
     ],
-    "force": 0.3
+    "force": 0.3,
+    "tip_step": 0.007,
+    "tip_max_tries": 8,
+    "tip_force": 0.8,
+    "pull_step": 0.01,
+    "pull_window": 80,
+    "pull_iters": 4
   },
   "wipe": {
     "_about": "wipe: sweep the fingertips (holding a napkin) back and forth on the table with light pressure",

@@ -93,9 +93,12 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
 ## Wiping / cleaning the table
 - `wipe(x, y, to_x, to_y, strokes)` sweeps the fingertips back and forth along a straight line on the table with
   light pressure. It feels for the table itself, so you give only the two ends of the line (at most 25 cm).
-- Take a napkin first: `pick_at` on a sheet (object_height 0.005, grip_force 0.50). From a pack or a pile, aim at
-  the loose top sheet, near its edge or a raised fold, so that one sheet comes away. Check the touch line: a held
-  napkin shows a gap of a few mm. If the whole pack lifts, put it down and grip nearer the sheet's edge.
+- Take a napkin first. A loose napkin lying on the table: `pick_at` (object_height 0.005, grip_force 0.50).
+  A sheet sticking UP out of a pack or box: `grab_tip(x, y, z_top, z_min, pull_to=0.20)` on the top of the sheet.
+  It closes from the top down, so it takes the sheet by its tip and not the pack, then pulls it straight up and
+  out. Localize the sheet from a CLOSE view right above it first: 2 cm off and the jaws close beside it. Check
+  the touch line: a held sheet shows a gap of 1-3 mm; about 5 mm means the pack's edge is in the jaws too: put
+  it down and take it higher. If the whole pack comes up with the sheet, say so: the pack must be held down.
 - Find the dirty area (a spill, crumbs, a stain) in the images, get both ends of a line across it with
   `pixel_to_table` (height 0), and `wipe`. For a wide area use several parallel lines 3-4 cm apart.
 - Keep the line clear of other objects: anything on it is swept along. Wiping is the ONE case where dragging

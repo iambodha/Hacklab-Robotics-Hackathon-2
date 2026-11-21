@@ -893,6 +893,75 @@ async def grab_upright(x: float, y: float, z: float, force: float = GB.force) ->
 @server.tool(annotations={"destructiveHint": True})
 @recorded
 @doc
+async def grab_tip(x: float, y: float, z_top: float, z_min: float, pull_to: float = 0.0, force: float = GB.tip_force) -> list:
+    """Take something soft by its very TIP: a tissue or napkin sticking up out of a pack or box, a ribbon, a bag's
+    corner. The gripper starts at height z_top above (x, y), closes gently, and if the jaws meet nothing it opens,
+    goes a little lower and tries again, down to z_min. So the first thing the jaws close on is the top of the
+    sheet, not the pack underneath. z_top: a little above where the tip is; z_min: no lower than about 2.5 cm above
+    the top of the pack or box (the fingertips reach 1 cm below the gripper height). pull_to: if given, the
+    sheet is then pulled straight up to that gripper height (e.g. 0.20); this pull is allowed to work against the
+    sheet's resistance, which move_tcp would stop on as a collision. The grip is firm by default (a sheet being
+    pulled out of a pack slips from a gentle grip). If the pack comes up with the sheet, something has to hold the
+    pack down. Returns HOLDING / NOT holding, a touch line and fresh images."""
+    log = []
+    st = await am._read()
+    if st[GRIP_ID]["norm"] < GR.open_enough:
+        await gripper(open_fraction=1.0)
+    out = await move_tcp(x=x, y=y, z=z_top, top_down=True)
+    log.append("approach: " + _first(out))
+    if _stopped(out):
+        return ["GRAB not started.\n" + "\n".join(log)] + await _views()
+    q, _ = await measured()
+    yaw, z = _yaw_now(q), float(z_top)
+    for _ in range(GB.tip_max_tries):
+        closed = await gripper(open_fraction=0.0, force=force)
+        touch = next((l for l in closed.splitlines() if l.startswith("touch:")), "")
+        if "HOLDING" in touch:
+            log.append(f"at height {z:.3f}: " + touch)
+            if pull_to <= z:
+                return [f"HOLDING it by the tip (first contact at gripper height {z:.3f}). Pull it out with grab_tip's pull_to, "
+                        f"or lift with move_tcp.\n" + "\n".join(log)] + await _views()
+            qn, _ = await measured()
+            cur, seed, peak = IK.fk(qn)[0], qn, 0
+            for zz in list(np.arange(cur[2] + GB.pull_step, pull_to, GB.pull_step)) + [pull_to]:
+                sol, _ = await asyncio.to_thread(_solve_tcp, np.array([cur[0], cur[1], zz]), seed, yaw)
+                if sol is None:
+                    log.append(f"pull stopped at {zz:.3f}: no joint solution higher up")
+                    break
+                seed = sol
+                res = await _drive({ARM_IDS[i]: float(v) for i, v in enumerate(to_norm(sol))}, STEP, DT, settle=True, contact=False,
+                                   window=GB.pull_window, iters=GB.pull_iters)
+                now = await am._read()
+                loads = sorted((now[m]["load"] for m in ARM_IDS), reverse=True)
+                peak = max(peak, loads[0] + loads[1])
+                if res.startswith("ABORTED"):
+                    log.append("pull: " + res)
+                    break
+            held, st = await _probe_hold()
+            end = float(IK.fk((await measured())[0])[0][2])
+            log.append(f"pulled up to gripper height {end:.3f} (peak arm motor load {peak}); " + _touch(st, None, held))
+            return [("HOLDING it after the pull: check in the images that only the sheet came up, not the pack." if held else
+                     "NOT holding after the pull: the sheet slipped out of the jaws. Take it again, lower on the sheet.")
+                    + "\n" + "\n".join(log)] + await _views()
+        log.append(f"at height {z:.3f}: nothing between the jaws")
+        await gripper(open_fraction=1.0)
+        z -= GB.tip_step
+        if z < z_min - 1e-6:
+            break
+        sol, _ = await asyncio.to_thread(_solve_tcp, np.array([x, y, z]), (await measured())[0], yaw)
+        if sol is None:
+            break
+        res = await _go(sol, settle=True)
+        if res.startswith("ABORTED"):
+            log.append(res)
+            break
+    return [f"NOT holding: nothing was felt between {z_top:.3f} and {max(z, z_min):.3f}. The tip is probably beside the jaws, "
+            f"or lower than z_min: look again.\n" + "\n".join(log)] + await _views()
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+@doc
 async def touch_table(x: float, y: float) -> str:
     """Feel where the table is at (x, y): the gripper goes down slowly until the fingertips touch, stops, and lifts
     again. Returns the gripper height at contact, which is remembered and used by later picks near that spot. Use it
