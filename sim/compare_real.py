@@ -4,7 +4,7 @@
 
 Reads one overview + wrist frame and the follower's raw ticks through Station (read-only), sets the twin's joints
 with sim/real_joints.py, renders overview_cam and wrist_cam at the Station resolution and writes:
-  compare.png    rows = cameras; columns = real | twin | overlay (real image, real edges green, twin edges magenta,
+  compare.jpg    rows = cameras; columns = real | twin | overlay (real image, real edges green, twin edges magenta,
                  real marker corners green circles, twin model corners red crosses)
   metrics.json   per camera: marker corner px error (twin model corners projected vs corners detected in the real
                  frame; also corners detected in the twin render), table colour error (mean RGB difference of the
@@ -182,7 +182,7 @@ def compare(layout_file, frames, raw, ranges, out: Path) -> dict:
             cv2.rectangle(row, (0, 0), (row.shape[1], 22), (0, 0, 0), -1)
             cv2.putText(row, label + "    [real | twin | overlay: real edges green, twin magenta]", (6, 16), 0, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
             rows.append(row)
-    cv2.imwrite(str(out / "compare.png"), np.vstack(rows))
+    cv2.imwrite(str(out / "compare.jpg"), np.vstack(rows), [cv2.IMWRITE_JPEG_QUALITY, 88])
     (out / "metrics.json").write_text(json.dumps(metrics, indent=1))
     return metrics
 
