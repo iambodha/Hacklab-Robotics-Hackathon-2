@@ -555,7 +555,7 @@ async def _views(which=("wrist", "overview")) -> list:
 
 def _first(text: str) -> str:
     lines = text.splitlines()
-    return lines[0] + "".join(" " + l for l in lines[1:3] if l.startswith("NOTE"))
+    return lines[0] + "".join(" " + l for l in lines[1:3] if l.startswith(("NOTE", "ABORTED")))
 
 
 def _stopped(text: str) -> bool:
@@ -564,6 +564,7 @@ def _stopped(text: str) -> bool:
 
 OPEN_MAX = float(os.environ.get("ROBOT_GRIPPER_OPEN_MAX", "0.96"))
 CLOSED_NORM = float(os.environ.get("ROBOT_GRIPPER_CLOSED", "0.045"))   # j8 above this after closing = holding something
+FLAT_Z = float(os.environ.get("ROBOT_FLAT_PICK_Z", "0.006"))   # TCP height for flat objects (fingertips at the table)
 CARRY_Z = float(os.environ.get("ROBOT_CARRY_Z", "0.20"))
 
 
@@ -579,12 +580,28 @@ async def pick_at(x: float, y: float, object_height: float = 0.02, yaw_deg: floa
     st = await am._read()
     if st[8]["norm"] < 0.88:
         log.append("open: " + _first(await gripper(open_fraction=1.0)))
-    for name, z in (("hover", max(object_height + 0.05, 0.07)), ("descend", max(MIN_Z, object_height / 2 + 0.008))):
-        out = await move_tcp(x=x, y=y, z=z, top_down=True, yaw_deg=yaw_deg)
+    global MIN_Z
+    flat = object_height < 0.01          # flat things (wrappers): go down until the fingertips touch the table
+    for name, z in (("hover", max(object_height + 0.05, 0.07)), ("descend", FLAT_Z if flat else max(MIN_Z, object_height / 2 + 0.008))):
+        floor, MIN_Z = MIN_Z, (min(MIN_Z, FLAT_Z) if flat else MIN_Z)
+        try:
+            out = await move_tcp(x=x, y=y, z=z, top_down=True, yaw_deg=yaw_deg, step=0.01 if name == "descend" and flat else 0.02)
+        finally:
+            MIN_Z = floor
         log.append(f"{name}: " + _first(out))
-        if _stopped(out) or "do not grasp" in out:
+        touched = flat and name == "descend" and ("contact" in out or "still short" in out)
+        if (_stopped(out) and not touched) or "do not grasp" in out:
             return ["PICK STOPPED before closing.\n" + "\n".join(log)] + await _views()
+        if touched:
+            log.append("(fingertips are on the table: closing here)")
     log.append("close: " + _first(await gripper(open_fraction=0.0)))
+    st = await am._read()
+    if st[8]["norm"] <= CLOSED_NORM:      # closed on nothing: do not carry air to 0.20; back off to a close viewpoint
+        await gripper(open_fraction=1.0)
+        out = await move_tcp(x=x, y=y, z=0.09, top_down=True, yaw_deg=yaw_deg)
+        log.append("back off: " + _first(out))
+        return [f"NOT holding (the jaws closed fully to {st[8]['norm']:.3f}). The jaws are open again and the gripper is 9 cm above "
+                f"the pick point: find the object in the wrist image below, re-localize and retry.\n" + "\n".join(log)] + await _views()
     out = await move_tcp(x=x, y=y, z=CARRY_Z, top_down=True, yaw_deg=yaw_deg)
     log.append("lift: " + _first(out))
     st = await am._read()

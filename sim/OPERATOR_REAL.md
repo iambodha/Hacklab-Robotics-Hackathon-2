@@ -22,7 +22,9 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
   Long moves rise to the target height first (at least 8 cm) and travel level. z must be >= 0.012.
 - `pick_at(x, y, object_height, yaw_deg=0)`: **the whole pick in one call**: open, hover, descend, close until the
   jaws stall, lift to z = 0.20. It says HOLDING or NOT holding and returns fresh images. Give it a position
-  measured from a CLOSE wrist view (step 2 below), not from far away. `yaw_deg` turns the jaws about vertical
+  measured from a CLOSE wrist view (step 2 below), not from far away. For a FLAT object (a wrapper lying flat) pass object_height below 0.01: the
+  fingertips then go down until they touch the table before closing. If nothing was grabbed it opens the jaws and
+  backs off to 9 cm above the spot, with a fresh image for you to re-localize. `yaw_deg` turns the jaws about vertical
   (at 0 they close along x): use it for long objects so the jaws close across the narrow side.
 - `drop_at(x, y, z=0.19)`: **the whole drop in one call**: carry level at height z, open, retreat to above the
   parking spot. Returns fresh images.
