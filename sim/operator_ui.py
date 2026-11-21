@@ -47,7 +47,7 @@ def env():
 
 
 def other_agent_running():
-    out = subprocess.run(["pgrep", "-f", "run_agent_real.sh"], capture_output=True, text=True).stdout.split()
+    out = subprocess.run(["pgrep", "-f", "run_agent_real.sh|run_agent_openai.py"], capture_output=True, text=True).stdout.split()
     mine = RUN["proc"].pid if RUN["proc"] and RUN["proc"].poll() is None else None
     return any(int(p) != mine for p in out) and mine is None
 
@@ -62,12 +62,17 @@ def start(task, model, effort):
             return "an operator run is already in progress"
         SESS.mkdir(exist_ok=True)
         f = SESS / f"ui_run_{time.strftime('%Y%m%d-%H%M%S')}.jsonl"
-        cmd = ["bash", str(HERE / "run_agent_real.sh"), "--model", model, "--max-turns", "90",
-               "--output-format", "stream-json", "--verbose", "-p", "Task for this run (it replaces the default task): " + task]
-        if effort:
-            cmd[4:4] = ["--effort", effort]
-        RUN.update(file=f, t0=time.time(), task=task, model=f"{model} {effort}".strip(), stopped=False)
-        RUN["proc"] = subprocess.Popen(cmd, cwd=REPO, env=env(), stdin=subprocess.DEVNULL, stdout=open(f, "w"),
+        if model == "endpoint":       # an OpenAI-compatible endpoint (Gemma etc.): sim/model_endpoint.env or MODEL_* env
+            cmd = ["bash", str(HERE / "run_agent_model.sh"), "--log", str(f), "-p", task]
+            out, label = open(str(f) + ".out", "w"), "model endpoint"
+        else:
+            cmd = ["bash", str(HERE / "run_agent_real.sh"), "--model", model, "--max-turns", "90",
+                   "--output-format", "stream-json", "--verbose", "-p", "Task for this run (it replaces the default task): " + task]
+            if effort:
+                cmd[4:4] = ["--effort", effort]
+            out, label = open(f, "w"), f"{model} {effort}".strip()
+        RUN.update(file=f, t0=time.time(), task=task, model=label, stopped=False)
+        RUN["proc"] = subprocess.Popen(cmd, cwd=REPO, env=env(), stdin=subprocess.DEVNULL, stdout=out,
                                        stderr=open(str(f) + ".err", "w"), start_new_session=True)
     return None
 
@@ -236,7 +241,7 @@ th{color:var(--mut)}.bad{color:var(--bad)}.ok{color:var(--ok)}#state{font-weight
 <h1>Arm operator <span id=state class=mut></span></h1>
 <div class=grid>
 <div class=card><h2>Task</h2><textarea id=task></textarea>
- <div class=row><select id=model><option value=sonnet>Sonnet</option><option value=haiku>Haiku</option><option value=opus>Opus</option></select>
+ <div class=row><select id=model><option value=sonnet>Sonnet</option><option value=haiku>Haiku</option><option value=opus>Opus</option><option value=endpoint>Model endpoint (Gemma, see model_endpoint.env)</option></select>
  <select id=effort><option value=low>effort: low</option><option value="">effort: default</option><option value=medium>effort: medium</option></select>
  <button id=enh>Enhance</button><button id=start>Start</button><button id=stop>Stop</button><button id=park>Park arm</button><span id=msg class=mut></span></div><div id=orig class=mut style="margin-top:6px"></div></div>
 <div class=card><h2>Cameras (wrist, overview)</h2><div class=cams><img id=cw alt="wrist camera"><img id=co alt="overview camera"></div></div>
@@ -303,7 +308,7 @@ class Handler(BaseHTTPRequestHandler):
             body = {}
         if self.path == "/api/start":
             task = (body.get("task") or "").strip()
-            model = body.get("model") if body.get("model") in ("sonnet", "haiku", "opus") else "sonnet"
+            model = body.get("model") if body.get("model") in ("sonnet", "haiku", "opus", "endpoint") else "sonnet"
             effort = body.get("effort") if body.get("effort") in ("low", "medium", "high", "") else "low"
             msg = "the task is empty" if not task else start(task, model, effort)
         elif self.path == "/api/enhance":

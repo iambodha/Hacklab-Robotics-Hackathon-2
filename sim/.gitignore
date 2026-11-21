@@ -2,3 +2,4 @@ generated/
 sessions/
 __pycache__/
 real_sessions/
+model_endpoint.env
