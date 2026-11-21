@@ -172,5 +172,89 @@ async def gripper(open_fraction: float) -> str:
     return await _move({GRIPPER: open_fraction}, 0.05, 0.1, 4096)
 
 
+# ---------------------------------------------------------------------------
+# Wrist-camera geometry (camera_pose/elrobot_camera.py). Read-only: these tools never move the arm.
+
+_WCAM = None
+CAM_W, CAM_H = 299, 224        # wrist frames as stored by Station (resize_target 224)
+TABLE_Z = float(os.environ.get("ROBOT_TABLE_Z", "0.0"))   # base-frame table height; HANDOFF task 5 measures it
+
+
+def _wcam():
+    global _WCAM
+    if _WCAM is None:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from camera_pose.elrobot_camera import WristCamera
+        _WCAM = WristCamera()
+    return _WCAM
+
+
+async def _q():
+    st = await _read()
+    return _wcam().joints_to_q({NAMES[i]: {"raw": st[mid]["raw"], "lo": st[mid]["lo"], "hi": st[mid]["hi"]}
+                                for i, mid in enumerate(IDS)})
+
+
+def _intrinsics(assumed_hfov_deg: float | None) -> dict:
+    cam = _wcam()
+    if cam.intrinsics:
+        return cam.intrinsics
+    if assumed_hfov_deg is None:
+        raise ValueError("wrist camera intrinsics are not calibrated yet (camera_pose/HANDOFF.md task 2); "
+                         "pass assumed_hfov_deg (e.g. 80) for a rough, clearly labelled estimate")
+    from camera_pose.elrobot_camera import assumed_intrinsics
+    return assumed_intrinsics(assumed_hfov_deg)
+
+
+def _note(intr: dict) -> str:
+    return (f" [ASSUMED intrinsics, hfov {intr['hfov_deg']} deg: rough]" if intr.get("assumed") else "") + \
+           f" [table z={TABLE_Z} m{' (not measured yet)' if 'ROBOT_TABLE_Z' not in os.environ else ''}]"
+
+
+@server.tool(annotations={"readOnlyHint": True})
+async def wrist_camera_pose() -> str:
+    """Where the wrist camera is and where it looks, plus the gripper tip (TCP), in the robot base
+    frame (metres, z up), computed from the live motor-bus joints. Use it to reason about what the
+    wrist image shows. Joint signs of j1/j5/j7 are not yet verified on hardware."""
+    import math
+    q = await _q()
+    cam = _wcam()
+    T = cam.camera_pose(q)
+    o, z = T[:3, 3], T[:3, 2]
+    out = [f"camera position {o.round(4).tolist()}",
+           f"viewing direction {z.round(3).tolist()} ({math.degrees(math.asin(max(-1, min(1, -z[2])))):.0f} deg below horizontal)",
+           f"TCP (between fingertip pads) {cam.tcp(q).round(4).tolist()}"]
+    if z[2] < -1e-3:
+        hit = o + ((TABLE_Z - o[2]) / z[2]) * z
+        out.append(f"image centre looks at table point {hit.round(4).tolist()}")
+    return "\n".join(out)
+
+
+@server.tool(annotations={"readOnlyHint": True})
+async def wrist_pixel_to_table(u: float, v: float, assumed_hfov_deg: float | None = None) -> str:
+    """Table point (base frame, metres) seen at wrist-image pixel (u = column, v = row, 299x224
+    frame as returned by look), and its offset from the current gripper tip. Use it to turn
+    'the object is at pixel (u,v)' into how far to move."""
+    intr = _intrinsics(assumed_hfov_deg)
+    q = await _q()
+    cam = _wcam()
+    p = cam.pixel_to_table(u, v, q, intr, CAM_W, CAM_H, TABLE_Z)
+    if p is None:
+        return "that pixel's ray does not hit the table plane" + _note(intr)
+    return f"table point {p.round(4).tolist()}; offset from TCP {(p - cam.tcp(q)).round(4).tolist()}" + _note(intr)
+
+
+@server.tool(annotations={"readOnlyHint": True})
+async def project_to_wrist(x: float, y: float, z: float, assumed_hfov_deg: float | None = None) -> str:
+    """Pixel (u, v) in the wrist image (299x224) where base-frame point (x, y, z) appears, or
+    'outside view'."""
+    intr = _intrinsics(assumed_hfov_deg)
+    q = await _q()
+    cam = _wcam()
+    uv, depth = cam.project([x, y, z], q, intr, CAM_W, CAM_H)
+    inside = bool(cam.in_view(uv, depth, CAM_W, CAM_H)[0])
+    return (f"pixel {uv[0].round(1).tolist()}, depth {depth[0]:.3f} m" + ("" if inside else " (outside view)")) + _note(intr)
+
+
 if __name__ == "__main__":
     server.run()

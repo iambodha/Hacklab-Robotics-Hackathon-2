@@ -64,6 +64,40 @@ The other joints matched. j6 is wrist pitch: if its range really shrank, the nor
 off by tens of degrees and the camera direction will be wrong. Ask the operator whether calibration was re-run or reset.
 Then use the tick-based mapping, anchored at the range centre, or recalibrate.
 
+## Progress (21 Nov, afternoon)
+
+**Task 1 done: `camera_pose/elrobot_camera.py`.** numpy-only library (`WristCamera`) with
+`joints_to_q`, `link_pose`, `camera_pose`, `tcp`, `project`, `pixel_ray`, `pixel_to_table`, plus a CLI.
+
+- `validate` (MuJoCo 4.0, in-memory URDF + camera at `T_link_camera`, nothing on disk changed):
+  FK matches MuJoCo's body pose to 6e-16 on 12 poses (today's top-down grasp, all-mid, 10 random);
+  60 random markers 0.12-0.30 m in front of the camera project within **0.72 px** of the rendered
+  marker centroids (target < 2 px); pixel -> table -> pixel round trip 1e-13 px.
+  Run: `uv run --no-project --with numpy --with mujoco python camera_pose/elrobot_camera.py validate`
+- `pose` on the live arm (read-only, motor bus via `robot_mcp.station_lib`) gave camera 10 cm above
+  the base plane looking 71 deg down and TCP 1.1 cm above it, which matches the wrist and overview
+  images at that moment (gripper down at the table among objects).
+- Loading the URDF in MuJoCo needs, in memory: `meshdir` = the simulation folder with
+  `strippath="false"` (MuJoCo 4 keeps the `assets/` prefix), and `boundmass`/`boundinertia`
+  because `Gripper_Gear_v1_1` has no mass.
+- Joint mapping default is "ticks" anchored at range centre (finding 3). On this laptop's Station
+  the calibrated spans match the URDF spans within 2%, so it equals the direct norm mapping.
+- `locate`/`project` refuse to run without intrinsics unless `--hfov DEG` is given; results are then
+  labelled ASSUMED. Task 2 fills `intrinsics` in `wrist_camera.json` and they're used automatically.
+- Camera queues on the macOS laptop (Station `0x...` unique ids differ per machine):
+  wrist `usbvideo/e091eeda8dcda172482f039057691cdb`, overview `usbvideo/5cd55831e21692d4f05fcaec75c351a5`.
+
+**Task 4 built (in `arm_mcp`, not `robot_mcp`):** `arm_mcp` is the server the team drives with
+(`robot_mcp`'s `observe` serves stale frames when torque is off). Three read-only tools, from the live
+motor-bus joints: `wrist_camera_pose()`, `wrist_pixel_to_table(u, v, assumed_hfov_deg=None)`,
+`project_to_wrist(x, y, z, assumed_hfov_deg=None)`. Without calibrated intrinsics the pixel tools refuse
+unless `assumed_hfov_deg` is passed, and label the result ASSUMED. Table height comes from env
+`ROBOT_TABLE_Z` (default 0.0, flagged "not measured yet"). Tested over stdio against the live arm.
+`arm_mcp` now also needs numpy (`uv run ... --with numpy`). Not deployed yet: the running server is on
+branch `MCP`; merge this branch into `MCP` and restart the server to pick it up.
+
+Still open: task 2 (checkerboard), task 3 (joint signs, needs the arm), task 5 (table height, needs the arm).
+
 ## Tasks for the next agent (in order)
 
 Coordinate with the human operator: **a teammate is driving the arm.** Everything below is read-only
