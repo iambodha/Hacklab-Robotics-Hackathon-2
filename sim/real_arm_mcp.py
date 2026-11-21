@@ -80,7 +80,7 @@ LOG_DIR = Path(os.environ.get("ROBOT_REAL_LOG_DIR", HERE / "real_sessions"))
 W, H = P.cameras.width, P.cameras.height
 FRAME = P.frame_text
 PARK, CARRY_Z = list(P.poses.park), env("ROBOT_CARRY_Z", P.poses.carry_z)
-WS, MO, GR, PK, DR, ST, IKP = P.workspace, P.motion, P.gripper, P.pick, P.drop, P.stir, P.ik
+WS, MO, GR, PK, DR, ST, IKP, TS = P.workspace, P.motion, P.gripper, P.pick, P.drop, P.stir, P.ik, P.touch
 
 IK = robot_profile.Kin(P)                            # forward kinematics, wrist-camera pose, position-only IK
 MODEL = IK.model
@@ -741,6 +741,88 @@ async def pixel_to_table(camera: str, u: float, v: float, height: float = 0.0, v
             f"({t:.2f} m from the camera, {np.hypot(p[0], p[1]):.3f} m from the arm base).\n{FRAME}")
 
 
+# --- feeling the table --------------------------------------------------------------------------------
+# The model puts the table at z = 0, but where the fingertips really meet it depends on the arm's sag at that reach
+# and on calibration. A guarded descent finds it by touch and the height is remembered per spot.
+TABLE_FILE = LOG_DIR / "table_touch.json"
+try:
+    TABLE_TOUCHES: list = json.loads(TABLE_FILE.read_text())
+except (OSError, ValueError):
+    TABLE_TOUCHES = []
+
+
+def _table_tcp_z(x: float, y: float):
+    """Measured gripper (TCP) height at which the fingertips touch the table near (x, y), or None if never felt there."""
+    near = [(float(np.hypot(t[0] - x, t[1] - y)), t[2]) for t in TABLE_TOUCHES]
+    near = [n for n in near if n[0] <= TS.reuse_radius]
+    return min(near)[1] if near else None
+
+
+def _remember_touch(x: float, y: float, z: float) -> None:
+    TABLE_TOUCHES.append([round(x, 4), round(y, 4), round(z, 4)])
+    del TABLE_TOUCHES[:-TS.keep]
+    try:
+        TABLE_FILE.write_text(json.dumps(TABLE_TOUCHES))
+    except OSError:
+        pass
+
+
+async def _descend_guarded(x: float, y: float, z_to: float, yaw: float):
+    """Go straight down to z_to in small steps, feeling for contact. Returns (text, contact_z or None).
+    Contact = the measured gripper height stops following the commanded one (blocked servos stop short), or the
+    load of an arm motor changes by more than TS.load_delta. On contact the arm stops pushing and backs off a hair."""
+    q, st = await measured()
+    cur, seed = IK.fk(q)[0], q
+    base = {m: st[m]["load"] for m in ARM_IDS}
+    zs = list(np.arange(cur[2] - TS.step, z_to, -TS.step)) + [z_to]
+    off0, last = None, cur[2]
+    for z in zs:
+        sol, _ = await asyncio.to_thread(_solve_tcp, np.array([x, y, z]), seed, yaw)
+        if sol is None:
+            return f"stopped at z = {last:.3f}: no joint solution lower down", None
+        seed = sol
+        res = await _drive({ARM_IDS[i]: float(v) for i, v in enumerate(to_norm(sol))}, STEP, TS.dt, settle=False, contact=False)
+        if res.startswith("ABORTED"):
+            return res, None
+        await asyncio.sleep(TS.wait_s)
+        qn, st = await measured()
+        meas = float(IK.fk(qn)[0][2])
+        gap = meas - z                                   # how far the gripper is above where it was told to be
+        if off0 is None:
+            off0 = gap                                   # the normal offset (gravity sag) before any contact
+        load = max(abs(st[m]["load"] - base[m]) for m in ARM_IDS)
+        if gap - off0 > TS.stall_gap or load > TS.load_delta:
+            await _stop_here(st, ARM_IDS)                # stop pushing: goals = where the joints are
+            up, _ = await asyncio.to_thread(_solve_tcp, np.array([x, y, meas + TS.backoff]), qn, yaw)
+            if up is not None:
+                await _drive({ARM_IDS[i]: float(v) for i, v in enumerate(to_norm(up))}, STEP, TS.dt, settle=False, contact=False)
+            why = f"gripper stopped {(gap - off0) * 1000:.0f} mm short" if gap - off0 > TS.stall_gap else f"motor load changed by {load}"
+            return f"TOUCHED at gripper height z = {meas:.3f} ({why}); backed off {TS.backoff * 1000:.0f} mm", meas
+        last = meas
+    return f"reached z = {last:.3f} without touching anything", None
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+@doc
+async def touch_table(x: float, y: float) -> str:
+    """Feel where the table is at (x, y): the gripper goes down slowly until the fingertips touch, stops, and lifts
+    again. Returns the gripper height at contact, which is remembered and used by later picks near that spot. Use it
+    once on a FREE patch of table near the items when a pick hit the table, slid, or closed above a flat object."""
+    q, _ = await measured()
+    yaw = _yaw_now(q)
+    out = await move_tcp(x=x, y=y, z=TS.probe_from, top_down=True)
+    if _stopped(out):
+        return "touch_table not done. " + _first(out)
+    text, z = await _descend_guarded(x, y, TS.nominal_table_tcp_z - TS.max_below, yaw)
+    if z is not None:
+        _remember_touch(x, y, z)
+    back = await move_tcp(x=x, y=y, z=TS.probe_from, top_down=True)
+    note = (f" The table is {abs(z - TS.nominal_table_tcp_z) * 1000:.0f} mm {'higher' if z > TS.nominal_table_tcp_z else 'lower'} "
+            f"here than the model assumes; picks within {TS.reuse_radius * 100:.0f} cm of this spot now use it.") if z is not None else ""
+    return text + "." + note + " " + _first(back)
+
+
 async def _views(which=("wrist", "overview")) -> list:
     out = []
     for label, prefix in (("wrist", WRIST_CAM), ("overview", OVERVIEW_CAM)):
@@ -782,21 +864,21 @@ async def pick_at(x: float, y: float, object_height: float = PK.default_height, 
     st = await am._read()
     if st[GRIP_ID]["norm"] < GR.open_enough:
         log.append("open: " + _first(await gripper(open_fraction=1.0)))
-    global MIN_Z
     flat = object_height < PK.flat_below          # flat things (wrappers): go down until the fingertips touch the table
-    for name, z in (("hover", max(object_height + PK.hover_above, PK.hover_min)),
-                    ("descend", FLAT_Z if flat else max(MIN_Z, object_height / 2 + PK.grasp_above_mid))):
-        floor, MIN_Z = MIN_Z, (min(MIN_Z, FLAT_Z) if flat else MIN_Z)
-        try:
-            out = await move_tcp(x=x, y=y, z=z, top_down=True, yaw_deg=yaw_deg, step=PK.flat_step if name == "descend" and flat else STEP)
-        finally:
-            MIN_Z = floor
-        log.append(f"{name}: " + _first(out))
-        touched = flat and name == "descend" and ("contact" in out or "still short" in out)
-        if (_stopped(out) and not touched) or "do not grasp" in out:
-            return ["PICK STOPPED before closing.\n" + "\n".join(log)] + await _views()
-        if touched:
-            log.append("(fingertips are on the table: closing here)")
+    out = await move_tcp(x=x, y=y, z=max(object_height + PK.hover_above, PK.hover_min), top_down=True, yaw_deg=yaw_deg)
+    log.append("hover: " + _first(out))
+    if _stopped(out) or "do not grasp" in out:
+        return ["PICK STOPPED before closing.\n" + "\n".join(log)] + await _views()
+    felt = _table_tcp_z(x, y)                                   # table height felt near here earlier, if any
+    table = TS.nominal_table_tcp_z if felt is None else felt     # gripper height at which the fingertips touch the table
+    # flat: go down until touching. Otherwise: fingertips a little below the object's middle, never into the table.
+    goal_z = table - TS.max_below if flat else max(table + 0.002, table - TS.nominal_table_tcp_z + object_height / 2 + PK.grasp_above_mid)
+    text, hit = await _descend_guarded(x, y, goal_z, _yaw_now((await measured())[0]))
+    log.append("descend: " + text + ("" if felt is None else f" (table felt at {felt:.3f} near here)"))
+    if text.startswith("ABORTED"):
+        return ["PICK STOPPED before closing.\n" + "\n".join(log)] + await _views()
+    if hit is not None and flat:
+        _remember_touch(x, y, hit)
     closed = await gripper(open_fraction=0.0, force=grip_force)
     log.append("close: " + _first(closed))
     log.append(next((l for l in closed.splitlines() if l.startswith("touch:")), ""))

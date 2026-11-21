@@ -55,9 +55,11 @@ def env():
 
 
 def other_agent_running():
-    out = subprocess.run(["pgrep", "-f", "run_agent_real.sh|run_agent_openai.py"], capture_output=True, text=True).stdout.split()
+    # any live real-arm server means some session is driving the arm (run_agent_real.sh execs claude, so its own
+    # name never shows up in the process list)
+    out = subprocess.run(["pgrep", "-f", "real_arm_mcp.py"], capture_output=True, text=True).stdout.split()
     mine = RUN["proc"].pid if RUN["proc"] and RUN["proc"].poll() is None else None
-    return any(int(p) != mine for p in out) and mine is None
+    return bool(out) and mine is None
 
 
 def running():

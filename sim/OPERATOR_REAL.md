@@ -33,6 +33,10 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
   smooth or light things** (bottle caps, lids, marbles: squeezed hard they shoot out of the jaws), about 0.5 for
   wrappers, more only for heavy objects. If an object jumped away when the jaws closed, retry with a LOWER force. If
   the touch line shows a gap far from the object's real width, you are holding it by a corner: put it down and re-grip.
+- **Feeling the table.** `pick_at` goes down in small steps and stops when the fingertips touch something, so it
+  no longer presses into the table and slides. Its "descend:" line says where it touched. `touch_table(x, y)` does
+  the same on purpose on a FREE patch of table and remembers the height for picks nearby: use it once near the
+  items if a pick slid, hit the table early, or closed above a flat object.
 - `center_over(u, v, height=0.10)`: with the gripper raised, slide it sideways until it is above the thing at pixel
   (u, v) of the latest wrist image. The returned wrist image has a **green DROP line**: where a released object
   would fall. For a box, aim at the centre of its opening and repeat until the DROP line ends inside the opening.
