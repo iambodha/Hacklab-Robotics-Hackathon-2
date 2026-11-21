@@ -1,0 +1,2 @@
+mcp>=1.12,<2   # FastMCP API; mcp 2.x renamed it to MCPServer
+pillow>=10     # optional but recommended: downscales camera frames for token budget

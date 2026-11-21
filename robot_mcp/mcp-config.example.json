@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "robot": {
+      "command": "python",
+      "args": ["-m", "robot_mcp"],
+      "cwd": "<path-to-this-repo>",
+      "env": {
+        "STATION_HOST": "localhost",
+        "NORMA_CORE_REPO": "<path-to-this-repo>/norma-core",
+        "ROBOT_BUS_SERIAL": "5B61033301",
+        "ROBOT_MAX_STEP": "0.25",
+        "ROBOT_MCP_ENABLE_MOCK": "0"
+      }
+    }
+  }
+}
