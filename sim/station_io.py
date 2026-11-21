@@ -99,7 +99,8 @@ class JointFollower:
                 if len(s) >= 0x3A:
                     raw[int(m.get_id())] = _pos(struct.unpack_from("<H", s, 0x38)[0])
                     rng[int(m.get_id())] = (int(m.get_range_min()), int(m.get_range_max()))
-            return raw, {"ranges": rng, "t_recv": t_recv}
+            stamp = getattr(bs, "get_system_stamp_ns", lambda: 0)() or 0      # bus read time (wall clock, ns)
+            return raw, {"ranges": rng, "t_recv": t_recv, "stamp_s": stamp / 1e9 if stamp > 1e17 else None}
         raise RuntimeError(f"bus {BUS} not in st3215/inference")
 
 

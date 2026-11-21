@@ -30,6 +30,19 @@ def load_mapping(layout: dict | None = None) -> dict:
     return {**DEFAULT, **((layout or {}).get("arm", {}).get("joint_mapping") or {})}
 
 
+def set_arm_q(model, data, q) -> None:
+    """Put the twin at joint angles q (8,) for rendering/kinematics, including equality-coupled joints (the jaw
+    slides follow rev_motor_08 only through the solver, so a kinematic pose would leave them where they were)."""
+    import mujoco
+    data.qpos[model.jnt_qposadr[model.actuator_trnid[:, 0]]] = q
+    for e in range(model.neq):
+        if model.eq_type[e] == mujoco.mjtEq.mjEQ_JOINT and model.eq_obj2id[e] >= 0:
+            a1, a2 = model.jnt_qposadr[model.eq_obj1id[e]], model.jnt_qposadr[model.eq_obj2id[e]]
+            x = data.qpos[a2] - model.qpos0[a2]
+            data.qpos[a1] = model.qpos0[a1] + np.polyval(model.eq_data[e, 4::-1], x)
+    mujoco.mj_forward(model, data)
+
+
 def to_q(raw: dict, ranges: dict, lo_rad, hi_rad, mapping: dict | None = None) -> np.ndarray:
     """raw {motor_id: tick}, ranges {motor_id: (min, max)}, URDF limits per joint (8,) -> q (8,) radians."""
     m = {**DEFAULT, **(mapping or {})}

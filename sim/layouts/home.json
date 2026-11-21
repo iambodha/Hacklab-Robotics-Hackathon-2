@@ -1,9 +1,15 @@
 {
-  "_notes": ["Home table twin (2026-11-22). Select it with SIM_LAYOUT=home (sim/layout.json stays the venue table).", "Frame = the sim frame (URDF base_link on the table top): +y = arm forward at j1 = 0, +z up. The contract world of scene_calib.json has +x forward: p_sim = T_sim_world @ p_world.", "Every calibrated block carries 'src': 'estimate' (sim/estimate_home.py, from the live cameras) or 'scene_calib' (perception's calibration via sim/sync_from_calib.py). 'fixed' = hand-set.", "Re-sync: python3 sim/sync_from_calib.py ../perception/calibration/scene_calib.json ; re-estimate: python3 sim/estimate_home.py", "Sizes: table/bin sizes are full lengths; 'fixed' and object part sizes are MuJoCo half-sizes."],
+  "_notes": [
+    "Home table twin (2026-11-22). Select it with SIM_LAYOUT=home (sim/layout.json stays the venue table).",
+    "Frame = the sim frame (URDF base_link on the table top): +y = arm forward at j1 = 0, +z up. The contract world of scene_calib.json has +x forward: p_sim = T_sim_world @ p_world.",
+    "Every calibrated block carries 'src': 'estimate' (sim/estimate_home.py, from the live cameras) or 'scene_calib' (perception's calibration via sim/sync_from_calib.py). 'fixed' = hand-set.",
+    "Re-sync: python3 sim/sync_from_calib.py ../perception/calibration/scene_calib.json ; re-estimate: python3 sim/estimate_home.py",
+    "Sizes: table/bin sizes are full lengths; 'fixed' and object part sizes are MuJoCo half-sizes."
+  ],
   "table": {
-    "size": [0.92, 0.6206],
-    "center": [0.0193, 0.2807],
-    "yaw": 180.862,
+    "size": [0.92, 0.6848],
+    "center": [0.0226, 0.3234],
+    "yaw": 178.728,
     "thickness": 0.025,
     "height": 0.75,
     "rgba": [0.8, 0.69, 0.57, 1],
@@ -45,8 +51,8 @@
     {
       "name": "cam_stand_pole",
       "type": "cylinder",
-      "pos": [0.018, 0.675, 0.115],
-      "size": [0.008, 0.215],
+      "pos": [0.0362, 0.704, 0.1243],
+      "size": [0.008, 0.2243],
       "yaw": 0,
       "rgba": [0.05, 0.05, 0.05, 1],
       "src": "estimate",
@@ -60,26 +66,26 @@
       {
         "id": 20,
         "role": "top",
-        "T": [[-0.99848, 0.05503, 0.0, 0.34799], [-0.05503, -0.99848, 0.0, 0.47691], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "T": [[-0.99984, 0.01783, 0.0, 0.35771], [-0.01783, -0.99984, 0.0, 0.47511], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
         "src": "estimate"
       },
       {
         "id": 21,
         "role": "top",
-        "T": [[-0.99935, 0.03607, 0.0, -0.30587], [-0.03607, -0.99935, 0.0, 0.45596], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "T": [[-1.0, -0.00116, 0.0, -0.29647], [0.00116, -1.0, 0.0, 0.47852], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
         "src": "estimate",
         "note": "id hidden in the overview (cable over the bits): parallelogram from the other three"
       },
       {
         "id": 22,
         "role": "base",
-        "T": [[-0.99989, 0.01504, 0.0, -0.29516], [-0.01504, -0.99989, 0.0, 0.03365], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "T": [[-0.99975, -0.0222, 0.0, -0.3015], [0.0222, -0.99975, 0.0, 0.0561], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
         "src": "estimate"
       },
       {
         "id": 23,
         "role": "base",
-        "T": [[-0.99927, 0.03813, 0.0, 0.3587], [-0.03813, -0.99927, 0.0, 0.05459], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "T": [[-1.0, 0.0009, 0.0, 0.35269], [-0.0009, -1.0, 0.0, 0.05269], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
         "src": "estimate"
       }
     ]
@@ -89,7 +95,7 @@
       "name": "overview_cam",
       "fovy": 73.827,
       "src": "estimate",
-      "T_cv": [[-0.99922, -0.01111, 0.03801, 0.01777], [-0.03562, 0.67156, -0.7401, 0.66366], [-0.01731, -0.74087, -0.67143, 0.34867], [0.0, 0.0, 0.0, 1.0]],
+      "T_cv": [[-0.99985, 0.0139, 0.01044, 0.03467], [0.0016, 0.67151, -0.741, 0.67403], [-0.01731, -0.74087, -0.67143, 0.34867], [0.0, 0.0, 0.0, 1.0]],
       "queue": "usbvideo/9ea4cacd5be94751e1eea7be90bcf628",
       "K_normalized": {
         "fx": 0.49864934527729,
@@ -115,12 +121,13 @@
   ],
   "wrist_camera": {
     "pose_file": "camera_pose/wrist_camera.json",
-    "fovy": 72.0,
+    "fovy": 73.827,
     "src": "estimate",
     "K_normalized": null,
     "dist": null,
     "queue": "usbvideo/28ff0ca87978e8f993c2ac64a84d188a",
-    "pose_source": "CAD (camera_pose/wrist_camera.json)"
+    "pose_source": "CAD (camera_pose/wrist_camera.json)",
+    "pitch_offset_deg": 0.15
   },
   "image_size": [299, 224],
   "reach": {

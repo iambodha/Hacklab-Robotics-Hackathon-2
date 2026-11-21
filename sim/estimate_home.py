@@ -1,14 +1,16 @@
 """Estimate the home table geometry from the real cameras (until perception's scene_calib.json exists).
 
-  python3 sim/estimate_home.py [--frames DIR] [--n 5] [--fit-wrist-fov]
+  python3 sim/estimate_home.py [--frames DIR] [--n 5] [--wrist-fovy DEG] [--no-wrist-pitch]
 
 1. Grabs overview + wrist frames and the follower's raw ticks through Station (or reads DIR/overview.jpg,
    DIR/wrist.jpg, DIR/joints.json), and saves them to sim/layouts/home_estimate/.
 2. Overview camera: one shared focal length (+ k1) and one table plane, fitted jointly to every detected ArUco
    marker's corners (each marker alone is too small for a stable pose at 299x224). Gives the marker layout on the
    table plane (frame P: origin = first far marker, x along the table, z up).
-3. Arm: the twin's wrist camera at the measured joints (FK, real_joints mapping) must see the markers where the real
-   wrist camera sees them; this fixes the arm base (x, y, yaw) on the table plane.
+3. Arm: the arm's foot in the overview gives the base position (prior, ~1 cm); the twin's wrist camera at the measured
+   joints (FK, real_joints mapping, fovy = the overview's: same KD-USB camera model) must see the markers where the
+   real wrist camera sees them, which fixes the base yaw and a small tilt of the wrist camera vs its CAD mount.
+   (--jaw-pitch also reports the tilt implied by the jaw silhouette; on 22 Nov it disagreed with the markers.)
 4. Table edges from the rectified overview (left/right/far) and the wrist view (near edge).
 5. Writes sim/layouts/home_estimate/scene_calib_estimate.json in the scene-contract format and applies it to
    sim/layouts/home.json with src "estimate" (sync_from_calib never lets an estimate replace a scene_calib value).
@@ -135,21 +137,72 @@ def project_overview(fit, pts_P):
 # --- 3. arm base from the wrist view -----------------------------------------------------------------------------
 
 class WristModel:
-    def __init__(self, layout_file):
+    """The twin arm with a wrist camera we can re-mount (pitch offset vs the CAD pose) and re-lens (fovy)."""
+
+    def __init__(self, layout_file, layout):
         xml = build_scene.generated_dir(layout_file) / "workspace.xml"
         if not xml.exists():
             build_scene.build(layout_file, xml.parent, report=False)
         self.m = mujoco.MjModel.from_xml_path(str(xml))
         self.d = mujoco.MjData(self.m)
         self.lo, self.hi = self.m.actuator_ctrlrange.T
-        self.qids = self.m.jnt_qposadr[self.m.actuator_trnid[:, 0]]
+        self.cid = self.m.camera("wrist_cam").id
+        w = layout["wrist_camera"]
+        self.T_link = np.array(w["T_link_cam"] if "T_link_cam" in w else
+                               json.loads((build_scene.REPO / w["pose_file"]).read_text())["T_link_camera"])
+        gripper = self.m.body("Gripper_Base_v1_1").id
+        self.gripper_geoms = np.array([self._under(self.m.geom_bodyid[g], gripper) for g in range(self.m.ngeom)])
+
+    def _under(self, b, root):
+        while b:
+            if b == root:
+                return True
+            b = self.m.body_parentid[b]
+        return False
+
+    def set_camera(self, pitch_deg, fovy):
+        a = math.radians(pitch_deg)
+        R = self.T_link[:3, :3] @ np.array([[1, 0, 0], [0, math.cos(a), -math.sin(a)], [0, math.sin(a), math.cos(a)]])
+        quat = np.zeros(4)
+        mujoco.mju_mat2Quat(quat, (R @ build_scene.CV_TO_MJ).flatten())
+        self.m.cam_pos[self.cid], self.m.cam_quat[self.cid], self.m.cam_fovy[self.cid] = self.T_link[:3, 3], quat, fovy
 
     def cam_pose(self, q):
         """(position, R with OpenCV axes as columns) of the wrist camera in the sim frame."""
-        self.d.qpos[self.qids] = q
-        mujoco.mj_kinematics(self.m, self.d); mujoco.mj_camlight(self.m, self.d)
-        c = self.m.camera("wrist_cam").id
-        return self.d.cam_xpos[c].copy(), self.d.cam_xmat[c].reshape(3, 3) @ build_scene.CV_TO_MJ
+        real_joints.set_arm_q(self.m, self.d, q)
+        return self.d.cam_xpos[self.cid].copy(), self.d.cam_xmat[self.cid].reshape(3, 3) @ build_scene.CV_TO_MJ
+
+    def jaw_mask(self, q, W, H):
+        """Pixels of the wrist image covered by the gripper (jaws), lower half only."""
+        real_joints.set_arm_q(self.m, self.d, q)
+        opt = mujoco.MjvOption(); opt.geomgroup[1] = 0
+        with mujoco.Renderer(self.m, H, W) as r:
+            r.enable_segmentation_rendering()
+            r.update_scene(self.d, camera="wrist_cam", scene_option=opt)
+            seg = r.render()
+        ok = (seg[..., 1] == int(mujoco.mjtObj.mjOBJ_GEOM)) & (seg[..., 0] >= 0)
+        out = np.zeros((H, W), bool)
+        out[ok] = self.gripper_geoms[seg[..., 0][ok]]
+        out[:H // 2] = False
+        return out
+
+
+def fit_wrist_pitch(wm, q, real, fovy, lo=-15, hi=25):
+    """Tilt of the real wrist camera vs the CAD mount from the jaw silhouette (independent of the arm pose and the
+    scene: the jaws are rigid to the camera except for the j8 opening, taken from the joint mapping)."""
+    H, W = real.shape[:2]
+    dark = cv2.cvtColor(real, cv2.COLOR_BGR2HSV)[..., 2] < 95
+    dark[:H // 2] = False
+    scores = []
+    for p in np.arange(lo, hi + 0.1, 1.0):
+        wm.set_camera(p, fovy)
+        t = wm.jaw_mask(q, W, H)
+        scores.append(((t & dark).sum() / max((t | dark).sum(), 1), float(p)))
+    wm.set_camera(0.0, fovy)
+    t0 = wm.jaw_mask(q, W, H)
+    iou0 = (t0 & dark).sum() / max((t0 | dark).sum(), 1)
+    best = max(scores)
+    return best[1], float(best[0]), float(iou0)
 
 
 def p_to_s(base, pts_P):
@@ -162,19 +215,26 @@ def project_wrist(base, pts_P, cpos, Rcv, f, W, H):
     return pc[:, :2] / pc[:, 2:3] * f + [W / 2, H / 2], pc[:, 2]
 
 
-def fit_base(Cw, rejected, markers_P, cpos, Rcv, f0, W, H, fit_fov, prior_xy=None):
+def rot_x(a):
+    return np.array([[1, 0, 0], [0, math.cos(a), -math.sin(a)], [0, math.sin(a), math.cos(a)]])
+
+
+def fit_base(Cw, rejected, markers_P, cpos, Rcv, f, W, H, prior_xy=None, prior_w=300.0, pitch0=0.0):
+    """x = (base x, base y, base yaw in P, wrist camera tilt about its x axis vs the given mount, rad).
+    prior_xy: the arm foot seen by the overview (prior_w px per metre); the tilt has a weak prior (1 px per degree)."""
     def resid(x, Cw):
-        f = x[3] if fit_fov else f0
-        out = [(project_wrist(x, corners_on_plane(*markers_P[i]), cpos, Rcv, f, W, H)[0] - px).ravel() for i, px in Cw.items()]
-        if prior_xy is not None:      # weak pull toward the arm blob seen by the overview (metres -> ~px)
-            out.append(30.0 * (np.asarray(x[:2]) - prior_xy))
+        R = Rcv @ rot_x(x[3])
+        out = [(project_wrist(x, corners_on_plane(*markers_P[i]), cpos, R, f, W, H)[0] - px).ravel() for i, px in Cw.items()]
+        if prior_xy is not None:
+            out.append(prior_w * (np.asarray(x[:2]) - prior_xy))
+        out.append([math.degrees(x[3] - pitch0)])
         return np.concatenate(out)
 
     best = None
     for th0 in np.radians(np.arange(0, 360, 30)):
-        x0 = np.array([*(prior_xy if prior_xy is not None else [0.3, 0.05]), th0] + ([f0] if fit_fov else []))
+        x0 = np.array([*(prior_xy if prior_xy is not None else [0.3, 0.05]), th0, pitch0])
         x = lm(lambda x: resid(x, Cw), x0, 80)
-        z = np.concatenate([project_wrist(x, corners_on_plane(*markers_P[i]), cpos, Rcv, x[3] if fit_fov else f0, W, H)[1] for i in Cw])
+        z = np.concatenate([project_wrist(x, corners_on_plane(*markers_P[i]), cpos, Rcv @ rot_x(x[3]), f, W, H)[1] for i in Cw])
         e = float(np.abs(resid(x, Cw)[:8 * len(Cw)]).mean())
         if (z > 0).all() and (best is None or e < best[0]):
             best = (e, x)
@@ -184,7 +244,7 @@ def fit_base(Cw, rejected, markers_P, cpos, Rcv, f0, W, H, fit_fov, prior_xy=Non
     for i, m in markers_P.items():
         if i in Cw:
             continue
-        pr, z = project_wrist(x, corners_on_plane(*m), cpos, Rcv, x[3] if fit_fov else f0, W, H)
+        pr, z = project_wrist(x, corners_on_plane(*m), cpos, Rcv @ rot_x(x[3]), f, W, H)
         if (z > 0).all() and (pr > 0).all() and (pr < [W, H]).all():
             c = match_rejected(rejected, pr, 15.0)
             if c is not None:
@@ -193,6 +253,34 @@ def fit_base(Cw, rejected, markers_P, cpos, Rcv, f0, W, H, fit_fov, prior_xy=Non
         x = lm(lambda x: resid(x, {**Cw, **extra}), x, 80)
         e = float(np.abs(resid(x, {**Cw, **extra})[:8 * (len(Cw) + len(extra))]).mean())
     return x, e, sorted(extra)
+
+
+def px_to_plane(fit, u, v):
+    """Overview pixel -> point on the table plane (frame P)."""
+    n = cv2.undistortPoints(np.array([[[u, v]]], float), fit["K"], fit["D"]).reshape(2)
+    R = cv2.Rodrigues(fit["rvec"])[0]
+    c, ray = -R.T @ fit["tvec"].ravel(), R.T @ np.array([n[0], n[1], 1.0])
+    return c + ray * (-c[2] / ray[2])
+
+
+def arm_foot(img, fit, markers_P, front_m):
+    """Arm base origin in P from the overview: the dark arm between the two far markers; its lowest image row is the
+    front edge of the base on the table, front_m ahead of the base origin (towards the camera)."""
+    far = sorted(markers_P, key=lambda i: -markers_P[i][1])[:2]
+    c = project_overview(fit, [[*markers_P[i][:2], 0] for i in far])
+    u0, u1 = sorted(c[:, 0]); span = u1 - u0
+    v_lo, v_hi = int(c[:, 1].min()) - 40, int(c[:, 1].max()) + 25
+    roi = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)[max(v_lo, 0):v_hi, int(u0 + 0.2 * span):int(u1 - 0.2 * span), 2] < 60
+    rows = np.where(roi.sum(1) >= 3)[0]
+    if not len(rows):
+        return None
+    vb = rows.max()
+    us = np.where(roi[max(vb - 2, 0):vb + 1].any(0))[0]
+    u, v = int(u0 + 0.2 * span) + float(np.median(us)), max(v_lo, 0) + vb + 0.5
+    p = px_to_plane(fit, u, v)
+    cam = -cv2.Rodrigues(fit["rvec"])[0].T @ fit["tvec"].ravel()
+    fwd = (cam[:2] - p[:2]) / np.linalg.norm(cam[:2] - p[:2])
+    return p[:2] - front_m * fwd, (u, v)
 
 
 # --- 4. table edges ----------------------------------------------------------------------------------------------
@@ -301,8 +389,12 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--frames", type=Path, help="use saved overview.jpg/wrist.jpg/joints.json instead of Station")
     ap.add_argument("--n", type=int, default=5, help="overview frames averaged for the marker corners")
-    ap.add_argument("--fit-wrist-fov", action="store_true")
+    ap.add_argument("--wrist-fovy", type=float, help="wrist camera vertical fov (default: the overview's fitted fovy)")
+    ap.add_argument("--jaw-pitch", action="store_true", help="also report the wrist tilt implied by the jaw silhouette")
     ap.add_argument("--layout", type=Path, default=HERE / "layouts" / "home.json")
+    ap.add_argument("--ids", type=int, nargs="+", help="table marker ids (default 20 21 22 23)")
+    ap.add_argument("--near-margin", type=float, default=0.05,
+                    help="table assumed to run this far past the overview's bottom row (m; the near edge is not seen)")
     ap.add_argument("--no-apply", action="store_true")
     a = ap.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
@@ -322,13 +414,15 @@ def main():
         ranges = meta["ranges"]
         ovs = [cv2.imdecode(np.frombuffer(b, np.uint8), cv2.IMREAD_COLOR) for b in ov_j]
         wr = cv2.imdecode(np.frombuffer(w_j[0], np.uint8), cv2.IMREAD_COLOR)
-    cv2.imwrite(str(OUT / "overview.jpg"), ovs[-1]); cv2.imwrite(str(OUT / "wrist.jpg"), wr)
-    (OUT / "joints.json").write_text(json.dumps({"raw": raw, "ranges": ranges}))
     H, W = ovs[0].shape[:2]
-
-    dets = [detect(o) for o in ovs]
-    ids = set.intersection(*[set(d[0]) for d in dets])
-    C = {i: np.mean([d[0][i] for d in dets], axis=0) for i in ids}
+    layout = json.loads(a.layout.read_text())
+    expected = set(a.ids) if a.ids else {20, 21, 22, 23}
+    dets = [detect(o)[0] for o in ovs]
+    seen = {i: [d[i] for d in dets if i in d] for i in expected}
+    C = {i: np.mean(v, axis=0) for i, v in seen.items() if len(v) >= max(1, len(ovs) // 2)}
+    best_frame = max(range(len(ovs)), key=lambda k: len(set(dets[k]) & expected))
+    if len(C) < 3:
+        raise SystemExit(f"overview sees only markers {sorted(C)} of {sorted(expected)} (occluded?); try again or use --frames")
     fit = fit_overview(C, W, H)
     mk = fit["markers_P"]
     missing = []
@@ -338,9 +432,9 @@ def main():
         o1, o2 = [k for k in mk if k != corner]
         guess = (mk[o1][0] + mk[o2][0] - mk[corner][0], mk[o1][1] + mk[o2][1] - mk[corner][1],
                  math.atan2(np.mean([math.sin(mk[k][2]) for k in mk]), np.mean([math.cos(mk[k][2]) for k in mk])))
-        new_id = ({20, 21, 22, 23} - set(mk)).pop() if len({20, 21, 22, 23} - set(mk)) == 1 else None
+        new_id = (expected - set(mk)).pop() if len(expected - set(mk)) == 1 else None
         if new_id is not None:
-            c = match_rejected(detect(ovs[-1])[1], project_overview(fit, corners_on_plane(*guess)), 10.0)
+            c = match_rejected(detect(ovs[best_frame])[1], project_overview(fit, corners_on_plane(*guess)), 10.0)
             if c is not None:      # the bare square is visible: refit with it
                 fit = fit_overview({**C, new_id: c}, W, H); mk = fit["markers_P"]
             else:
@@ -348,27 +442,44 @@ def main():
     print(f"overview: f={fit['f']:.1f}px fovy={math.degrees(2 * math.atan(H / 2 / fit['f'])):.1f} k1={fit['k1']:.3f} "
           f"reproj={fit['err_px']:.2f}px markers(P)={ {i: np.round(v, 3).tolist() for i, v in mk.items()} } guessed={missing}")
 
-    layout = json.loads(a.layout.read_text())
-    wm = WristModel(a.layout)
+    wm = WristModel(a.layout, layout)
     q = real_joints.to_q(raw, ranges, wm.lo, wm.hi, real_joints.load_mapping(layout))
+    wcal = layout["wrist_camera"].get("src") == "scene_calib"
+    # Same KD-USB camera model as the overview: unless calibrated, the wrist lens gets the overview's fitted fovy.
+    wrist_fovy = a.wrist_fovy or (layout["wrist_camera"]["fovy"] if wcal else math.degrees(2 * math.atan(H / 2 / fit["f"])))
+    iou = iou0 = jaw_pitch = None
+    if a.jaw_pitch and not wcal:      # diagnostic: tilt from the jaw silhouette (disagreed with the markers on 22 Nov)
+        jaw_pitch, iou, iou0 = fit_wrist_pitch(wm, q, wr, wrist_fovy)
+        print(f"jaw silhouette: tilt vs CAD mount {jaw_pitch:+.0f} deg (IoU {iou0:.2f} -> {iou:.2f})")
+    wm.set_camera(0.0, wrist_fovy)
     cpos, Rcv = wm.cam_pose(q)
-    wrist_fovy = layout["wrist_camera"].get("fovy", 72)
     f_w = H / 2 / math.tan(math.radians(wrist_fovy) / 2)
     Cw, rej_w = detect(wr)
     Cw = {i: c for i, c in Cw.items() if i in mk}
-    # prior: the dark arm blob at the far edge, midway between the two far markers (only used weakly)
-    far = sorted(mk, key=lambda i: -mk[i][1])[:2]
-    prior = np.array([(mk[far[0]][0] + mk[far[1]][0]) / 2, (mk[far[0]][1] + mk[far[1]][1]) / 2])
+    base_front = float(layout.get("arm", {}).get("base_front_m", 0.057))   # base_link mesh: y from -0.011 to 0.057
+    foot = arm_foot(ovs[best_frame], fit, mk, base_front)
+    if foot is None:       # fall back: midway between the two far markers, weakly
+        far = sorted(mk, key=lambda i: -mk[i][1])[:2]
+        prior, prior_w = np.array([(mk[far[0]][0] + mk[far[1]][0]) / 2, (mk[far[0]][1] + mk[far[1]][1]) / 2]), 30.0
+    else:
+        (prior, foot_px), prior_w = foot, 300.0
+        print(f"arm foot in the overview at px {np.round(foot_px, 1).tolist()} -> base origin prior {np.round(prior, 3).tolist()} (P)")
     if not Cw:
         raise SystemExit("wrist camera sees no marker: cannot place the arm (point the wrist at a marker)")
-    base, err_w, extra = fit_base(Cw, rej_w, mk, cpos, Rcv, f_w, W, H, a.fit_wrist_fov, prior)
-    if a.fit_wrist_fov:
-        wrist_fovy = math.degrees(2 * math.atan(H / 2 / base[3]))
-    print(f"arm base in P: ({base[0]:.3f}, {base[1]:.3f}) yaw {math.degrees(base[2]) % 360:.1f} deg; wrist reproj "
-          f"{err_w:.2f}px from markers {sorted(Cw)} + bare squares {extra}; wrist fovy {wrist_fovy:.1f}; q={np.round(q, 3).tolist()}")
+    base, err_w, extra = fit_base(Cw, rej_w, mk, cpos, Rcv, f_w, W, H, prior, prior_w)
+    pitch = 0.0 if wcal else round(math.degrees(base[3]), 2)
+    print(f"arm base in P: ({base[0]:.3f}, {base[1]:.3f}) yaw {math.degrees(base[2]) % 360:.1f} deg; wrist tilt vs mount "
+          f"{math.degrees(base[3]):+.1f} deg; wrist reproj {err_w:.2f}px from markers {sorted(Cw)} + bare squares {extra}; "
+          f"wrist fovy {wrist_fovy:.1f}; q={np.round(q, 3).tolist()}")
+    if not wcal:
+        wm.set_camera(pitch, wrist_fovy); cpos, Rcv = wm.cam_pose(q)
 
-    edges = overview_edges(ovs[-1], fit, mk)
-    edges["y_min"] = wrist_near_edge(wr, base, cpos, Rcv, H / 2 / math.tan(math.radians(wrist_fovy) / 2), mk, W, H)
+    edges = overview_edges(ovs[best_frame], fit, mk)
+    # Near edge: the wood seen by the wrist camera, but at least past the overview's bottom row (the real table runs
+    # out of that frame; a cloth lying on the table end limits what the wrist camera sees as wood).
+    bottom = min(px_to_plane(fit, u, H - 1)[1] for u in (W * 0.3, W * 0.5, W * 0.7))
+    wrist_edge = wrist_near_edge(wr, base, cpos, Rcv, f_w, mk, W, H)
+    edges["y_min"] = min(wrist_edge if wrist_edge is not None else bottom, bottom - a.near_margin)
     defaults = {"x_min": min(v[0] for v in mk.values()) - 0.1, "x_max": max(v[0] for v in mk.values()) + 0.1,
                 "y_max": max(v[1] for v in mk.values()) + 0.08, "y_min": min(v[1] for v in mk.values()) - 0.15}
     guessed_edges = [k for k in defaults if edges.get(k) is None]
@@ -376,10 +487,16 @@ def main():
     print(f"table edges in P: {edges} (fallback for {guessed_edges})")
 
     calib = scene_calib(fit, base, mk, edges, wrist_fovy, raw, {k: list(v) for k, v in ranges.items()})
-    calib["notes"] = {"markers_guessed": missing, "table_edges_guessed": guessed_edges,
+    if not wcal:
+        calib["cameras"]["wrist"].update(pitch_offset_deg=pitch, fovy_source="overview camera fit (same camera model)")
+    calib["notes"] = {"jaw_silhouette_pitch_deg": jaw_pitch, "jaw_iou": [iou0, iou], "base_prior_P": sync_from_calib.r(prior, 4),
+                      "markers_guessed": missing, "table_edges_guessed": guessed_edges,
                       "wrist_markers": sorted(Cw), "wrist_bare_squares": extra, "wrist_reproj_px": round(err_w, 2),
                       "base_P": sync_from_calib.r(base, 4)}
     (OUT / "scene_calib_estimate.json").write_text(sync_from_calib.dumps(calib) + "\n")
+    if not a.frames:     # keep the inputs of a successful estimate (re-run offline with --frames)
+        cv2.imwrite(str(OUT / "overview.jpg"), ovs[best_frame]); cv2.imwrite(str(OUT / "wrist.jpg"), wr)
+        (OUT / "joints.json").write_text(json.dumps({"raw": raw, "ranges": ranges}))
     print("wrote", OUT / "scene_calib_estimate.json")
     if not a.no_apply:
         layout, changes = sync_from_calib.apply_calib(calib, layout, "estimate")

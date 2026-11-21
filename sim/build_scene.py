@@ -136,6 +136,9 @@ def add_gripper_parts(root, layout):
     cam = layout['wrist_camera']
     # Inline T_link_cam (e.g. synced from scene_calib.json) or the CAD pose file; link = Gripper_Base_v1_1.
     T = np.array(cam['T_link_cam'] if 'T_link_cam' in cam else json.loads((REPO / cam['pose_file']).read_text())['T_link_camera'])
+    if cam.get('pitch_offset_deg'):  # mount tilted vs the CAD: rotate about the camera's own x axis
+        a = math.radians(cam['pitch_offset_deg'])
+        T = T.copy(); T[:3, :3] = T[:3, :3] @ np.array([[1, 0, 0], [0, math.cos(a), -math.sin(a)], [0, math.sin(a), math.cos(a)]])
     # OpenCV (x right, y down, z forward) -> MuJoCo camera (x right, y up, looks along -z).
     ET.SubElement(gripper, 'camera', name='wrist_cam', pos=fmt(T[:3, 3]), xyaxes=fmt(np.r_[T[:3, 0], -T[:3, 1]]),
                   fovy=str(cam['fovy']))

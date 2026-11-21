@@ -104,12 +104,20 @@ def apply_calib(calib: dict, layout: dict, src: str = "scene_calib", force: bool
                          queue=ov.get("queue"), K_normalized=ov.get("K_normalized"), dist=ov.get("dist"),
                          reproj_px=ov.get("reproj_px"))
             changes.append(f"overview_cam: pos {r(T[:3, 3], 3)} fovy {entry['fovy']}")
+            for fx in layout.get("fixed", []):      # its stand rises just behind the camera, out of its own view
+                if fx["name"] == "cam_stand_pole" and fx.get("src") != "fixed":
+                    c = T[:3, 3]; away = c[:2] / np.linalg.norm(c[:2])
+                    fx.update(pos=r([*(c[:2] + 0.03 * away), (c[2] - 0.1) / 2], 4), src=src,
+                              size=[fx["size"][0], round((c[2] + 0.1) / 2, 4)])
     wr = cams.get("wrist")
     if wr and allowed(layout.get("wrist_camera")):
         w = layout["wrist_camera"]
         if wr.get("T_link_cam"):
             w["T_link_cam"] = r(wr["T_link_cam"], 6)
             w["link"] = wr.get("link", "Gripper_Base_v1_1")
+            w.pop("pitch_offset_deg", None)       # a calibrated pose replaces the jaw-silhouette tilt estimate
+        elif wr.get("pitch_offset_deg") is not None:
+            w["pitch_offset_deg"] = wr["pitch_offset_deg"]
         if fovy_of(wr):
             w["fovy"] = round(fovy_of(wr), 3)
         w.update(src=src, K_normalized=wr.get("K_normalized"), dist=wr.get("dist"), queue=wr.get("queue"),
