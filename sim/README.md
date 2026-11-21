@@ -1,5 +1,7 @@
 # sim: MuJoCo twin of the hackathon table, driven like the real arm
 
+> **Real arm:** the same operator runs on the physical follower arm. See [REAL_ARM.md](REAL_ARM.md).
+
 A simulated ElRobot follower on the hackathon table (grey box + black cube), behind **the same
 MCP tools as `arm_mcp/`** (`look`, `joint_state`, `set_torque`, `move_to`, `gripper`). An agent
 practises here exactly as it would on hardware: two camera JPEGs and the motor-bus joint table.
