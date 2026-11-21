@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / "software/station/shared")); sys.path.insert(0, st
 from target.gen_python.protobuf.drivers.usbvideo import usbvideo
 import station_thin
 
-GRIPPER_CAM = "usbvideo/e091eeda8dcda172482f039057691cdb"
+GRIPPER_CAM = os.environ.get("EVG_CAM_GRIPPER", "usbvideo/e091eeda8dcda172482f039057691cdb")
 FRAMES = HERE.parent / "frames"
 
 def decode(jpeg):

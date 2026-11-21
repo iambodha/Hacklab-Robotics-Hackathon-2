@@ -85,3 +85,25 @@ def plan(action, st, pkg, margin):
         t, n = clamp_targets({j: v for j, v in w["joints"].items() if j in ARM_JOINTS}, st, pkg, margin)
         return "goto", {"targets": t, "waypoint": name}, n
     raise Invalid(f"unknown action {kind!r}")
+
+
+def reply_schema(chunk=1, waypoints=()):
+    """JSON schema of a valid reply. Local servers (Ollama, llama.cpp, vLLM) can enforce it while generating, so the model
+    cannot produce joint 8, an unknown waypoint or a missing wrapper, and generation stops when the object is complete."""
+    num = {"type": "number"}
+    step = {"type": "object", "properties": {"action": {"type": "string", "enum": ["step"]},
+            "joints": {"type": "object", "properties": {str(j): num for j in ARM_JOINTS}, "additionalProperties": False}},
+            "required": ["action", "joints"], "additionalProperties": False}
+    goto = {"type": "object", "properties": {"action": {"type": "string", "enum": ["goto"]},
+            "waypoint": {"type": "string", "enum": list(waypoints) or ["none"]}}, "required": ["action", "waypoint"], "additionalProperties": False}
+    grip = {"type": "object", "properties": {"action": {"type": "string", "enum": ["grip"]}, "opening": num},
+            "required": ["action", "opening"], "additionalProperties": False}
+    wait = {"type": "object", "properties": {"action": {"type": "string", "enum": ["wait"]}, "seconds": num},
+            "required": ["action", "seconds"], "additionalProperties": False}
+    done = {"type": "object", "properties": {"action": {"type": "string", "enum": ["done"]}, "reason": {"type": "string"}},
+            "required": ["action", "reason"], "additionalProperties": False}
+    one = {"anyOf": [step, goto, grip, wait, done]}
+    if chunk > 1:
+        return {"type": "object", "properties": {"thought": {"type": "string"}, "actions": {"type": "array", "items": one, "minItems": 1, "maxItems": chunk}},
+                "required": ["thought", "actions"], "additionalProperties": False}
+    return {"type": "object", "properties": {"thought": {"type": "string"}, "action": one}, "required": ["thought", "action"], "additionalProperties": False}

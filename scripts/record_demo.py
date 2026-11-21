@@ -1,11 +1,11 @@
 """Record a teleop demonstration: follower joint positions (10 Hz) + gripper/overview frames (2 Hz).
 usage: python3 scripts/record_demo.py [seconds=120] [name=demo]   -> demos/<name>/states.jsonl + frames
 Stop early with Ctrl-C or by creating demos/<name>/STOP."""
-import asyncio, json, sys, time
+import asyncio, json, os, sys, time
 from pathlib import Path
 import arm, vision, station_thin
 from target.gen_python.protobuf.drivers.usbvideo import usbvideo
-OVERVIEW = "usbvideo/5cd55831e21692d4f05fcaec75c351a5"
+OVERVIEW = os.environ.get("EVG_CAM_OVERVIEW", "usbvideo/5cd55831e21692d4f05fcaec75c351a5")
 
 async def frames(client, queue, out, tag, t0, stop):
     q = asyncio.Queue(maxsize=4); station_thin.follow_thin(client, queue, q, step=15); last = 0

@@ -19,7 +19,7 @@ class Session:
         self.starting = False      # a recording is being started (teleop takes a few seconds); blocks a second start
         self.rec = None            # dict(name, proc, t0) while recording
         self.review = None         # name of a finished take waiting for keep/discard
-        self.cfg = {"preset": "claude-haiku", "max_ticks": 80, "chunk": 1, "effort": "low", "demos": [], "base_url": "", "model": "", "api_key_env": ""}
+        self.cfg = {"preset": "gemma-e4b", "max_ticks": 80, "chunk": 1, "effort": "low", "demos": [], "base_url": "", "model": "", "api_key_env": ""}
         self.cfg.update(C.read_json(C.CONFIG, {}))
         self.cfg.pop("step_mode", None)                       # approval mode removed: every action runs
         self.cfg["demos"] = list(dict.fromkeys(self.cfg.get("demos", [])))

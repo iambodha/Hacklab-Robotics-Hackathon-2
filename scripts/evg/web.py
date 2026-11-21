@@ -57,7 +57,8 @@ class LiveCams:
                     if fr: self.frames[name] = (time.time(), bytes(fr[-1]))
                 except Exception:
                     pass
-        tasks = [asyncio.create_task(pump("over", robot_mod.OVERVIEW_CAM)), asyncio.create_task(pump("grip", robot_mod.GRIPPER_CAM))]
+        cams = C.camera_queues()
+        tasks = [asyncio.create_task(pump("over", cams["over"])), asyncio.create_task(pump("grip", cams["grip"]))]
         try:
             while time.time() - self.t_req < self.IDLE: await asyncio.sleep(1)
         finally:

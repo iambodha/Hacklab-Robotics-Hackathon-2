@@ -1,7 +1,9 @@
-"""Robot access for the agent: real arm through Station (Robot) or recorded demo frames (ReplayRobot).
+"""Robot access for the agent: real arm through Station (Robot), the MCP arm server (McpRobot) or recorded demo frames (ReplayRobot).
 
-Real moves reuse the project's closed-loop recipe from grasp.py: the servos are P-only and stop short, so we keep nudging the
-goal until the measured position arrives, and abort (holding position) as soon as any arm joint exceeds the contact current.
+Realtime moves (Station): one coordinated command per move. Each joint gets its own speed so all joints arrive together (a straight
+line in joint space, like the old sub-stepping, but without stopping at every sub-step). The arm is checked 20x per second: any arm joint
+over the contact current stops the move and holds position. The servos are P-only and stop short, so a joint that has stopped moving
+before its target gets its goal nudged (the project's grasp.py recipe).
 """
 import asyncio, logging, sys, time
 from pathlib import Path
@@ -9,12 +11,15 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(SCRIPTS.parent / "norma-core" / "software/station/shared")); sys.path.insert(0, str(SCRIPTS.parent / "norma-core"))
+sys.path.insert(0, str(SCRIPTS / "evg"))
 import station_thin  # noqa: E402  (scripts/ is on sys.path now)
+import common as C   # noqa: E402
 
-OVERVIEW_CAM = "usbvideo/5cd55831e21692d4f05fcaec75c351a5"
-GRIPPER_CAM = "usbvideo/e091eeda8dcda172482f039057691cdb"
 FRAME_MAX_AGE = 3.0
 CAM_STEP = 10          # take every 10th camera frame (~3 fps): see station_thin.py
+POLL = 0.05            # check the arm 20x per second during a move
+MIN_SPEED = 40         # steps/s floor for the slowest joint of a coordinated move
+STALL_POLLS = 3        # a joint that has not moved for this many checks has stopped (arrived short, or blocked)
 
 
 class RobotError(Exception):
@@ -32,7 +37,8 @@ class Robot:
         from target.gen_python.protobuf.drivers.usbvideo import usbvideo
         self._usbvideo, self.mod = usbvideo, arm
         self.arm = await arm.Arm().connect()
-        for name, q in (("over", OVERVIEW_CAM), ("grip", GRIPPER_CAM)):
+        self.cams = C.camera_queues()
+        for name, q in self.cams.items():
             queue = asyncio.Queue(); station_thin.follow_thin(self.arm.client, q, queue, step=CAM_STEP)
             asyncio.create_task(self._pump(name, queue))
         return self
@@ -66,60 +72,76 @@ class Robot:
         st = await self._state()
         return dict(state=st, over=self._frame("over"), grip=self._frame("grip"))
 
-    async def drive(self, target, stop=lambda: False, tol=4, timeout=8.0):
-        """Closed-loop move of {joint: steps}. Returns (final_state, note). Raises RobotError on contact."""
+    def _check_calibrated(self, st, joints):
+        for j in joints:
+            m = st[j]
+            if not m["frozen"] or m["mx"] - m["mn"] < 300:
+                raise RobotError(f"motor {j} is not calibrated; refusing to move")
+
+    async def drive(self, target, stop=lambda: False, tol=6, timeout=None):
+        """Coordinated closed-loop move of {joint: steps}. Returns (final_state, note). Raises RobotError on contact."""
         if self.dry_run:
             return None, "ok (dry-run: arm was not actually moved)"
         a, m = self.arm, self.mod
-        cmd = dict(target)
-        try:
-            await a.goto_steps(dict(cmd), wait=False)            # sets speed/accel, torque on, first goal
-        except SystemExit as e:
-            raise RobotError(str(e))
-        except TimeoutError:
-            raise RobotError("lost the Station state stream before the move started; nothing was commanded", fatal=True)
-        t, ok, st = 0.0, 0, None
-        while t < timeout and not stop():
-            await asyncio.sleep(0.25); t += 0.25; st = await self._state()
+        st = await self._state()
+        self._check_calibrated(st, target)
+        target = {j: int(min(st[j]["mx"] - m.MARGIN, max(st[j]["mn"] + m.MARGIN, t))) for j, t in target.items()}
+        dist = {j: abs(t - st[j]["pos"]) for j, t in target.items()}
+        far = max(dist.values()) or 1
+        items = []
+        for j, t in target.items():
+            speed = max(MIN_SPEED, round(m.SPEED * dist[j] / far))          # all joints arrive together
+            items += [(j, 0x29, bytes([m.ACCEL])), (j, 0x2E, speed.to_bytes(2, "little")), (j, 0x28, b"\x01"), (j, 0x2A, t.to_bytes(2, "little"))]
+        await a.write(items)
+        timeout = timeout or (2.0 + 2.0 * far / m.SPEED)                     # time to cover the distance, with margin
+        cmd, prev, still, t0 = dict(target), {j: st[j]["pos"] for j in target}, {j: 0 for j in target}, time.time()
+        while time.time() - t0 < timeout and not stop():
+            await asyncio.sleep(POLL)
+            st = await self._state()
             hot = {i: st[i]["cur"] for i in range(1, 8) if st[i]["cur"] > m.CUR_LIMIT}
             if hot:
                 await a.write([(i, 0x2A, st[i]["pos"].to_bytes(2, "little")) for i in range(1, 8)])
                 raise RobotError(f"CONTACT: current over {m.CUR_LIMIT} mA {hot}; stopped and holding position")
             err = {j: target[j] - st[j]["pos"] for j in target}
-            ok = ok + 1 if all(abs(e) <= tol for e in err.values()) else 0
-            if ok >= 2: break
+            if all(abs(e) <= tol for e in err.values()):
+                break
+            nudge = []
             for j, e in err.items():
-                if abs(e) > tol:
+                still[j] = still[j] + 1 if abs(st[j]["pos"] - prev[j]) <= 1 else 0
+                prev[j] = st[j]["pos"]
+                if abs(e) > tol and still[j] >= STALL_POLLS:                     # stopped short (P-only servo): push the goal further
                     c = int(max(target[j] - 400, min(target[j] + 400, cmd[j] + round(0.5 * e))))
                     cmd[j] = int(min(st[j]["mx"] - m.MARGIN, max(st[j]["mn"] + m.MARGIN, c)))
-            await a.write([(j, 0x2A, c.to_bytes(2, "little")) for j, c in cmd.items()])
-        left = {j: target[j] - st[j]["pos"] for j in target if st and abs(target[j] - st[j]["pos"]) > tol}
-        return st, (f"did not fully arrive, remaining steps {left} (something may be touching)" if left else "arrived")
+                    nudge.append((j, 0x2A, cmd[j].to_bytes(2, "little"))); still[j] = 0
+            if nudge:
+                await a.write(nudge)
+        if stop():
+            return st, "stopped"
+        left = {j: target[j] - st[j]["pos"] for j in target if abs(target[j] - st[j]["pos"]) > tol}
+        return st, (f"did not fully arrive, remaining steps {left} (something may be touching)" if left else
+                    f"arrived in {time.time() - t0:.1f}s")
 
-    async def goto_path(self, target, st, stop, max_deg=6.0):
-        """Joint-space interpolation in sub-steps of at most max_deg per joint, so no single jump is large."""
-        n = max(1, max(abs(target[j] - st[j]["pos"]) for j in target) // round(max_deg * 4096 / 360) + 1)
-        note = ""
-        for k in range(1, int(n) + 1):
-            if stop(): return "stopped"
-            sub = {j: round(st[j]["pos"] + (target[j] - st[j]["pos"]) * k / n) for j in target}
-            st2, note = await self.drive(sub, stop)
-            if self.dry_run: return note
-            st = st2 or st
-        return note
+    async def goto_path(self, target, st, stop, **_):
+        """One coordinated move to a waypoint (all joints arrive together); contact and STOP are checked 20x per second."""
+        return (await self.drive(target, stop))[1]
 
     async def grip(self, opening, stop=lambda: False):
+        """Move the jaws; returns as soon as they arrive or stall on an object (no fixed wait)."""
         if self.dry_run:
             return "ok (dry-run: arm was not actually moved)"
+        a, m = self.arm, self.mod
         st = await self._state(); g = st[8]
-        try:
-            await self.arm.goto_steps({8: g["mn"] + opening * (g["mx"] - g["mn"])}, timeout=4)
-        except SystemExit as e:
-            raise RobotError(str(e))
-        except TimeoutError:
-            raise RobotError("lost the Station state stream during the gripper move", fatal=True)
-        st = await self._state()
-        return f"gripper at {(st[8]['pos'] - g['mn']) / (g['mx'] - g['mn']):.2f}, motor current {st[8]['cur']} mA"
+        self._check_calibrated(st, [8])
+        goal = int(min(g["mx"] - m.MARGIN, max(g["mn"] + m.MARGIN, g["mn"] + opening * (g["mx"] - g["mn"]))))
+        await a.write([(8, 0x29, bytes([m.ACCEL])), (8, 0x2E, m.SPEED.to_bytes(2, "little")), (8, 0x28, b"\x01"), (8, 0x2A, goal.to_bytes(2, "little"))])
+        prev, still, t0 = g["pos"], 0, time.time()
+        while time.time() - t0 < 3.0 and not stop():
+            await asyncio.sleep(POLL)
+            st = await self._state(); p = st[8]["pos"]
+            if abs(goal - p) <= 8: break
+            still = still + 1 if abs(p - prev) <= 1 else 0; prev = p
+            if still >= STALL_POLLS and time.time() - t0 > 0.3: break        # stalled on an object = a grip
+        return f"gripper at {(st[8]['pos'] - g['mn']) / (g['mx'] - g['mn']):.2f}, motor current {st[8]['cur']} mA ({time.time() - t0:.1f}s)"
 
     async def hold(self):
         st = await self._state()

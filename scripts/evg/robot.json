@@ -1,5 +1,5 @@
 {
- "_note": "No secrets here. backend: 'station' = Station API at station_host:8888 (full control, demo recording); 'mcp' = the arm MCP server (token in env EVG_MCP_TOKEN). Override with env EVG_BACKEND / STATION_HOST.",
+ "_note": "No secrets here. backend 'station' = Station API at station_host:8888 (robot on this laptop: localhost). 'cameras' = id prefixes, see `ctl.py cameras`. 'mcp' backend: token in env EVG_MCP_TOKEN. Env EVG_BACKEND / STATION_HOST / EVG_CAM_* override.",
  "backend": "station",
  "mcp": {
   "url": "http://10.212.27.240:8766/mcp",
@@ -55,7 +55,7 @@
   }
  },
  "saved_at": "2026-11-21 14:35:07",
- "station_host": "10.212.27.240",
+ "station_host": "localhost",
  "buses": {
   "follower": "5B61033301",
   "leader": "5B61035034"

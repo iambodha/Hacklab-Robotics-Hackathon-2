@@ -7,6 +7,7 @@
   python3 scripts/evg/ctl.py demos                list demos (samples, duration, filtered or not)
   python3 scripts/evg/ctl.py demo-filter NAME [--eps N]
   python3 scripts/evg/ctl.py demo-delete NAME     moves to demos/.trash (not deleted)
+  python3 scripts/evg/ctl.py cameras [--overview ID --gripper ID]   list cameras, save a frame of each, assign roles
 
 Contract with the agent loop (scripts/evg/agent/run.py): every tick it must
   * exit cleanly if evg-run/STOP exists, and wait while evg-run/PAUSE exists,
@@ -146,6 +147,51 @@ def cmd_delete(a):
     shutil.move(str(src), str(dst)); print(f"moved to {dst}")
 
 
+def cmd_cameras(a):
+    """List the cameras the local Station has seen, save one frame of each, and optionally assign overview/gripper."""
+    sys.path.insert(0, str(Path(__file__).parent))
+    import common
+    if a.overview or a.gripper:
+        p = Path(__file__).parent / "robot.json"; cfg = json.loads(p.read_text())
+        cams = cfg.setdefault("cameras", {})
+        if a.overview: cams["overview"] = a.overview.removeprefix("usbvideo/")
+        if a.gripper: cams["gripper"] = a.gripper.removeprefix("usbvideo/")
+        p.write_text(json.dumps(cfg, indent=1)); print(f"saved to {p}: {cams}")
+    seen, cur = common.detected_cameras(), common.camera_queues()
+    role = {v.removeprefix("usbvideo/"): k for k, v in cur.items()}
+    if not seen:
+        print("no cameras seen by the local Station yet (is it running, are the cameras plugged in?)")
+    for h in seen:
+        print(f"  {h}  {'-> ' + {'over': 'overview', 'grip': 'gripper'}[role[h]] if h in role else '(not assigned)'}")
+    for name, q in cur.items():
+        if q.removeprefix("usbvideo/") not in seen and seen:
+            print(f"WARNING: {name} camera {q} is not among the cameras this Station has seen; assign with --overview/--gripper")
+    if seen and not a.no_snap:
+        import asyncio, logging
+        from agent import robot  # noqa: F401  (sets up the Station client import path)
+        from station_py import new_station_client
+        from target.gen_python.protobuf.drivers.usbvideo import usbvideo
+        import station_thin
+
+        async def grab():
+            client = await new_station_client(common.station_host(), logging.getLogger("cams"))
+            out = ROOT / "frames"; out.mkdir(exist_ok=True)
+            for h in seen:
+                q = asyncio.Queue(); station_thin.follow_thin(client, f"usbvideo/{h}", q, step=1)
+                try:
+                    for _ in range(30):
+                        e = await asyncio.wait_for(q.get(), 3)
+                        pack = usbvideo.RxEnvelopeReader(memoryview(bytes(e.Data))).get_frames()
+                        fr = (pack.get_frames_data() or []) if pack else []
+                        if fr:
+                            f = out / f"cam-{h[:8]}.jpg"; f.write_bytes(bytes(fr[-1])); print(f"  saved {f}"); break
+                except asyncio.TimeoutError:
+                    print(f"  {h[:8]}: no frames (camera unplugged?)")
+            client.close_connection()
+        asyncio.run(grab())
+        print("Open the frames, then e.g.:  python3 scripts/evg/ctl.py cameras --overview <id> --gripper <id>  (a prefix is enough)")
+
+
 def main():
     import common; common.apply_robot_env()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -162,6 +208,8 @@ def main():
     sp.add_parser("demos").set_defaults(f=cmd_demos)
     s = sp.add_parser("demo-filter"); s.set_defaults(f=cmd_filter)
     s.add_argument("name"); s.add_argument("--eps", type=float, default=40); s.add_argument("--grip-eps", type=float, default=60)
+    s = sp.add_parser("cameras", help="list/assign the overview and gripper cameras"); s.set_defaults(f=cmd_cameras)
+    s.add_argument("--overview"); s.add_argument("--gripper"); s.add_argument("--no-snap", action="store_true")
     s = sp.add_parser("demo-delete"); s.set_defaults(f=cmd_delete); s.add_argument("name")
     a = ap.parse_args(); a.f(a)
 

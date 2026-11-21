@@ -26,7 +26,7 @@ ACTIONS = """Actions:
   {"action":"step","joints":{"1":deg,"3":deg}}   small joint rotations in degrees, joints 1-7, each |deg| <= 6
   {"action":"goto","waypoint":"A_pregrasp"}       move all joints to a waypoint from the demonstration (interpolated in small steps)
   {"action":"grip","opening":0.0-1.0}             0 closed, 1 open
-  {"action":"wait","seconds":1}                   look again without moving
+  {"action":"wait","seconds":0}                   look again without moving (the next turn shows fresh images)
   {"action":"done","reason":"..."}                only when the whole TASK is visibly complete (must be the only action in a turn)
 
 Rules: move in small steps and check the next image; never push into the table or objects; if a result says a limit or contact stopped the move, choose a different, gentler action. Positions are servo steps (4096 per turn). Use the demonstration for waypoints, heights (the floor) and the grasp/release sequence, but adapt to where objects are NOW.
@@ -80,6 +80,7 @@ async def main(a):
     prov = providers.make(dict(preset=a.provider_preset, provider=a.provider, model=a.model, base_url=a.base_url, api_key_env=a.api_key_env, effort=a.effort))
     hints = (Path(__file__).parent / "hints.md").read_text()
     system = system_prompt(a.chunk, hints)
+    schema = safety.reply_schema(a.chunk, list(pkg["waypoints"]))
     from agent import mcp_client
     be = "replay" if a.replay else (a.backend if a.backend != "auto" else mcp_client.backend())
     rb = (robot_mod.ReplayRobot(C.DEMOS / a.replay) if a.replay else robot_mod.McpRobot(dry_run=a.dry_run) if be == "mcp"
@@ -92,6 +93,12 @@ async def main(a):
 
     status(phase="connecting"); log(f"provider {prov.name}; robot {be}; mode {st['mode']}; demos {names}; {len(pkg['waypoints'])} waypoints, floor j2={pkg['floor_j2']}")
     await rb.connect()
+    if isinstance(prov, providers.OpenAICompat) and "api.openai.com" not in prov.base:
+        # local model: load it and fill its prefix cache now, so tick 1 is not a cold start
+        t0 = time.time(); status(phase="warming up model")
+        try: await asyncio.to_thread(prov.complete, system, [f"=== TASK ===\n{a.task}"] + demo_pkg.parts(pkg) + ["Reply with OK."], None)
+        except providers.ProviderError as e: log(f"warm-up failed: {e}")
+        log(f"model warm-up {time.time() - t0:.1f}s")
     margin = rb.mod.MARGIN
     signal.signal(signal.SIGTERM, lambda *_: C.STOP.touch())
     warned = False
@@ -115,7 +122,7 @@ async def main(a):
                 if obs[k]:
                     (td / f"{k}.jpg").write_bytes(obs[k]); (C.RUN / f"latest_{k}.jpg").write_bytes(obs[k])
             if not obs["over"] and not obs["grip"]:
-                log("no camera frames; waiting"); status(phase="no_frames"); await asyncio.sleep(1); continue
+                log("no camera frames yet"); status(phase="no_frames"); await asyncio.sleep(0.1); continue
             # stable prefix (system + task + demo) first, CACHE_BREAK, then everything that changes per tick
             prefix = [f"=== TASK ===\n{a.task}"] + demo_pkg.parts(pkg)
             parts = prefix + [providers.CACHE_BREAK, "=== CURRENT STATE (tick %d) ===\n%s" % (tick, fmt_state(s, getattr(rb, "cur_unit", "mA")))]
@@ -133,7 +140,7 @@ async def main(a):
             action, raw, err, acts = None, "", None, []
             for attempt in range(2):
                 try:
-                    raw = await asyncio.to_thread(prov.complete, system, parts)
+                    raw = await asyncio.to_thread(prov.complete, system, parts, schema)
                     action = providers.extract_json(raw)
                     acts = action["actions"] if isinstance(action.get("actions"), list) else [action.get("action")]
                     acts = acts[:max(a.chunk, 1)]
@@ -143,12 +150,12 @@ async def main(a):
                 except (ValueError, safety.Invalid) as e:
                     err = f"invalid reply: {e}"; parts.append(f"Your previous reply was rejected: {e}. Reply with valid JSON only.")
                 except providers.ProviderError as e:
-                    err = f"provider error: {e}"; await asyncio.sleep(2)
+                    err = f"provider error: {e}"; await asyncio.sleep(0.3)
             (td / "reply.json").write_text(json.dumps(dict(raw=raw, error=err, usage=prov.usage), indent=1))
             u = prov.usage
             log(f"    tokens: new {u.get('input', '?')}, cache read {u.get('cache_read', 0)}, cache write {u.get('cache_write', 0)}, out {u.get('output', '?')}, {u.get('ms', '?')} ms")
             if err:
-                log(err); status(phase="error", error=err); await asyncio.sleep(1)
+                log(err); status(phase="error", error=err); await asyncio.sleep(0.2)
                 if tick > 2 and err.startswith("provider"): break
                 continue
             thought = (action.get("thought") or "")[:200]
@@ -175,7 +182,7 @@ async def main(a):
                     if kind == "done":
                         log(f"DONE: {payload['reason']}"); status(phase="done", result=payload["reason"]); finished = True; break
                     elif kind == "wait":
-                        await asyncio.sleep(payload["seconds"]); res = "waited"
+                        res = "looked again (no movement)"                    # realtime: no sleeping, the next tick re-observes
                     elif kind == "step":
                         _, res = await rb.drive(payload["targets"], stop_requested)
                     elif kind == "goto":
@@ -230,7 +237,7 @@ if __name__ == "__main__":
     ap.add_argument("--max-ticks", type=int, default=80); ap.add_argument("--max-seconds", type=int, default=900)
     args = ap.parse_args()
     if not (args.provider_preset or args.provider):
-        args.provider_preset = "claude-haiku"
+        args.provider_preset = "gemma-e4b"
     try:
         asyncio.run(main(args))
     except KeyboardInterrupt:

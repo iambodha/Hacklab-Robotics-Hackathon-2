@@ -33,7 +33,12 @@ async def main(secs):
     q = asyncio.Queue(); client.follow("st3215/inference", q)
     first = last = None; t0 = time.time()
     while time.time() - t0 < secs or first is None:
-        e = await asyncio.wait_for(q.get(), 10)
+        try:
+            e = await asyncio.wait_for(q.get(), 10)
+        except TimeoutError:
+            host = os.environ.get("STATION_HOST", "localhost")
+            sys.exit(f"No motor state from Station at {host} for 10 s. Station is reachable, but it sees no arm: check the USB data "
+                     f"cable of each arm's bus adapter (`ls /dev/cu.usb*` should list them) and that STATION_HOST is the machine the arms are on.")
         last = snapshot(bytes(e.Data)); first = first or last
     for serial, rows in last.items():
         print(f"\nBUS {serial}  ({len(rows)} motors)")

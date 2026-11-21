@@ -38,7 +38,10 @@ PRESETS = {
     "api-haiku":        dict(provider="anthropic", model="claude-haiku-4-5-20251001"),
     "api-sonnet":       dict(provider="anthropic", model="claude-sonnet-5-5"),
     "openai":           dict(provider="openai", model="gpt-4o", base_url="https://api.openai.com/v1"),
-    "ollama":           dict(provider="openai", model="qwen2.5vl:7b", base_url="http://localhost:11434/v1"),
+    "gemma-e4b":        dict(provider="openai", model="gemma4:e4b-mlx", base_url="http://localhost:11434/v1", api_key_env="NO_KEY_NEEDED"),
+    "gemma-12b":        dict(provider="openai", model="gemma4:12b-mlx", base_url="http://localhost:11434/v1", api_key_env="NO_KEY_NEEDED"),
+    "gemma-31b":        dict(provider="openai", model="gemma4:31b-mlx", base_url="http://localhost:11434/v1", api_key_env="NO_KEY_NEEDED"),
+    "ollama":           dict(provider="openai", model="gemma4:12b-mlx", base_url="http://localhost:11434/v1", api_key_env="NO_KEY_NEEDED"),
     "lmstudio":         dict(provider="openai", model="local-model", base_url="http://localhost:1234/v1"),
 }
 
@@ -108,7 +111,7 @@ class ClaudeCLI:
             except Exception: pass
             p.terminate()
 
-    def complete(self, system, parts):
+    def complete(self, system, parts, schema=None):
         cut = next((i for i, p in enumerate(parts) if p is CACHE_BREAK), None)
         if cut is None:
             return self._run(system, parts).get("result") or ""
@@ -153,7 +156,7 @@ class AnthropicAPI:
         self.model, self.timeout, self.max_tokens, self.key_env, self.effort = model, timeout, max_tokens, api_key_env, effort
         self.name, self.usage = f"anthropic:{model}", {}
 
-    def complete(self, system, parts):
+    def complete(self, system, parts, schema=None):
         key = os.environ.get(self.key_env)
         if not key:
             raise ProviderError(f"{self.key_env} is not set")
@@ -167,11 +170,12 @@ class AnthropicAPI:
 
 
 class OpenAICompat:
-    def __init__(self, model, base_url="https://api.openai.com/v1", api_key_env="OPENAI_API_KEY", timeout=180, max_tokens=1024, **_):
+    def __init__(self, model, base_url="https://api.openai.com/v1", api_key_env="OPENAI_API_KEY", timeout=180, max_tokens=1024, effort="low", **_):
         self.model, self.base, self.timeout, self.max_tokens, self.key_env = model, base_url.rstrip("/"), timeout, max_tokens, api_key_env
+        self.effort = effort
         self.name, self.usage = f"openai:{model}@{self.base}", {}
 
-    def complete(self, system, parts):
+    def complete(self, system, parts, schema=None):
         content = []
         for p in parts:
             if p is CACHE_BREAK:
@@ -186,6 +190,11 @@ class OpenAICompat:
         r = _post(f"{self.base}/chat/completions", headers,
                   {"model": self.model, "max_tokens": self.max_tokens, "temperature": 0,
                    **({} if "api.openai.com" in self.base else {"cache_prompt": True}),      # llama.cpp: reuse the KV cache of the common prefix
+                   # local thinking models (Gemma 4, Qwen 3 on Ollama) think by default: 200-850 hidden tokens per tick. effort "low" turns it off
+                   **({"reasoning_effort": "none" if self.effort == "low" else self.effort} if self.effort and "api.openai.com" not in self.base else {}),
+                   # local servers: constrain the output to the reply schema (valid structure, stops when the object is complete)
+                   **({"response_format": {"type": "json_schema", "json_schema": {"name": "reply", "schema": schema}}}
+                      if schema and "api.openai.com" not in self.base else {}),
                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": content}]}, self.timeout)
         self.usage = _usage(r.get("usage"), round((time.time() - t) * 1000))
         try:
