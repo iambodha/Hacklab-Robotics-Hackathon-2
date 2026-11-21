@@ -320,11 +320,13 @@ class LiveCapture:
         self.state_frames += 1
         self._since_emit += 1
         self.last_state_mono = mono
-        if self.state_hz > 0 and mono - self._last_emit < 1.0 / self.state_hz:
+        # Decimate on Station's bus clock, not arrival time: frames reach us in bursts under load.
+        stamps = [self.bus_stamps[s] for s in self.motors if s in self.bus_stamps]
+        clock = max((s[1] for s in stamps), default=0) / 1e9 or mono
+        if self.state_hz > 0 and 0 <= clock - self._last_emit < 1.0 / self.state_hz:
             return
-        self._last_emit = mono
+        self._last_emit = clock
         buses = {s: bus_entry(s, m) for s, m in self.motors.items()}
-        stamps = [self.bus_stamps[s] for s in buses if s in self.bus_stamps]
         row = {"wall": round(wall, 4), "station_ns": max((s[0] for s in stamps), default=None),
                "station_mono_ns": max((s[1] for s in stamps), default=None), "buses": buses, **sim_compat(buses)}
         n, self._since_emit = self._since_emit, 0
