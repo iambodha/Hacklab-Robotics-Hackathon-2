@@ -154,6 +154,30 @@ From the lifted grasp pose: `goto 2 1640` (clearance), base j1 decreased ~29° i
 until the box filled the gripper view, `arm.py grip 0.85`, then `step 2 -14` to lift clear.
 The object landed on the open cardboard box near its edge closest to the arm.
 
+## Dataset export from Station history (works)
+
+Station keeps every frame and motor reading in `station-run/station_data/` (5.1 GB by 12:51).
+Exporting a time window as a training dataset took about 3 seconds:
+
+```bash
+python3 scripts/history_index.py 12:31:50 12:48:00        # -> frame pointers for those times
+./station-bin/dataset-generator -no-tui -robot localhost -from 7086000 -to 8712000 \
+  -episode.duration 20 -episode.min-commands 20 \
+  -task "pick up the small black object and place it on the white box" \
+  -output datasets/pick-place-2026-11-21
+./station-bin/dataset-mp4 -input datasets/pick-place-2026-11-21.parquet \
+  -output datasets/pick-place-2026-11-21.mp4 -render-state=false -grid-cols 2 -grid-rows 1
+```
+
+Result (first try, 21 Nov 13:47): 6 episodes, 2168 frames, 59 MB Parquet; 144 s mp4 showing both
+cameras side by side with every joint's position, goal and current. Files are in `datasets/` in
+the project root, outside git (size, and the footage shows people).
+
+Caveats:
+- Episodes are cut by command activity, not by task, so they include idle and setup stretches. 9 of 15 were dropped for too few commands; one ~3-minute stretch was dropped for a 172 s frame gap (possibly the teleop demo; not checked).
+- The last two episodes show the table rearranged with other objects (snack wrappers, a black box), so they don't match the task label.
+- For a clean dataset, tag the start and end of each pick-and-place run in the web UI (see `norma-core/docs/datasets/export-parquet/datasets-export.md`).
+
 ## Current state when this session ended (21 Nov, ~13:00)
 
 - Station running (`scripts/run-station.sh`), both arms calibrated and frozen.
