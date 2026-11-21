@@ -205,7 +205,11 @@
     "default_clearance": 0.08,
     "points_per_turn": 12,
     "dt": 0.06,
-    "tip_iterations": 3
+    "tip_iterations": 3,
+    "contact_load_delta": 320,
+    "rim_margin": 0.004,
+    "max_tilt_note": 25,
+    "contact_points": 2
   },
   "touch": {
     "_about": "guarded descent: go down in small steps and stop when the fingertips touch (the measured gripper height stops following the commanded one, or the arm motors' load changes)",
@@ -220,5 +224,16 @@
     "reuse_radius": 0.08,
     "probe_from": 0.05,
     "keep": 40
+  },
+  "grab": {
+    "_about": "grab_upright: tactile search for a thin upright object",
+    "offsets": [
+      0.0,
+      0.012,
+      -0.012,
+      0.024,
+      -0.024
+    ],
+    "force": 0.3
   }
 }

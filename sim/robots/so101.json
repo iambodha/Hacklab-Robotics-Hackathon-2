@@ -274,7 +274,11 @@
     "default_clearance": 0.08,
     "points_per_turn": 12,
     "dt": 0.06,
-    "tip_iterations": 3
+    "tip_iterations": 3,
+    "contact_load_delta": 320,
+    "rim_margin": 0.004,
+    "max_tilt_note": 25,
+    "contact_points": 2
   },
   "_to_verify": [
     "bus_serial: the serial of this arm's servo bus as Station reports it",
@@ -297,5 +301,16 @@
     "reuse_radius": 0.08,
     "probe_from": 0.05,
     "keep": 40
+  },
+  "grab": {
+    "_about": "grab_upright: tactile search for a thin upright object",
+    "offsets": [
+      0.0,
+      0.012,
+      -0.012,
+      0.024,
+      -0.024
+    ],
+    "force": 0.3
   }
 }

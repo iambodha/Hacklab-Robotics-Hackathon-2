@@ -80,7 +80,7 @@ LOG_DIR = Path(os.environ.get("ROBOT_REAL_LOG_DIR", HERE / "real_sessions"))
 W, H = P.cameras.width, P.cameras.height
 FRAME = P.frame_text
 PARK, CARRY_Z = list(P.poses.park), env("ROBOT_CARRY_Z", P.poses.carry_z)
-WS, MO, GR, PK, DR, ST, IKP, TS = P.workspace, P.motion, P.gripper, P.pick, P.drop, P.stir, P.ik, P.touch
+WS, MO, GR, PK, DR, ST, IKP, TS, GB = P.workspace, P.motion, P.gripper, P.pick, P.drop, P.stir, P.ik, P.touch, P.grab
 
 IK = robot_profile.Kin(P)                            # forward kinematics, wrist-camera pose, position-only IK
 MODEL = IK.model
@@ -805,6 +805,47 @@ async def _descend_guarded(x: float, y: float, z_to: float, yaw: float):
 @server.tool(annotations={"destructiveHint": True})
 @recorded
 @doc
+async def grab_upright(x: float, y: float, z: float, force: float = GB.force) -> list:
+    """Grab a thin object that STANDS UPRIGHT (a pen in a holder, a straw, a spoon in a cup) at about (x, y), with
+    the fingertips at height z. The wrist camera cannot tell whether such an object is between the jaws or a little
+    in front of or behind them, so this searches by touch: it closes gently, and if the jaws meet nothing it opens,
+    shifts 1-2 cm forwards or backwards along the gripper's own direction and tries again. Choose z low on the
+    object, so that little of it sticks out below the fingertips. Returns HOLDING / NOT holding, a touch line and
+    fresh images."""
+    log = []
+    st = await am._read()
+    if st[GRIP_ID]["norm"] < GR.open_enough:
+        await gripper(open_fraction=1.0)
+    out = await move_tcp(x=x, y=y, z=z, top_down=True)
+    log.append("approach: " + _first(out))
+    if _stopped(out):
+        return ["GRAB not started.\n" + "\n".join(log)] + await _views()
+    q, _ = await measured()
+    yaw = _yaw_now(q)
+    r = np.array([x, y]) / max(float(np.hypot(x, y)), 1e-6)        # outward from the base: the plane the gripper leans in
+    for off in GB.offsets:
+        if off:
+            sol, _ = await asyncio.to_thread(_solve_tcp, np.array([x + off * r[0], y + off * r[1], z]), (await measured())[0], yaw)
+            if sol is None:
+                continue
+            res = await _go(sol, settle=True)
+            if res.startswith("ABORTED"):
+                log.append(f"shift {off * 100:+.1f} cm: " + res)
+                break
+        closed = await gripper(open_fraction=0.0, force=force)
+        touch = next((l for l in closed.splitlines() if l.startswith("touch:")), "")
+        if "HOLDING" in touch:
+            log.append(f"at {off * 100:+.1f} cm: " + touch)
+            return [f"HOLDING it (found by touch {off * 100:+.1f} cm from the first position).\n" + "\n".join(log)] + await _views()
+        log.append(f"at {off * 100:+.1f} cm: nothing between the jaws")
+        await gripper(open_fraction=1.0)
+    return ["NOT holding: nothing was felt at any of the positions tried. The object is probably off to the SIDE of the "
+            "jaws: re-localize it and try again.\n" + "\n".join(log)] + await _views()
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+@doc
 async def touch_table(x: float, y: float) -> str:
     """Feel where the table is at (x, y): the gripper goes down slowly until the fingertips touch, stops, and lifts
     again. Returns the gripper height at contact, which is remembered and used by later picks near that spot. Use it
@@ -1025,13 +1066,17 @@ async def _go(sol, settle: bool, dt: float = DT) -> str:
 @recorded
 @doc
 async def stir(x: float, y: float, z: float, radius: float = ST.default_radius, turns: int = ST.default_turns,
-               tool_length: float = 0.0, clearance: float = ST.default_clearance) -> list:
+               tool_length: float = 0.0, clearance: float = ST.default_clearance, rim_height: float = 0.0,
+               cup_radius: float = 0.0) -> list:
     """Stir: move the TIP of a tool held pointing down in the jaws in smooth horizontal circles around (x, y) at
     height z, `turns` times, then lift it out. tool_length = how far the tool sticks out below the fingertips
     (metres; 0 = stir with the gripper tip itself). The tool is steered by its tip, so a leaning gripper is
     compensated. Sequence: tip to (x, y, z + clearance) above the cup, straight down to z, circles, straight back
     up. For a cup choose z = rim height - 0.03 (tip inside the cup), clearance so that z + clearance is above the
-    rim, and a radius of at most a third of the cup's inner width (max <<STIR_MAX_R>>). Stops and holds on contact."""
+    rim, and a radius of at most a third of the cup's inner width (max <<STIR_MAX_R>>). Give rim_height and cup_radius
+    (inner radius) when you know them: the tool then checks BEFORE moving that the leaning tool shaft will not rub
+    the rim, and tells you what to change if it would. The reply says how far the tool leans. It stops on HARD
+    resistance only; a light cup being nudged cannot be felt, so compare the cup in the images before and after."""
     radius, turns = float(min(max(radius, ST.min_radius), ST.max_radius)), int(min(max(turns, 1), ST.max_turns))
     L = float(min(max(tool_length, 0.0), ST.max_tool_length))
     q, _ = await measured()
@@ -1042,7 +1087,38 @@ async def stir(x: float, y: float, z: float, radius: float = ST.default_radius, 
     if above is None or down is None:
         return [f"STIR not started: the tool tip cannot reach {[round(x, 3), round(y, 3), round(z, 3)]} "
                 f"(or the point {clearance} m above it) with tool_length {L}. Nothing moved."] + await _views()
-    tcp_low = IK.fk(down)[0]
+    tcp_low, rot_low = IK.fk(down)
+    tilt = float(np.degrees(np.arccos(np.clip(-rot_low[2, 1], -1, 1))))          # how far the tool leans from vertical
+    if rim_height > 0 and cup_radius > 0:
+        depth = max(0.0, rim_height - z)                                         # how deep the tip is below the rim
+        reach = depth * np.tan(np.radians(tilt)) + radius                        # where the shaft crosses the rim, from the centre
+        if reach > cup_radius - ST.rim_margin:
+            ok_depth = max(0.0, (cup_radius - ST.rim_margin - radius) / max(np.tan(np.radians(tilt)), 1e-6))
+            return [f"STIR not started: the tool would lean {tilt:.0f} deg here, so with the tip {depth * 100:.0f} cm below the rim its shaft "
+                    f"crosses the rim {reach * 100:.1f} cm from the centre, but the cup's inner radius is {cup_radius * 100:.1f} cm: it would "
+                    f"rub and push the cup. Options: stir shallower (tip at most {ok_depth * 100:.1f} cm below the rim, z >= {rim_height - ok_depth:.3f}), "
+                    f"use a smaller radius, or hold the tool with less of it below the fingertips (now {L * 100:.0f} cm). "
+                    f"Nothing moved."] + await _views()
+    if rim_height > 0 and cup_radius > 0 and z < rim_height:
+        # the way in: the gripper leans more the higher it is, so check the shaft against the rim at several depths
+        def worst_on_the_way():
+            w, seed2 = (0.0, 0.0, 0.0), above
+            for d in np.linspace(0.0, rim_height - z, 6)[1:]:
+                sol = _solve_tip([x, y, rim_height - d], L, seed2, yaw)
+                if sol is None:
+                    continue
+                seed2 = sol
+                t = float(np.degrees(np.arccos(np.clip(-IK.fk(sol)[1][2, 1], -1, 1))))
+                off = d * np.tan(np.radians(t))
+                if off > w[0]:
+                    w = (float(off), float(d), t)
+            return w
+        off, d_at, t_at = await asyncio.to_thread(worst_on_the_way)
+        if off > cup_radius - ST.rim_margin:
+            return [f"STIR not started: on the way down, with the tip {d_at * 100:.0f} cm below the rim the tool leans {t_at:.0f} deg and its shaft "
+                    f"would be {off * 100:.1f} cm off-centre at the rim, but the cup's inner radius is {cup_radius * 100:.1f} cm: it would push "
+                    f"the cup while entering. Hold the tool with less of it below the fingertips (now {L * 100:.0f} cm) or stir shallower. "
+                    f"Nothing moved."] + await _views()
     if tcp_low[2] < MIN_Z:
         return [f"STIR not started: the gripper itself would have to go to z = {tcp_low[2]:.3f}. Check z and tool_length."] + await _views()
     log = []
@@ -1059,6 +1135,7 @@ async def stir(x: float, y: float, z: float, radius: float = ST.default_radius, 
         if res.startswith("ABORTED"):
             return [f"STIR stopped on the way ({name}). " + res] + await _views()
         log.append(f"{name}: tip at {np.round(_tip_of((await measured())[0], L), 3).tolist()}")
+    log.append(f"tool leans {tilt:.0f} deg from vertical" + (" (a lot: expect the shaft near the rim)" if tilt > ST.max_tilt_note else ""))
     seed, n_pts = down, ST.points_per_turn
     def plan():
         pts = [_solve_tip([x + radius, y, z], L, seed, yaw)]
@@ -1070,6 +1147,11 @@ async def stir(x: float, y: float, z: float, radius: float = ST.default_radius, 
         return pts
     ring = await asyncio.to_thread(plan)
     path = ring + ring[1:] * (turns - 1) if all(p is not None for p in ring) else [None]
+    # Resistance: only HARD resistance can be felt. Measured in open air, the arm's own motion changes the motor loads
+    # by 100-200 during a circle (also relative to a practice circle), so a light cup being nudged is below the noise.
+    # Whether the cup moved has to be judged from the images.
+    base = {m: v["load"] for m, v in (await am._read()).items() if m in ARM_IDS}
+    over, worst = 0, 0
     if not path or any(p is None for p in path):
         log.append("circles not reachable at this radius: stirred nothing")
     else:
@@ -1078,8 +1160,19 @@ async def stir(x: float, y: float, z: float, radius: float = ST.default_radius, 
             if res.startswith("ABORTED"):
                 log.append(f"stopped after {k / n_pts:.1f} turns: {res}")
                 break
+            now = await am._read()
+            push = max(abs(now[m]["load"] - base[m]) for m in ARM_IDS)
+            worst = max(worst, push)
+            over = over + 1 if push > ST.contact_load_delta else 0
+            if over >= ST.contact_points:                                        # hard resistance at consecutive points
+                await _stop_here(now, ARM_IDS)
+                log.append(f"STOPPED after {k / n_pts:.1f} turns: hard resistance (arm motor load changed by {push}): "
+                           f"the tool is jammed against the cup or its bottom")
+                break
         else:
-            log.append(f"stirred {turns} turns of radius {radius * 100:.1f} cm with the tip at height {z:.3f}")
+            log.append(f"stirred {turns} turns of radius {radius * 100:.1f} cm with the tip at height {z:.3f}" +
+                       f"; no hard resistance (largest motor load change {worst}, stop level {ST.contact_load_delta}; a light cup "
+                       f"being nudged cannot be felt: compare the cup in the images before and after)")
     for sol in (down, above):
         res = await _go(sol, settle=True)
         if res.startswith("ABORTED"):
