@@ -87,8 +87,16 @@ Then use the tick-based mapping, anchored at the range centre, or recalibrate.
 - Camera queues on the macOS laptop (Station `0x...` unique ids differ per machine):
   wrist `usbvideo/e091eeda8dcda172482f039057691cdb`, overview `usbvideo/5cd55831e21692d4f05fcaec75c351a5`.
 
-Still open: task 2 (checkerboard), task 3 (joint signs, needs the arm), task 4 (MCP tools),
-task 5 (table height, needs the arm).
+**Task 4 built (in `arm_mcp`, not `robot_mcp`):** `arm_mcp` is the server the team drives with
+(`robot_mcp`'s `observe` serves stale frames when torque is off). Three read-only tools, from the live
+motor-bus joints: `wrist_camera_pose()`, `wrist_pixel_to_table(u, v, assumed_hfov_deg=None)`,
+`project_to_wrist(x, y, z, assumed_hfov_deg=None)`. Without calibrated intrinsics the pixel tools refuse
+unless `assumed_hfov_deg` is passed, and label the result ASSUMED. Table height comes from env
+`ROBOT_TABLE_Z` (default 0.0, flagged "not measured yet"). Tested over stdio against the live arm.
+`arm_mcp` now also needs numpy (`uv run ... --with numpy`). Not deployed yet: the running server is on
+branch `MCP`; merge this branch into `MCP` and restart the server to pick it up.
+
+Still open: task 2 (checkerboard), task 3 (joint signs, needs the arm), task 5 (table height, needs the arm).
 
 ## Tasks for the next agent (in order)
 
