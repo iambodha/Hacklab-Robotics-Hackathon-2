@@ -1,4 +1,4 @@
-"""Web page to start, watch and stop the autonomous operator on the REAL arm: http://127.0.0.1:8894
+"""Web page to enhance a rough instruction, then start, watch and stop the autonomous operator on the REAL arm: http://127.0.0.1:8894
 
   python3 sim/operator_ui.py            # this machine only
   python3 sim/operator_ui.py --port 8894
@@ -81,6 +81,58 @@ def stop():
     except ProcessLookupError:
         pass
     return None
+
+
+ENHANCER = """You turn a short, casual instruction from a person standing at a robot table into a clear task for the
+robot's operator agent. You do not control the robot and must not try to.
+
+First read the two image files in the current folder with the Read tool: overview.jpg (the whole table seen from the
+front; the arm is at the back) and wrist.jpg (the view from the camera on the gripper). They show the table as it
+is right now. Use them to work out what the person means ("this box", "the cap", "the garbage").
+
+Then write the task. Rules:
+- Keep the person's intent exactly. Do not add goals they did not ask for.
+- Name each object the way it looks in the images (colour, kind, rough size) so it can be recognised, and say what
+  it is NOT to be confused with if something similar is on the table.
+- Say where each object must end up and what "done" looks like in a camera image.
+- Never give coordinates or pixel positions: the operator finds everything itself with survey().
+- Add practical hints that follow from the operator's abilities below: which part of an object to grip (the gripped
+  part must be narrower than 4 cm: a thin edge, a brim, a strap, a corner of fabric), object_height below 0.01 for
+  flat or soft things, placing something ON TOP of a box means centring over the box top and releasing, and so on.
+- If the request cannot be done with these abilities, or the images do not show the object or the target, say so
+  in one line starting with "PROBLEM:" and still write the best task you can.
+- Plain text, at most 12 short lines, no headings, no markdown. End with: "When finished, park and report DONE with
+  what went where, or BLOCKED."
+
+What the operator agent can do (its own instructions):
+----
+%s
+----
+Reply with the task text only."""
+
+
+def enhance(rough: str) -> str:
+    """Rewrite a casual instruction into an operator task, grounded in the current camera images."""
+    import tempfile
+    work = tempfile.mkdtemp(prefix="elrobot-enhance-")
+    seen = []
+    for name in ("overview", "wrist"):
+        try:
+            open(os.path.join(work, f"{name}.jpg"), "wb").write(snapshot(name))
+            seen.append(name)
+        except Exception:
+            pass
+    system = ENHANCER % (HERE / "OPERATOR_REAL.md").read_text()
+    if len(seen) < 2:
+        system += f"\n(Only these images could be captured: {seen or 'none'}; work from the text for the rest.)"
+    cmd = ["claude", "-p", "The person's instruction: " + rough, "--model", "sonnet", "--effort", "low",
+           "--tools", "Read", "--allowedTools", "Read", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+           "--append-system-prompt", system]
+    r = subprocess.run(cmd, cwd=work, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+    out = r.stdout.strip()
+    if r.returncode != 0 or not out:
+        raise RuntimeError((r.stderr.strip() or "the enhancer returned nothing")[-300:])
+    return out
 
 
 PARK = """
@@ -186,7 +238,7 @@ th{color:var(--mut)}.bad{color:var(--bad)}.ok{color:var(--ok)}#state{font-weight
 <div class=card><h2>Task</h2><textarea id=task></textarea>
  <div class=row><select id=model><option value=sonnet>Sonnet</option><option value=haiku>Haiku</option><option value=opus>Opus</option></select>
  <select id=effort><option value=low>effort: low</option><option value="">effort: default</option><option value=medium>effort: medium</option></select>
- <button id=start>Start</button><button id=stop>Stop</button><button id=park>Park arm</button><span id=msg class=mut></span></div></div>
+ <button id=enh>Enhance</button><button id=start>Start</button><button id=stop>Stop</button><button id=park>Park arm</button><span id=msg class=mut></span></div><div id=orig class=mut style="margin-top:6px"></div></div>
 <div class=card><h2>Cameras (wrist, overview)</h2><div class=cams><img id=cw alt="wrist camera"><img id=co alt="overview camera"></div></div>
 <div class="card wide"><h2>Result</h2><pre id=result class=mut>No run yet.</pre></div>
 <div class="card wide"><h2>Agent notes</h2><pre id=notes class=mut>-</pre></div>
@@ -197,6 +249,11 @@ let filled=false;
 async function post(p,b){const r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});const j=await r.json();$('msg').textContent=j.message||'';tick();}
 $('start').onclick=()=>post('/api/start',{task:$('task').value,model:$('model').value,effort:$('effort').value});
 $('stop').onclick=()=>post('/api/stop');
+let rough='';
+$('enh').onclick=async()=>{rough=$('task').value;$('enh').disabled=true;$('msg').textContent='enhancing (looks at the cameras, about 15 s)...';
+ try{const r=await fetch('/api/enhance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task:rough})});const j=await r.json();
+  if(j.task){$('task').value=j.task;$('orig').textContent='Your original instruction: '+rough;}$('msg').textContent=j.message||'';}
+ catch(e){$('msg').textContent='enhance failed';}$('enh').disabled=false;};
 $('park').onclick=()=>{$('msg').textContent='parking...';post('/api/park');};
 async function tick(){let s;try{s=await (await fetch('/api/status')).json();}catch(e){$('state').textContent='(page lost contact)';return;}
  if(!filled){$('task').value=s.task||s.default_task;filled=true;}
@@ -249,6 +306,14 @@ class Handler(BaseHTTPRequestHandler):
             model = body.get("model") if body.get("model") in ("sonnet", "haiku", "opus") else "sonnet"
             effort = body.get("effort") if body.get("effort") in ("low", "medium", "high", "") else "low"
             msg = "the task is empty" if not task else start(task, model, effort)
+        elif self.path == "/api/enhance":
+            rough = (body.get("task") or "").strip()
+            if not rough:
+                return self.send(200, json.dumps({"message": "type an instruction first"}).encode())
+            try:
+                return self.send(200, json.dumps({"message": "enhanced: read it, edit if needed, then Start", "task": enhance(rough)}).encode())
+            except Exception as e:
+                return self.send(200, json.dumps({"message": f"enhance failed: {e}"}).encode())
         elif self.path == "/api/stop":
             msg = stop()
         elif self.path == "/api/park":
