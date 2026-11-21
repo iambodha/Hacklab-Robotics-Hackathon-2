@@ -1,30 +1,38 @@
 <title>evg robot agent</title>
 <style>
-:root{--bg:#f6f6f4;--card:#fff;--ink:#1d1d1b;--dim:#6b6b66;--line:#dcdcd6;--accent:#1f5fbf;--red:#c0392b;--grn:#2e7d32;--amber:#b26a00}
-@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#161614;--card:#1f1f1c;--ink:#ecece6;--dim:#9a9a92;--line:#34342f;--accent:#6aa3ff;--red:#ff6b5b;--grn:#6fcf76;--amber:#e0a030;color-scheme:dark}}
+:root{--bg:#f6f6f4;--card:#fff;--ink:#1d1d1b;--dim:#6b6b66;--line:#dcdcd6;--accent:#1f5fbf;--red:#c0392b;--grn:#2e7d32;--amber:#b26a00;--busy-bg:#eef3fb;--err-bg:#fbeeec}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#161614;--card:#1f1f1c;--ink:#ecece6;--dim:#9a9a92;--line:#34342f;--accent:#6aa3ff;--red:#ff6b5b;--grn:#6fcf76;--amber:#e0a030;--busy-bg:#1c2533;--err-bg:#33201e;color-scheme:dark}}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,sans-serif;margin:0;padding-inline:16px}
 main{max-width:1100px;margin:0 auto;padding-block:16px 48px;display:grid;gap:14px}
 h1{font-size:18px;margin:0}h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:0 0 8px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 12px;border-radius:7px;cursor:pointer}
-button:hover{border-color:var(--accent)}button.p{background:var(--accent);color:#fff;border-color:var(--accent)}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 12px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+button:hover:not(:disabled){border-color:var(--accent)}button.p{background:var(--accent);color:#fff;border-color:var(--accent)}
 button.stop{background:var(--red);color:#fff;border-color:var(--red);font-weight:700;padding:10px 22px}
 button:disabled{opacity:.4;cursor:default}
+button.loading{opacity:1}
+.spin,button.loading::before{content:"";width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;display:inline-block;animation:spin .7s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
 textarea,input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:6px 8px;box-sizing:border-box}
 textarea{width:100%;min-height:80px}input.w{flex:1;min-width:180px}
 .pill{padding:2px 9px;border-radius:99px;border:1px solid var(--line);font-size:12px}
 .ok{color:var(--grn)}.bad{color:var(--red)}.warn{color:var(--amber)}.dim{color:var(--dim)}
+.banner{border-radius:8px;padding:9px 12px;display:flex;gap:10px;align-items:center;position:sticky;top:8px;z-index:3}
+#busy{background:var(--busy-bg);border:1px solid var(--accent)}#err{background:var(--err-bg);border:1px solid var(--red);color:var(--red)}
+#err button{margin-left:auto;padding:2px 8px}
+#note{min-height:1.2em}
 .cams{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
 .cams .cam{position:relative;aspect-ratio:4/3;background:#111;border-radius:7px;overflow:hidden;display:grid;place-items:center;color:#888;font-size:12px}
 .cams .cam img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 pre{margin:0;max-height:260px;overflow:auto;font:12px/1.4 ui-monospace,monospace;white-space:pre-wrap}
 .demo{display:flex;gap:8px;align-items:baseline;padding:3px 0}
-#msg{position:sticky;top:0;z-index:2}
 </style>
 <main>
-<div class="row"><h1>evg robot agent</h1><span id="station" class="pill"></span><span id="phase" class="pill"></span><span id="msg" class="warn"></span></div>
+<div class="row"><h1>evg robot agent</h1><span id="station" class="pill"></span><span id="phase" class="pill"></span><span id="note" class="ok"></span></div>
+<div id="busy" class="banner" hidden><span class="spin"></span><span id="busyText"></span></div>
+<div id="err" class="banner" hidden><b>!</b><span id="errText"></span><button id="errClose" title="dismiss">✕</button></div>
 
 <div class="card"><h2>1 · Task</h2>
 <textarea id="task" placeholder="Describe the task, e.g. clean the desk: garbage into the black box, parts into the white box"></textarea>
@@ -33,22 +41,20 @@ pre{margin:0;max-height:260px;overflow:auto;font:12px/1.4 ui-monospace,monospace
 
 <div class="card"><h2>2 · Demo</h2><div id="demos"></div>
 <div class="row" style="margin-top:8px">
-<button class="p" id="recStart">● Start recording</button><button id="recStop" disabled>■ Stop</button>
-<span id="recTime" class="dim"></span></div>
+<button class="p" id="recStart">● Start recording</button><button id="recStop">■ Stop recording</button>
+<span id="recTime" class="bad"></span></div>
 <div id="review" class="row" hidden style="margin-top:8px"><input class="w" id="desc" placeholder="What does this demo show? e.g. garbage → black box">
 <button class="p" id="keep">Keep</button><button id="rerec">Re-record</button><button id="keepMore">Keep + record another</button><button id="discard">Discard</button></div>
-<p id="stray" class="bad" hidden style="margin:8px 0 0"></p><p class="dim" style="margin:8px 0 0">Recording mirrors your leader arm onto the follower (teleop is started for you).</p></div>
+<p id="stray" class="bad" hidden style="margin:8px 0 0"></p><p class="dim" style="margin:8px 0 0">Recording mirrors the leader arm onto the follower (teleop is started for you).</p></div>
 
 <div class="card"><h2>3 · Model</h2><div class="row">
 <select id="preset"></select><input id="model" placeholder="model (openai-compatible)"><input class="w" id="base" placeholder="base URL (openai-compatible)">
-<input id="keyenv" placeholder="API key env var"><label>effort <select id="effort"><option>low<option>medium<option>high<option>xhigh<option>max</select></label><label>actions per call <input type="number" id="chunk" min="1" max="5" style="width:56px"></label><label><input type="checkbox" id="step"> approve every action</label><button id="saveCfg">Save</button></div>
+<input id="keyenv" placeholder="API key env var"><label>effort <select id="effort"><option>low<option>medium<option>high<option>xhigh<option>max</select></label><label>actions per call <input type="number" id="chunk" min="1" max="5" style="width:56px"></label><button id="saveCfg">Save</button></div>
 <p class="dim" style="margin:8px 0 0">claude-* uses your Claude subscription through the local <code>claude</code> CLI. API keys are read from the environment, never stored.</p></div>
 
 <div class="card"><h2>4 · Run</h2><div class="row">
 <button class="p" id="runLive">▶ Start (arm moves)</button><button id="runDry">Dry run (never moves)</button><button id="runReplay" title="uses the first selected demo as a fake robot">Replay test (no hardware)</button>
 <button class="stop" id="stop">■ STOP</button><button id="pause">Pause</button></div>
-<div id="approve" class="row" hidden style="margin-top:10px"><b class="warn">Approve?</b><code id="pending"></code>
-<button class="p" id="yes">Approve</button><button id="no">Reject</button></div>
 <div id="thought" class="dim" style="margin-top:8px"></div></div>
 
 <div class="card"><h2>Cameras</h2><div class="cams"><div><div class="dim">overview</div><div class="cam">no frame<img id="over" hidden></div></div><div><div class="dim">gripper</div><div class="cam">no frame<img id="grip" hidden></div></div></div>
@@ -58,46 +64,79 @@ pre{margin:0;max-height:260px;overflow:auto;font:12px/1.4 ui-monospace,monospace
 </main>
 <script>
 const TOKEN="__TOKEN__",PRESETS=__PRESETS__;
-const $=id=>document.getElementById(id);let taskDirty=false,cfgInit=false,last=null;
-async function api(a,body={}){const r=await fetch("/api/"+a,{method:"POST",headers:{"X-Token":TOKEN,"content-type":"application/json"},body:JSON.stringify(body)});
- const j=await r.json();if(!r.ok){say(j.error||"error","bad");throw new Error(j.error)}say("");return j}
-function say(t,c="warn"){const m=$("msg");m.textContent=t;m.className=c}
-const act=(id,fn)=>$(id).onclick=async()=>{const b=$(id);if(b.disabled)return;const t=b.textContent;b.disabled=true;if(id==="recStart")b.textContent="Starting… (teleop takes a few seconds)";try{await fn()}catch(e){}b.textContent=t;poll()};
+const $=id=>document.getElementById(id);
+let taskDirty=false,cfgInit=false,last={},pending=null,errHidden=null,noteTimer;
+const ACTIONS=["setTask","loadFile","recStart","recStop","keep","rerec","keepMore","discard","saveCfg","runLive","runDry","runReplay","pause","snap","stationBtn"];
+
+async function api(a,body={}){
+ const r=await fetch("/api/"+a,{method:"POST",headers:{"X-Token":TOKEN,"content-type":"application/json"},body:JSON.stringify(body)});
+ const j=await r.json().catch(()=>({}));
+ if(!r.ok){showErr(j.error||("HTTP "+r.status));throw new Error(j.error)}
+ return j}
+function note(t){$("note").textContent=t;clearTimeout(noteTimer);noteTimer=setTimeout(()=>$("note").textContent="",3000)}
+function showErr(t){errHidden=null;$("errText").textContent=t;$("err").hidden=false}
+$("errClose").onclick=()=>{errHidden=$("errText").textContent;$("err").hidden=true};
+
+// Every button: spinner + disabled from the click until the server says the operation is done.
+function act(id,fn){$(id).onclick=async()=>{
+ const b=$(id);if(b.disabled)return;
+ pending=id;b.classList.add("loading");b.disabled=true;$("err").hidden=true;
+ try{await fn()}catch(e){pending=null}
+ poll()}}
+
 PRESETS.forEach(p=>{const o=document.createElement("option");o.value=o.textContent=p;$("preset").append(o)});
 $("task").oninput=()=>taskDirty=true;
-act("setTask",async()=>{await api("task",{text:$("task").value});taskDirty=false;say("task saved","ok")});
-act("loadFile",async()=>{const r=await api("task",{text:$("taskFile").value});$("task").value=r.task;taskDirty=false;say("loaded","ok")});
-act("recStart",async()=>{const r=await api("rec_start");say("recording "+r.name,"ok")});
-act("recStop",async()=>{const r=await api("rec_stop");say(r.samples+" samples recorded","ok")});
-act("keep",()=>api("rec_keep",{description:$("desc").value}).then(()=>$("desc").value=""));
-act("keepMore",async()=>{await api("rec_keep",{description:$("desc").value});$("desc").value="";await api("rec_start")});
-act("rerec",async()=>{await api("rec_discard");await api("rec_start")});
-act("discard",()=>api("rec_discard"));
-act("saveCfg",async()=>{await api("cfg",{preset:$("preset").value,model:$("model").value,base_url:$("base").value,api_key_env:$("keyenv").value,step_mode:$("step").checked,chunk:Math.max(1,Math.min(5,+$("chunk").value||1)),effort:$("effort").value});say("saved","ok")});
-let armed=0;
-act("runLive",async()=>{if(Date.now()-armed>4000){armed=Date.now();$("runLive").textContent="Confirm: arm will move (click again)";setTimeout(()=>$("runLive").textContent="▶ Start (arm moves)",4000);return}
- armed=0;$("runLive").textContent="▶ Start (arm moves)";await api("run",{mode:"live"})});
-act("runDry",()=>api("run",{mode:"dry"}));act("runReplay",()=>api("run",{mode:"replay"}));
-act("stop",()=>api("stop"));act("pause",()=>api("pause",{on:!(last&&last.paused)}));
-act("yes",()=>api("approve",{yes:true}));act("no",()=>api("approve",{yes:false}));
-act("snap",()=>api("snapshot"));act("stationBtn",()=>api("station_start"));
-async function poll(){let s;try{s=await (await fetch("/api/status")).json()}catch{return}
- last=s;const run=s.running;
+act("setTask",async()=>{await api("task",{text:$("task").value});taskDirty=false;note("task saved")});
+act("loadFile",async()=>{const r=await api("task",{text:$("taskFile").value});$("task").value=r.task;taskDirty=false;note("task loaded")});
+act("recStart",()=>api("rec_start"));
+act("recStop",()=>api("rec_stop"));
+act("keep",async()=>{await api("rec_keep",{description:$("desc").value});$("desc").value=""});
+act("keepMore",async()=>{await api("rec_more",{description:$("desc").value});$("desc").value=""});
+act("rerec",()=>api("rec_again"));
+act("discard",async()=>{await api("rec_discard");note("take discarded")});
+act("saveCfg",async()=>{await api("cfg",{preset:$("preset").value,model:$("model").value,base_url:$("base").value,api_key_env:$("keyenv").value,chunk:Math.max(1,Math.min(5,+$("chunk").value||1)),effort:$("effort").value});note("settings saved")});
+act("runLive",()=>api("run",{mode:"live"}));
+act("runDry",()=>api("run",{mode:"dry"}));
+act("runReplay",()=>api("run",{mode:"replay"}));
+act("pause",()=>api("pause",{on:!last.paused}));
+act("snap",()=>api("snapshot"));
+act("stationBtn",()=>api("station_start"));
+// STOP is never blocked: it does not wait for other operations.
+$("stop").onclick=async()=>{$("stop").classList.add("loading");try{await api("stop");note("STOP sent")}catch(e){}poll()};
+
+function render(s){
+ last=s;const run=s.running,busy=!!s.busy,rec=s.recording||s.starting;
  $("station").textContent=(s.backend==="mcp"?"Arm (MCP) ":"Station ")+(s.station?"up":"DOWN");$("station").className="pill "+(s.station?"ok":"bad");
- $("phase").textContent=s.starting?"starting recording…":s.recording?"recording":run?(s.paused?"paused":s.phase||"running"):(s.phase&&s.phase!=="stopped"?s.phase:"idle");
+ $("phase").textContent=busy?"busy":s.starting?"starting recording…":s.recording?"● recording":run?(s.paused?"paused":(s.phase||"running")):(s.phase&&s.phase!=="stopped"?s.phase:"idle");
+ $("busy").hidden=!busy;$("busyText").textContent=s.busy||"";
+ if(s.error&&s.error!==errHidden){$("errText").textContent=s.error;$("err").hidden=false}
  if(!taskDirty&&document.activeElement!==$("task"))$("task").value=s.task||"";
- const c=s.cfg;if(!cfgInit){cfgInit=true;$("preset").value=c.preset;$("model").value=c.model||"";$("base").value=c.base_url||"";$("keyenv").value=c.api_key_env||"";$("step").checked=c.step_mode;$("chunk").value=c.chunk||1;$("effort").value=c.effort||"low"}
- $("demos").innerHTML="";(s.demos||[]).forEach(d=>{const l=document.createElement("label");l.className="demo";const k=document.createElement("input");k.type="checkbox";k.checked=d.selected;
-  k.onchange=()=>api("select",{names:[...document.querySelectorAll("#demos input:checked")].map(x=>x.dataset.n)}).then(poll);k.dataset.n=d.name;
-  const t=document.createElement("span");t.textContent=d.name+"  "+d.seconds+"s  "+(d.description||"(no description)");l.append(k,t);$("demos").append(l)});
- if(!(s.demos||[]).length)$("demos").innerHTML='<span class="dim">no demos yet</span>';
- $("recStart").disabled=s.recording||s.starting||run||!!s.review||s.backend==="mcp";$("recStart").title=s.backend==="mcp"?"recording needs a leader arm on a local Station":"";$("stationBtn").hidden=s.backend==="mcp";$("recStop").disabled=!s.recording;$("recTime").textContent=s.recording?"● "+s.rec_seconds+" s":"";
- $("stray").hidden=!(s.stray&&s.stray.length);$("stray").textContent="A recorder is still running that this page is not tracking: "+(s.stray||[]).join(", ")+" (starting a new recording stops it)";$("review").hidden=!s.review;$("runLive").disabled=run||s.recording;$("runDry").disabled=run||s.recording;$("runReplay").disabled=run||s.recording;$("stop").disabled=!run;$("pause").disabled=!run;$("pause").textContent=s.paused?"Resume":"Pause";
- const aw=s.phase==="awaiting_approval"&&run;$("approve").hidden=!aw;if(aw)$("pending").textContent=JSON.stringify(s.pending);
- $("thought").textContent=run&&s.thought?"tick "+s.tick+": "+s.thought+(s.notes&&s.notes.length?" ["+s.notes.join("; ")+"]":""):(s.result&&!run?"last: "+s.result:"");
+ const c=s.cfg||{};if(!cfgInit){cfgInit=true;$("preset").value=c.preset;$("model").value=c.model||"";$("base").value=c.base_url||"";$("keyenv").value=c.api_key_env||"";$("chunk").value=c.chunk||1;$("effort").value=c.effort||"low"}
+ const box=$("demos"),sel=(s.demos||[]).map(d=>d.name+d.selected+d.seconds).join();
+ if(box.dataset.sig!==sel){box.dataset.sig=sel;box.innerHTML="";
+  (s.demos||[]).forEach(d=>{const l=document.createElement("label");l.className="demo";const k=document.createElement("input");k.type="checkbox";k.checked=d.selected;k.dataset.n=d.name;
+   k.onchange=()=>api("select",{names:[...document.querySelectorAll("#demos input:checked")].map(x=>x.dataset.n)}).then(poll).catch(()=>{});
+   const t=document.createElement("span");t.textContent=d.name+"  "+d.seconds+"s  "+(d.description||"(no description)");l.append(k,t);box.append(l)});
+  if(!(s.demos||[]).length)box.innerHTML='<span class="dim">no demos yet</span>'}
+ $("recTime").textContent=s.recording?"● "+s.rec_seconds+" s":"";
+ $("stray").hidden=!(s.stray&&s.stray.length);$("stray").textContent="A recorder is still running that this page is not tracking: "+(s.stray||[]).join(", ")+" (starting a new recording stops it)";
+ $("review").hidden=!s.review;
+ // enable/disable: nothing else while an operation runs; STOP whenever there is something to stop
+ const dis={recStart:rec||run||!!s.review||s.backend==="mcp",recStop:!s.recording,keep:!s.review,rerec:!s.review,keepMore:!s.review,discard:!s.review,
+  runLive:run||rec,runDry:run||rec,runReplay:run||rec,pause:!run,stationBtn:s.backend==="mcp"};
+ ACTIONS.forEach(id=>{const b=$(id);const loading=busy&&pending===id;b.classList.toggle("loading",loading);b.disabled=busy||!!dis[id]});
+ if(!busy)pending=null;
+ $("stop").disabled=!(run||rec||busy);if(!(run||busy))$("stop").classList.remove("loading");
+ $("pause").textContent=s.paused?"Resume":"Pause";$("stationBtn").hidden=s.backend==="mcp";
+ $("recStart").title=s.backend==="mcp"?"recording needs a leader arm on a local Station":"";
+ $("thought").textContent=run&&s.thought?"tick "+s.tick+": "+s.thought:(s.result&&!run?"last: "+s.result:"");
  $("log").textContent=(s.log||[]).join("\n");
- }
+}
+let pollTimer;
+async function poll(){clearTimeout(pollTimer);
+ try{render(await (await fetch("/api/status")).json())}catch(e){}
+ const active=last.busy||last.running||last.recording||last.starting;
+ pollTimer=setTimeout(poll,active?400:1500)}
 function camLoop(k){const im=$(k);im.onload=()=>{im.hidden=false;setTimeout(()=>camLoop(k),300)};im.onerror=()=>{im.hidden=true;setTimeout(()=>camLoop(k),1500)};im.src="/frame/"+k+".jpg?"+Date.now()}
-camLoop("over");camLoop("grip");
-poll();setInterval(poll,1500);
+camLoop("over");camLoop("grip");poll();
 </script>

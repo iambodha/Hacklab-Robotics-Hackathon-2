@@ -3,12 +3,12 @@ usage: python3 scripts/record_demo.py [seconds=120] [name=demo]   -> demos/<name
 Stop early with Ctrl-C or by creating demos/<name>/STOP."""
 import asyncio, json, sys, time
 from pathlib import Path
-import arm, vision
+import arm, vision, station_thin
 from target.gen_python.protobuf.drivers.usbvideo import usbvideo
 OVERVIEW = "usbvideo/5cd55831e21692d4f05fcaec75c351a5"
 
 async def frames(client, queue, out, tag, t0, stop):
-    q = asyncio.Queue(maxsize=4); client.follow(queue, q); last = 0
+    q = asyncio.Queue(maxsize=4); station_thin.follow_thin(client, queue, q, step=15); last = 0
     while not stop.is_set():
         try: e = await asyncio.wait_for(q.get(), 2)
         except asyncio.TimeoutError: continue

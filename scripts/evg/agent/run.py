@@ -209,7 +209,7 @@ async def main(a):
     finally:
         if not (a.dry_run or a.replay):
             try: await asyncio.wait_for(rb.hold(), 8); log("arm holding position")
-            except Exception as e: log(f"WARNING could not hold arm: {e}")
+            except Exception as e: log(f"WARNING could not hold arm ({type(e).__name__}: {e}); the servos keep their last goal")
         if hasattr(prov, "close"): prov.close()
         status(phase="stopped")
         C.PID.unlink(missing_ok=True)

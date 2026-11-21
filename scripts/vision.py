@@ -8,6 +8,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent / "norma-core"
 sys.path.insert(0, str(ROOT / "software/station/shared")); sys.path.insert(0, str(ROOT))
 from target.gen_python.protobuf.drivers.usbvideo import usbvideo
+import station_thin
 
 GRIPPER_CAM = "usbvideo/e091eeda8dcda172482f039057691cdb"
 FRAMES = HERE.parent / "frames"
@@ -44,7 +45,7 @@ def blobs(w, h, lum, thresh=75, ymax=None):
     return sorted(out, key=lambda b: -b["area"])
 
 async def grab(client, save=True):
-    q = asyncio.Queue(); client.follow(GRIPPER_CAM, q)
+    q = asyncio.Queue(); station_thin.follow_thin(client, GRIPPER_CAM, q, step=6)
     for _ in range(300):
         e = await asyncio.wait_for(q.get(), 5)
         pack = usbvideo.RxEnvelopeReader(memoryview(bytes(e.Data))).get_frames()

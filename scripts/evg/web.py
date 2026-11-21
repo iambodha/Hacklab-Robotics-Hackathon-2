@@ -43,11 +43,12 @@ class LiveCams:
 
     async def _run_station(self):
         from station_py import new_station_client
+        import station_thin
         from target.gen_python.protobuf.drivers.usbvideo import usbvideo
         client = await asyncio.wait_for(new_station_client(C.station_host(), logging.getLogger("evg-web")), 10)
 
         async def pump(name, queue_id):
-            q = asyncio.Queue(); client.follow(queue_id, q)
+            q = asyncio.Queue(); station_thin.follow_thin(client, queue_id, q, step=6)       # ~5 fps is plenty for a live view
             while True:
                 e = await q.get()
                 try:
@@ -111,19 +112,26 @@ def serve(session, port):
             except ValueError: return self._send(400, {"error": "bad json"})
             a, s = self.path.removeprefix("/api/"), session
             try:
+                # quick actions answer directly; slow ones run in the background (the page shows s.busy with a spinner)
                 if a == "task": r = {"task": s.set_task(d.get("text", ""))}
                 elif a == "select": s.select_demos(d.get("names", [])); r = {}
-                elif a == "cfg": s.set_cfg(**{k: d.get(k) for k in ("preset", "model", "base_url", "api_key_env", "step_mode", "max_ticks", "chunk", "effort")}); r = {}
-                elif a == "station_start": r = {"up": s.start_station()}
-                elif a == "snapshot": r = {"out": s._script("camera.py", timeout=40)[-300:]}
-                elif a == "rec_start": r = dict(zip(("name", "teleop"), s.rec_start()))
-                elif a == "rec_stop": r = dict(zip(("name", "samples"), s.rec_stop()))
-                elif a == "rec_keep": r = dict(zip(("name", "samples", "kept"), s.rec_keep(d.get("description", ""))))
-                elif a == "rec_discard": s.rec_discard(); r = {}
-                elif a == "run": r = {"pid": s.run_start(dry_run=d.get("mode") == "dry", replay=(s.cfg["demos"] or [None])[0] if d.get("mode") == "replay" else None)}
-                elif a == "stop": r = dict(zip(("how", "hold"), s.run_stop()))
+                elif a == "cfg": s.set_cfg(**{k: d.get(k) for k in ("preset", "model", "base_url", "api_key_env", "max_ticks", "chunk", "effort")}); r = {}
+                elif a == "stop": s.stop_now(); r = {}
                 elif a == "pause": s.pause(bool(d.get("on", True))); r = {}
-                elif a == "approve": s.approve(bool(d.get("yes", True))); r = {}
+                elif a == "rec_discard": s.rec_discard(); r = {}
+                elif a == "station_start": s.bg("Starting Station…", s.start_station); r = {}
+                elif a == "snapshot": s.bg("Taking a camera snapshot…", s._script, "camera.py", timeout=40); r = {}
+                elif a == "rec_start": s.bg("Starting recording (teleop takes a few seconds)…", s.rec_start); r = {}
+                elif a == "rec_stop": s.bg("Stopping recording…", s.rec_stop); r = {}
+                elif a == "rec_keep": s.bg("Saving demo…", s.rec_keep, d.get("description", "")); r = {}
+                elif a == "rec_again":                       # discard this take and record again
+                    s.bg("Re-recording…", lambda: (s.rec_discard(), s.rec_start())); r = {}
+                elif a == "rec_more":                        # keep this take and record another
+                    desc = d.get("description", ""); s.bg("Saving and starting the next take…", lambda: (s.rec_keep(desc), s.rec_start())); r = {}
+                elif a == "run":
+                    mode = d.get("mode")
+                    label = {"dry": "Starting dry run…", "replay": "Starting replay test…"}.get(mode, "Starting run…")
+                    s.bg(label, s.run_start, dry_run=mode == "dry", replay=(s.cfg["demos"] or [None])[0] if mode == "replay" else None); r = {}
                 else: return self._send(404, {"error": "unknown action"})
                 self._send(200, r)
             except (RuntimeError, ValueError, FileNotFoundError, subprocess.TimeoutExpired) as e:

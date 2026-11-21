@@ -9,10 +9,12 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(SCRIPTS.parent / "norma-core" / "software/station/shared")); sys.path.insert(0, str(SCRIPTS.parent / "norma-core"))
+import station_thin  # noqa: E402  (scripts/ is on sys.path now)
 
 OVERVIEW_CAM = "usbvideo/5cd55831e21692d4f05fcaec75c351a5"
 GRIPPER_CAM = "usbvideo/e091eeda8dcda172482f039057691cdb"
 FRAME_MAX_AGE = 3.0
+CAM_STEP = 10          # take every 10th camera frame (~3 fps): see station_thin.py
 
 
 class RobotError(Exception):
@@ -31,7 +33,7 @@ class Robot:
         self._usbvideo, self.mod = usbvideo, arm
         self.arm = await arm.Arm().connect()
         for name, q in (("over", OVERVIEW_CAM), ("grip", GRIPPER_CAM)):
-            queue = asyncio.Queue(); self.arm.client.follow(q, queue)
+            queue = asyncio.Queue(); station_thin.follow_thin(self.arm.client, q, queue, step=CAM_STEP)
             asyncio.create_task(self._pump(name, queue))
         return self
 

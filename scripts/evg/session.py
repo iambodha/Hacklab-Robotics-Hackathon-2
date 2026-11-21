@@ -12,11 +12,33 @@ class Session:
     def __init__(self):
         C.ensure_run(); C.apply_robot_env()
         self._lock = threading.RLock()
+        self.busy = None           # label of the background operation in progress (UI shows it with a spinner)
+        self.error = None          # last background error, shown until the next action
+        self.cancel = False        # STOP pressed while a run was still starting
+        self._up = (0.0, False)    # cached robot reachability (checked at most every 5 s)
         self.starting = False      # a recording is being started (teleop takes a few seconds); blocks a second start
         self.rec = None            # dict(name, proc, t0) while recording
         self.review = None         # name of a finished take waiting for keep/discard
-        self.cfg = {"preset": "claude-haiku", "step_mode": True, "max_ticks": 80, "chunk": 1, "effort": "low", "demos": [], "base_url": "", "model": "", "api_key_env": ""}
+        self.cfg = {"preset": "claude-haiku", "max_ticks": 80, "chunk": 1, "effort": "low", "demos": [], "base_url": "", "model": "", "api_key_env": ""}
         self.cfg.update(C.read_json(C.CONFIG, {}))
+        self.cfg.pop("step_mode", None)                       # approval mode removed: every action runs
+        self.cfg["demos"] = list(dict.fromkeys(self.cfg.get("demos", [])))
+
+    # ---- background operations (the web UI must never block on a slow step)
+    def bg(self, label, fn, *args, **kw):
+        """Run fn in a thread; the UI sees `busy` until it ends and `error` if it fails. One at a time (STOP is separate)."""
+        with self._lock:
+            if self.busy: raise RuntimeError(f"still busy: {self.busy}")
+            self.busy, self.error = label, None
+        def work():
+            try: fn(*args, **kw)
+            except Exception as e: self.error = f"{label.rstrip('…')} failed: {e}"
+            finally: self.busy = None
+        threading.Thread(target=work, daemon=True).start()
+
+    def step(self, label):
+        """Update the progress text of the running background operation."""
+        if self.busy: self.busy = label
 
     # ---- config / task
     def save(self): C.write_json(C.CONFIG, self.cfg)
@@ -52,9 +74,13 @@ class Session:
     @staticmethod
     def backend(): return mcp_client.backend()
 
-    def robot_up(self):
-        """Is the arm reachable? MCP backend: the server's /health; Station backend: the local TCP API."""
-        return mcp_client.health() if self.backend() == "mcp" else self.station_up()
+    def robot_up(self, max_age=5.0):
+        """Is the arm reachable? MCP backend: the server's /health; Station backend: its TCP API. Cached so polling adds no load."""
+        t, up = self._up
+        if time.time() - t > max_age:
+            up = mcp_client.health() if self.backend() == "mcp" else self.station_up()
+            self._up = (time.time(), up)
+        return up
 
     def start_station(self):
         if self.backend() == "mcp": raise RuntimeError("backend is MCP: there is no local Station to start (set EVG_BACKEND=station to use one)")
@@ -82,7 +108,7 @@ class Session:
         return out
 
     def select_demos(self, names):
-        self.set_cfg(demos=[n for n in names if (C.DEMOS / n / "states.jsonl").exists()])
+        self.set_cfg(demos=list(dict.fromkeys(n for n in names if (C.DEMOS / n / "states.jsonl").exists())))
 
     @staticmethod
     def record_procs():
@@ -152,7 +178,7 @@ class Session:
         if not name: raise RuntimeError("nothing to keep")
         n, k, _ = demo_filter.run(name)
         C.write_json(C.DEMOS / name / "meta.json", dict(description=description.strip(), created=time.time(), samples=n, kept=k))
-        self.cfg["demos"] = [*self.cfg["demos"], name]; self.save(); self.review = None
+        self.cfg["demos"] = list(dict.fromkeys([*self.cfg["demos"], name])); self.save(); self.review = None
         return name, n, k
 
     def rec_discard(self):
@@ -175,25 +201,42 @@ class Session:
 
     def run_start(self, dry_run=False, replay=None):
         if self.running(): raise RuntimeError("agent already running")
+        if self.rec or self.starting: raise RuntimeError("a recording is in progress; stop it first")
         task = self.task()
         if not task: raise RuntimeError("no task set")
-        if self.rec or self.starting: raise RuntimeError("a recording is in progress; stop it first")
         if not self.cfg["demos"] and not (replay or dry_run): raise RuntimeError("no demo selected (a live run needs one: it sets the floor and joint limits)")
-        if not replay and not self.robot_up(): raise RuntimeError("the arm is not reachable" + (" (MCP server /health failed)" if self.backend() == "mcp" else " (Station not running)"))
+        self.cancel = False
+        self.step("Starting: checking the arm is reachable…")
+        if not replay and not self.robot_up(max_age=0): raise RuntimeError("the arm is not reachable" + (" (MCP server /health failed)" if self.backend() == "mcp" else f" (Station at {C.station_host()}:8888)"))
         if not (dry_run or replay) and self.backend() != "mcp":
-            self._script("teleop.py", "stop")          # mirroring would fight the agent
-            self._script("arm.py", "hold", timeout=40)
+            self.step("Starting: switching teleop off…"); self._script("teleop.py", "stop")          # mirroring would fight the agent
+            if self.cancel: raise RuntimeError("cancelled by STOP")
+            self.step("Starting: holding the arm…"); self._script("arm.py", "hold", timeout=40)
+        if self.cancel: raise RuntimeError("cancelled by STOP")
         for f in (C.STOP, C.PAUSE, C.APPROVE, C.REJECT, C.STATUS): f.unlink(missing_ok=True)
         c = self.cfg
-        args = [PY, str(C.EVG / "agent" / "run.py"), "--task", task, "--demo", ",".join(c["demos"]),
+        args = [PY, str(C.EVG / "agent" / "run.py"), "--task", task, "--demo", ",".join(dict.fromkeys(c["demos"])),
                 "--provider-preset", c["preset"], "--max-ticks", str(c["max_ticks"]), "--chunk", str(c.get("chunk", 1)), "--effort", c.get("effort", "low")]
         for flag, key in (("--model", "model"), ("--base-url", "base_url"), ("--api-key-env", "api_key_env")):
             if c.get(key): args += [flag, c[key]]
         if dry_run: args.append("--dry-run")
         if replay: args += ["--replay", replay]
-        if c["step_mode"]: args.append("--step-mode")
+        self.step("Starting: launching the agent…")
         p = subprocess.Popen(args, cwd=C.ROOT, stdout=open(C.LOG, "ab"), stderr=subprocess.STDOUT, start_new_session=True)
         C.PID.write_text(str(p.pid)); return p.pid
+
+    def stop_now(self):
+        """STOP button: immediate and never queued behind another operation. Cancels a run that is still starting,
+        signals a running agent, then (in the background) waits for it and holds the arm."""
+        self.cancel = True
+        C.ensure_run(); C.STOP.touch()
+        if self.rec:
+            threading.Thread(target=lambda: self._safe(self.rec_stop), daemon=True).start()
+        threading.Thread(target=lambda: self._safe(self.run_stop), daemon=True).start()
+
+    def _safe(self, fn):
+        try: fn()
+        except Exception as e: self.error = f"stop: {e}"
 
     def run_stop(self):
         """STOP file -> wait -> SIGTERM -> SIGKILL; the agent holds the arm in its own finally; hold again here as a backstop."""
@@ -231,7 +274,7 @@ class Session:
         age = time.time() - st["ts"] if st.get("ts") else None
         return dict(st, running=self.running(), paused=C.PAUSE.exists(), age=age,
                     recording=bool(self.rec), starting=self.starting, stray=[n for p, n in self.record_procs() if not self.rec or p != self.rec['proc'].pid], rec_name=self.rec["name"] if self.rec else None, rec_seconds=round(self.rec_elapsed()),
-                    review=self.review, station=self.robot_up(), backend=self.backend(), task=self.task(), cfg=self.cfg)
+                    review=self.review, station=self.robot_up(), backend=self.backend(), busy=self.busy, error=self.error, task=self.task(), cfg=self.cfg)
 
     def log_tail(self, n=25):
         try: return C.LOG.read_text(errors="replace").splitlines()[-n:]

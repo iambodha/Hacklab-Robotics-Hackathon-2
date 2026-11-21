@@ -5,7 +5,7 @@
   python3 scripts/evg/evg.py --web      same flow in the browser (http://127.0.0.1:8891, token in the printed URL)
 
 Keys while recording: SPACE start/stop, then ENTER keep, SPACE re-record, A keep + record another, D discard.
-Keys while running:   SPACE or X stop, P pause/resume, Y / N approve / reject the proposed action (step mode), Q stop and quit.
+Keys while running:   SPACE or X stop, P pause/resume, Q stop and quit.
 """
 import argparse, os, select, sys, termios, time, tty
 from pathlib import Path
@@ -128,9 +128,8 @@ def step_model(s):
         if env and not os.environ.get(env): print(f"{YEL}warning: {env} is not set in this shell{RST}")
     elif cfg["provider"] == "anthropic" and not os.environ.get("ANTHROPIC_API_KEY"):
         print(f"{YEL}warning: ANTHROPIC_API_KEY is not set in this shell{RST}")
-    sm = ask("Approve every action before the arm moves? (recommended for first runs) y/n", "y" if s.cfg["step_mode"] else "n").lower() == "y"
     ch = ask("Actions per model call (1 = look after every action; 2-4 = plan ahead, cheaper and faster, less closed-loop)", str(s.cfg.get("chunk", 1)))
-    s.set_cfg(preset=preset, model=model, base_url=base, api_key_env=env, step_mode=sm, chunk=max(1, min(int(ch), 5)) if ch.isdigit() else 1)
+    s.set_cfg(preset=preset, model=model, base_url=base, api_key_env=env, chunk=max(1, min(int(ch), 5)) if ch.isdigit() else 1)
 
 
 def tail_log(pos):
@@ -148,23 +147,18 @@ def run_live(s, dry=False, replay=None):
     except RuntimeError as e:
         print(f"{RED}{e}{RST}"); return False
     print(f"{GRN}started{RST} pid {pid} ({'dry-run' if dry else 'replay' if replay else 'LIVE'}).  "
-          f"{B}SPACE/X{RST} stop · {B}P{RST} pause/resume · {B}Y/N{RST} approve/reject · {B}Q{RST} stop+quit")
-    quit_after, announced = False, None
+          f"{B}SPACE/X{RST} stop · {B}P{RST} pause/resume · {B}Q{RST} stop+quit")
+    quit_after = False
     with keys:
         while s.running():
             pos, txt = tail_log(pos)
             if txt: print(txt, end="", flush=True)
-            st = s.status()
-            if st.get("phase") == "awaiting_approval" and st.get("pending") != announced:
-                announced = st["pending"]; print(f"{YEL}? APPROVE{RST} {announced}   [Y]es / [N]o")
             k = keys.get(0.3)
             if k is None: continue
             k = k.lower()
             if k in (" ", "x", "q"):
                 how, hold = s.run_stop(); print(f"{RED}STOPPED{RST} ({how}) {hold or ''}"); quit_after = k == "q"; break
             if k == "p": s.pause(not C.PAUSE.exists()); print("paused" if C.PAUSE.exists() else "resumed")
-            if k == "y": s.approve(True)
-            if k == "n": s.approve(False)
     pos, txt = tail_log(pos); print(txt, end="")
     print(f"{DIM}run ended: {s.status().get('phase')} {s.status().get('result') or ''}{RST}")
     if quit_after: raise SystemExit(0)
@@ -179,7 +173,7 @@ def console():
             print("starting..."); print("up" if s.start_station() else f"{RED}failed, see evg-run/station.log{RST}")
     step_task(s); step_demo(s); step_model(s)
     while True:
-        print(f"\n{B}Ready{RST}: model {s.cfg['preset']}, demos {len(s.cfg['demos'])}, approve-each-action {'on' if s.cfg['step_mode'] else 'OFF'}")
+        print(f"\n{B}Ready{RST}: model {s.cfg['preset']}, demos {len(s.cfg['demos'])}")
         print(f" {B}ENTER{RST} start LIVE · {B}D{RST} dry-run (cameras only, never moves) · {B}R{RST} replay test (recorded demo as fake robot) · {B}T{RST} task · {B}M{RST} demos · {B}O{RST} model · {B}Q{RST} quit")
         k = key("> ", {"\n", "\r", "d", "r", "t", "m", "o", "q"})
         if k == "q": return
