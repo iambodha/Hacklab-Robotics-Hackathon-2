@@ -81,7 +81,8 @@ LOG_DIR = Path(os.environ.get("ROBOT_REAL_LOG_DIR", HERE / "real_sessions"))
 W, H = P.cameras.width, P.cameras.height
 FRAME = P.frame_text
 PARK, CARRY_Z = list(P.poses.park), env("ROBOT_CARRY_Z", P.poses.carry_z)
-WS, MO, GR, PK, DR, ST, IKP, TS, GB = P.workspace, P.motion, P.gripper, P.pick, P.drop, P.stir, P.ik, P.touch, P.grab
+WS, MO, GR, PK, DR, ST, IKP, TS, GB, WP = (P.workspace, P.motion, P.gripper, P.pick, P.drop, P.stir, P.ik, P.touch, P.grab,
+                                              P.wipe)
 
 IK = robot_profile.Kin(P)                            # forward kinematics, wrist-camera pose, position-only IK
 MODEL = IK.model
@@ -526,11 +527,13 @@ def _touch(st, force: float | None = None, probed: bool | None = None) -> str:
     """One line of 'touch sense' from the gripper motor: opening, estimated object width, load, verdict."""
     g = st[GRIP_ID]
     is_open = g["norm"] >= GR.open_enough            # fully open jaws rest on their end stop: that load is not a grip
-    holding = (not is_open) and g["norm"] > CLOSED_NORM and (g["load"] >= GR.holding_load if probed is None else probed)
+    holding = (not is_open) and ((g["norm"] > CLOSED_NORM and g["load"] >= GR.holding_load) if probed is None else probed)
+    thin = holding and g["norm"] <= CLOSED_NORM
     f = f", force setting {force:.2f}" if force is not None else ""
     return (f"touch: jaws at {g['norm']:.3f} (gap about {_jaw_width(g['norm']) * 1000:.0f} mm), motor load {g['load']}/1000{f}, "
-            f"{g['temp']} C -> " + ("HOLDING something about that wide" if holding else
-                                    "closed on nothing" if g["norm"] <= CLOSED_NORM else "open" if is_open else
+            f"{g['temp']} C -> " + ("HOLDING something thin (a sheet: napkin, paper, foil)" if thin else
+                                    "HOLDING something about that wide" if holding else
+                                    "closed on nothing" if g["norm"] < THIN_MIN or (g["norm"] <= CLOSED_NORM and probed is not True) else "open" if is_open else
                                     "NOTHING between the jaws (they closed further when tested: the object slipped out)" if probed is False
                                     else "partly closed, not gripping"))
 
@@ -541,14 +544,14 @@ async def _probe_hold() -> tuple[bool, dict]:
     alone cannot tell.) Returns (holding, state); the grip is restored to its limited squeeze afterwards."""
     st = await am._read()
     g = st[GRIP_ID]
-    if g["norm"] >= GR.open_enough or g["norm"] <= CLOSED_NORM:
+    if g["norm"] >= GR.open_enough or g["norm"] < THIN_MIN:  # open, or closed as far as empty jaws go
         return False, st
     raw0 = g["raw"]
     await am._write(GOAL_REG, {**_holds(st), GRIP_ID: raw0 - GR.probe_ticks}, 2)
     await asyncio.sleep(GR.probe_wait_s)
     st = await am._read()
     moved = raw0 - st[GRIP_ID]["raw"]
-    holding = moved < GR.probe_moved_fraction * GR.probe_ticks and st[GRIP_ID]["norm"] > CLOSED_NORM
+    holding = moved < GR.probe_moved_fraction * GR.probe_ticks and st[GRIP_ID]["norm"] >= THIN_MIN
     if holding:                                            # back to the gentle hold
         await am._write(GOAL_REG, {**_holds(st), GRIP_ID: st[GRIP_ID]["raw"] - GR.squeeze_min_ticks}, 2)
     return holding, st
@@ -601,6 +604,10 @@ async def gripper(open_fraction: float, force: float | None = None) -> str:
                f"Jaws touched something but it slipped out: nothing is held (jaws now at {st[G]['norm']:.3f}).")
         return out + "\n" + _touch(st, force, held) + "\n" + am._table(st)
     elif closing and st[G]["norm"] <= CLOSED_NORM:
+        held, st = await _probe_hold()                                               # a thin sheet keeps the jaws a hair apart
+        if held:
+            return (f"Jaws closed on something thin at {st[G]['norm']:.3f} (empty jaws close to about {GR.empty_closed_norm}).\n"
+                    + _touch(st, force, True) + "\n" + am._table(st))
         await am._write(GOAL_REG, {**_holds(st), G: st[G]["raw"]}, 2)                # closed on nothing: stop pushing the jaws together
         out = f"gripper closed fully at {st[G]['norm']:.3f}: nothing between the jaws."
     else:
@@ -622,7 +629,7 @@ async def grip_state() -> str:
     limit = next((int.from_bytes(bytes(m.get_state())[GR.torque_limit_register:GR.torque_limit_register + 2], "little")
                   for m in motors or [] if int(m.get_id()) == GRIP_ID), None)
     g = st[GRIP_ID]
-    probed = held if (CLOSED_NORM < g["norm"] < GR.open_enough) else None
+    probed = held if (THIN_MIN <= g["norm"] < GR.open_enough) else None
     return _touch(st, None, probed) + f"\ntorque limit {limit}/{GR.torque_full}."
 
 
@@ -931,7 +938,8 @@ def _stopped(text: str) -> bool:
     return text.startswith(("ABORTED", "UNREACHABLE"))
 
 
-CLOSED_NORM = env("ROBOT_GRIPPER_CLOSED", GR.closed_norm)   # jaws above this after closing = holding something
+CLOSED_NORM = env("ROBOT_GRIPPER_CLOSED", GR.closed_norm)   # jaws above this after closing = clearly holding something
+THIN_MIN = GR.empty_closed_norm + GR.thin_margin            # between this and CLOSED_NORM: maybe something thin (a sheet)
 FLAT_Z = env("ROBOT_FLAT_PICK_Z", PK.flat_z)               # TCP height for flat objects (fingertips at the table)
 
 
@@ -970,11 +978,11 @@ async def pick_at(x: float, y: float, object_height: float = PK.default_height, 
     log.append("close: " + _first(closed))
     log.append(next((l for l in closed.splitlines() if l.startswith("touch:")), ""))
     held0, st = await _probe_hold()
-    if st[GRIP_ID]["norm"] <= CLOSED_NORM or not held0:      # nothing held: do not carry air; back off to a close viewpoint
+    if not held0:      # nothing held: do not carry air; back off to a close viewpoint
         await gripper(open_fraction=1.0)
         out = await move_tcp(x=x, y=y, z=PK.backoff_z, top_down=True, yaw_deg=yaw_deg)
         log.append("back off: " + _first(out))
-        why = (f"the jaws closed fully to {st[GRIP_ID]['norm']:.3f}" if st[GRIP_ID]["norm"] <= CLOSED_NORM else
+        why = (f"the jaws closed fully to {st[GRIP_ID]['norm']:.3f}" if st[GRIP_ID]["norm"] < THIN_MIN else
                "the jaws touched the object but it slipped out when squeezed: try a lower grip_force, or grip a different part of it")
         return [f"NOT holding ({why}). The jaws are open again and the gripper is {PK.backoff_z * 100:.0f} cm above "
                 f"the pick point: find the object in the wrist image below, re-localize and retry.\n" + "\n".join(log)] + await _views()
@@ -1227,6 +1235,82 @@ async def stir(x: float, y: float, z: float, radius: float = ST.default_radius, 
     else:
         log.append(f"lifted out: tip at {np.round(_tip_of((await measured())[0], L), 3).tolist()}")
     return ["STIR: " + "; ".join(log)] + await _views()
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+@doc
+async def wipe(x: float, y: float, to_x: float, to_y: float, strokes: int = WP.default_strokes) -> list:
+    """Wipe the table: with a napkin or cloth HELD in the jaws (pick it first), go down at (x, y) until the
+    fingertips feel the table, sweep in a straight line to (to_x, to_y) and back, `strokes` times, pressing lightly,
+    then lift. The line must be free of other objects (they would be swept along) and at most <<WIPE_MAX_CM>> cm long. The
+    jaws stay closed on the napkin; afterwards drop it where it belongs with drop_at. Without anything held it wipes
+    with the bare fingertips. Returns what it did, whether the napkin is still held, and fresh images."""
+    a, b = np.array([x, y], float), np.array([to_x, to_y], float)
+    length = float(np.linalg.norm(b - a))
+    if not WP.min_length <= length <= WP.max_length:
+        return [f"WIPE not started: the line is {length * 100:.0f} cm long; it must be between {WP.min_length * 100:.0f} and "
+                f"{WP.max_length * 100:.0f} cm. Nothing moved."]
+    for pt in (a, b):
+        if float(np.hypot(*pt)) > WS.max_radius:
+            return [f"WIPE not started: {np.round(pt, 3).tolist()} is beyond the arm's reach. Nothing moved."]
+    strokes = int(min(max(strokes, 1), WP.max_strokes))
+    held0, _ = await _probe_hold()
+    log = [("holding something (the napkin)" if held0 else "nothing is held: wiping with the bare fingertips")]
+    out = await move_tcp(x=float(a[0]), y=float(a[1]), z=WP.start_height, top_down=True)
+    if _stopped(out):
+        return ["WIPE not started. " + _first(out)] + await _views()
+    q, _ = await measured()
+    yaw = _yaw_now(q)
+    text, hit = await _descend_guarded(float(a[0]), float(a[1]), TS.nominal_table_tcp_z - TS.max_below, yaw)
+    log.append("down: " + text)
+    if hit is None:
+        log.append("the table was not felt: wiping at the lowest height reached")
+    qn, st = await measured()
+    z = float(IK.fk(qn)[0][2]) - TS.backoff if hit is not None else float(IK.fk(qn)[0][2])   # back on the surface, light pressure
+    n = max(2, int(length / WP.waypoint_every) + 1)
+
+    def plan():
+        pts, seed = [], qn
+        for k in range(n + 1):
+            p = a + (b - a) * k / n
+            sol, _ = _solve_tcp(np.array([p[0], p[1], z]), seed, yaw)
+            if sol is None:
+                return None
+            pts.append(sol); seed = sol
+        return pts
+    line = await asyncio.to_thread(plan)
+    if line is None:
+        up = await move_tcp(x=float(a[0]), y=float(a[1]), z=WP.lift_after, top_down=True)
+        return ["WIPE not done: part of the line cannot be reached at table height. " + _first(up) + "\n" + "\n".join(log)] + await _views()
+    done, hard, stopped = 0, 0, ""
+    for sidx in range(strokes):
+        path = line[1:] if sidx % 2 == 0 else line[-2::-1]              # there, back, there ...
+        for sol in path:
+            res = await _go(sol, settle=False, dt=WP.dt)
+            if res.startswith("ABORTED"):
+                stopped = res
+                break
+            now = await am._read()
+            loads = sorted((now[m]["load"] for m in ARM_IDS), reverse=True)
+            hard = hard + 1 if loads[0] + loads[1] >= WP.hard_load_sum else 0
+            if hard >= WP.hard_reads:                                   # pushing hard into something
+                await _stop_here(now, ARM_IDS)
+                stopped = f"hard resistance (motor loads {loads[0]}+{loads[1]}): something is in the way or the table is higher there"
+                break
+        if stopped:
+            break
+        done += 1
+    qe, _ = await measured()
+    end = IK.fk(qe)[0]
+    up = await move_tcp(x=float(end[0]), y=float(end[1]), z=WP.lift_after, top_down=True)
+    held1, st = await _probe_hold()
+    log.append(f"wiped {done} of {strokes} strokes of {length * 100:.0f} cm at gripper height {z:.3f}" + (f"; STOPPED: {stopped}" if stopped else ""))
+    log.append("lift: " + _first(up))
+    log.append("after wiping, " + _touch(st, None, held1))
+    if held0 and not held1:
+        log.append("the napkin is no longer in the jaws: it stayed on the table")
+    return [("WIPED. " if done == strokes else "WIPE stopped early. ") + "\n".join(log)] + await _views()
 
 
 if __name__ == "__main__":

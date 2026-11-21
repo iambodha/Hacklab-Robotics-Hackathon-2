@@ -43,7 +43,7 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
 - `release_here()`: open the jaws where the gripper is and retreat. It reports the release position.
 - `drop_at(x, y, z, yaw_deg)`: carry, release and retreat in one call, for a box position you ALREADY verified in
   this run. Without yaw_deg the gripper keeps the rotation it picked with.
-- `stir(...)` and `grab_upright(x, y, z)`: see Stirring below.
+- `stir(...)` and `grab_upright(x, y, z)`: see Stirring below. `wipe(x, y, to_x, to_y, strokes)`: see Wiping below.
 - `gripper(open_fraction)`, `tcp_pose()`, `joint_state()`, `move_to({...})`, `set_torque()`: rarely needed.
 
 ## Procedure
@@ -90,10 +90,22 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
 - The reply tells you how far the tool leaned. It only stops on HARD resistance: a light cup being nudged cannot be
   felt by the motors. So `look()` at the cup before and after and compare: if it moved or turned, say so.
 
+## Wiping / cleaning the table
+- `wipe(x, y, to_x, to_y, strokes)` sweeps the fingertips back and forth along a straight line on the table with
+  light pressure. It feels for the table itself, so you give only the two ends of the line (at most 25 cm).
+- Take a napkin first: `pick_at` on a sheet (object_height 0.005, grip_force 0.50). From a pack or a pile, aim at
+  the loose top sheet, near its edge or a raised fold, so that one sheet comes away. Check the touch line: a held
+  napkin shows a gap of a few mm. If the whole pack lifts, put it down and grip nearer the sheet's edge.
+- Find the dirty area (a spill, crumbs, a stain) in the images, get both ends of a line across it with
+  `pixel_to_table` (height 0), and `wipe`. For a wide area use several parallel lines 3-4 cm apart.
+- Keep the line clear of other objects: anything on it is swept along. Wiping is the ONE case where dragging
+  something (the napkin) over the table is intended.
+- Afterwards the used napkin is garbage: `drop_at` it into the garbage box, or put it where the task says.
+
 ## Physical limits (real hardware)
 - People sit and stand around the table and may appear in the images, also close to the arm. That is normal for
   this setup: keep working.
-- Never go below z = 0.17 while above a box. Do not push objects along the table. If z = 0.20 is unreachable above a
+- Never go below z = 0.17 while above a box. Do not push objects along the table (wiping with `wipe` is the exception). If z = 0.20 is unreachable above a
   far box, try 0.18.
 - `ABORTED ... contact` or high load near the table means you pushed into something: go up before anything else.
 - "do not grasp like this" in a result means the gripper leans too much there: do not close on an object.

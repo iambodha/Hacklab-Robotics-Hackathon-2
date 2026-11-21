@@ -140,7 +140,9 @@
     "holding_load": 30,
     "probe_ticks": 30,
     "probe_wait_s": 0.3,
-    "probe_moved_fraction": 0.6
+    "probe_moved_fraction": 0.6,
+    "empty_closed_norm": 0.013,
+    "thin_margin": 0.006
   },
   "ik": {
     "leans_small": [
@@ -239,5 +241,19 @@
       -0.024
     ],
     "force": 0.3
+  },
+  "wipe": {
+    "_about": "wipe: sweep the fingertips (holding a napkin) back and forth on the table with light pressure",
+    "default_strokes": 3,
+    "max_strokes": 8,
+    "max_length": 0.25,
+    "min_length": 0.03,
+    "waypoint_every": 0.01,
+    "dt": 0.08,
+    "start_height": 0.05,
+    "lift_after": 0.09,
+    "hard_load_sum": 520,
+    "hard_reads": 2,
+    "napkin_force": 0.5
   }
 }

@@ -52,6 +52,7 @@ def values(p: dict | None = None) -> dict:
         "HANDOVER": f"{_n(hand[0])[:-1] if _n(hand[0]) == '0.00' else _n(hand[0])}, {_n(hand[1])}, {_n(hand[2])}",
         "CLOSE_Z": _n(pk["close_view_z"]), "FLAT_BELOW": _n(pk["flat_below"]), "PICK_H": _n(pk["default_height"]),
         "MAX_GRIP_CM": round(gr["max_grip_width"] * 100), "JAW_CM": round(gr["jaw_opening"] * 100 + 0.01), "CLOSED": _n(round(gr["closed_norm"] - 0.015, 2)),
+        "WIPE_MAX_CM": round(p.get("wipe", {}).get("max_length", 0.25) * 100), "NAPKIN_FORCE": _n(p.get("wipe", {}).get("napkin_force", 0.5)),
         "GRIP_FORCE": _n(gr.get("force_default", 0.35)),
         "STIR_MAX_R": _n(st["max_radius"]), "STIR_CLEAR": _n(st["default_clearance"] - 0.01),
     }
