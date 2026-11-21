@@ -51,6 +51,20 @@
   ],
   "tcp_note": "midpoint between fingertip pads, 10 mm behind the tips; gripper points along +y",
   "jaw_travel": "each jaw moves inward by 0.0255*(1 - j8_norm) m along -/+x (j8 norm 1 = open)",
-  "intrinsics": null,
-  "intrinsics_note": "UNKNOWN - calibrate with a checkerboard (see HANDOFF.md). Store normalised fx/W, fy/H, cx/W, cy/H."
+  "intrinsics": {
+    "fx_n": 0.46627408561215083,
+    "fy_n": 0.6214887325954297,
+    "cx_n": 0.5064735511931084,
+    "cy_n": 0.5296365534439758,
+    "dist": [
+      0.058588887398209846,
+      -0.07156655204334568,
+      -0.002509185096635855,
+      -0.0039804706090478545,
+      0.017699344876849217
+    ],
+    "rms_px": 0.395,
+    "source": "perception/calib_intrinsics.py 2026-11-22T00:48:52+01:00"
+  },
+  "intrinsics_note": "ChArUco calibration; normalised by image width/height"
 }

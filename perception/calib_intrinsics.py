@@ -87,14 +87,20 @@ def detect_board(img: np.ndarray, b: cv2.aruco.CharucoBoard):
     return obj.reshape(-1, 3), imgp.reshape(-1, 2)
 
 
-def calibrate(views: list[tuple[np.ndarray, np.ndarray]], W: int, H: int, rational: bool = False):
-    """views: [(obj (N,3), img (N,2))]. Rejects views with error > 3x the median and refits once."""
-    flags = cv2.CALIB_RATIONAL_MODEL if rational else 0
+MODELS = {"full": 0, "k1k2p": cv2.CALIB_FIX_K3, "k1k2": cv2.CALIB_FIX_K3 | cv2.CALIB_ZERO_TANGENT_DIST,
+          "rational": cv2.CALIB_RATIONAL_MODEL}
+
+
+def calibrate(views: list[tuple[np.ndarray, np.ndarray]], W: int, H: int, rational: bool = False, model: str = "full"):
+    """views: [(obj (N,3), img (N,2))]. Rejects views with error > 3x the median and refits once.
+    model: "full" (k1 k2 p1 p2 k3), "k1k2p" (k3 = 0), "k1k2" (radial only), "rational"."""
+    flags = MODELS["rational" if rational else model] | cv2.CALIB_USE_INTRINSIC_GUESS
+    K0 = np.array([[0.5 * W, 0, (W - 1) / 2], [0, 0.5 * W, (H - 1) / 2], [0, 0, 1]])
 
     def run(vs):
         obj = [v[0].astype(np.float32) for v in vs]
         img = [v[1].astype(np.float32).reshape(-1, 1, 2) for v in vs]
-        rms, K, dist, rv, tv, sdi, _, per = cv2.calibrateCameraExtended(obj, img, (W, H), None, None, flags=flags)
+        rms, K, dist, rv, tv, sdi, _, per = cv2.calibrateCameraExtended(obj, img, (W, H), K0.copy(), None, flags=flags)
         return rms, K, dist.ravel(), per.ravel(), sdi.ravel()
 
     rms, K, dist, per, sdi = run(views)
@@ -102,7 +108,7 @@ def calibrate(views: list[tuple[np.ndarray, np.ndarray]], W: int, H: int, ration
     if len(keep) < len(views) and len(keep) >= 8:
         rms, K, dist, per, sdi = run(keep)
     tilts = np.array([tilt(v) for v in views])
-    return {"rms_px": float(rms), "K": K, "dist": dist, "per_view_px": per,
+    return {"rms_px": float(rms), "K": K, "dist": dist, "per_view_px": per, "model": "rational" if rational else model,
             "n_views": len(keep) if len(keep) >= 8 else len(views),
             "sigma_f_rel": float(max(sdi[0] / K[0, 0], sdi[1] / K[1, 1])), "sigma_c_px": float(max(sdi[2], sdi[3])),
             "max_tilt_deg": np.degrees(np.abs(tilts).max(0)).round(1).tolist() if len(tilts) else [0, 0]}
@@ -122,9 +128,10 @@ def tilt(view, W: int = 299, H: int = 224) -> np.ndarray:
     return np.array([np.arctan2(n[1], -n[2]), np.arctan2(n[0], -n[2])])
 
 
-def save(cam: str, res: dict, W: int, H: int, square_mm: float) -> Path:
+def save(cam: str, res: dict, W: int, H: int, square_mm: float, note: str = "") -> Path:
     K, d = res["K"], res["dist"]
     out = {"camera": cam, "created": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+           "model": res.get("model", "full"), "note": note,
            "image_size": [W, H], "K_normalized": {"fx": K[0, 0] / W, "fy": K[1, 1] / H, "cx": K[0, 2] / W, "cy": K[1, 2] / H},
            "dist": [float(v) for v in d[:5]], "dist_full": [float(v) for v in d], "rms_px": round(res["rms_px"], 4),
            "n_views": res["n_views"], "sigma_f_rel": round(res["sigma_f_rel"], 4), "max_tilt_deg": res["max_tilt_deg"],
@@ -141,7 +148,7 @@ def save(cam: str, res: dict, W: int, H: int, square_mm: float) -> Path:
                            "cy_n": out["K_normalized"]["cy"], "dist": out["dist"], "rms_px": out["rms_px"],
                            "source": f"perception/calib_intrinsics.py {out['created']}"}
         w["intrinsics_note"] = "ChArUco calibration; normalised by image width/height"
-        wj.write_text(json.dumps(w, indent=2))
+        wj.write_text(json.dumps(w, indent=2) + "\n")
     return p
 
 
@@ -199,14 +206,19 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("board")
-    for name in ("live", "dir"):
+    for name in ("live", "dir", "pooled"):
         p = sub.add_parser(name)
-        p.add_argument("camera", choices=["overview", "wrist"])
+        if name == "pooled":       # same camera model on both mounts: calibrate once from every saved view
+            p.add_argument("paths", type=Path, nargs="+")
+            p.add_argument("--cameras", nargs="+", default=["overview", "wrist"], choices=["overview", "wrist"])
+        else:
+            p.add_argument("camera", choices=["overview", "wrist"])
         if name == "dir":
             p.add_argument("path", type=Path)
         p.add_argument("--views", type=int, default=25)
         p.add_argument("--square-mm", type=float, default=SQUARE_MM, help="measured printed square size")
         p.add_argument("--rational", action="store_true", help="8-coefficient distortion model (very wide lenses)")
+        p.add_argument("--model", choices=sorted(MODELS), default="full", help="distortion model")
         p.add_argument("--force", action="store_true", help="save even if the focal length is poorly constrained")
     a = ap.parse_args()
     if a.cmd == "board":
@@ -214,12 +226,23 @@ def main():
             print("wrote", p)
         return
     b = board(a.square_mm)
-    views, W, H = asyncio.run(capture_live(a.camera, a.views, b, a.square_mm)) if a.cmd == "live" else views_from_dir(a.path, b)
+    note = ""
+    if a.cmd == "live":
+        views, W, H = asyncio.run(capture_live(a.camera, a.views, b, a.square_mm))
+    elif a.cmd == "dir":
+        views, W, H = views_from_dir(a.path, b)
+    else:
+        views, W, H = [], None, None
+        for p in a.paths:
+            v, W, H = views_from_dir(p, b)
+            views += v
+        note = f"pooled over {[str(p) for p in a.paths]} (same UVC camera model assumed on both mounts)"
     if len(views) < 8:
         raise SystemExit(f"only {len(views)} usable views; need >= 8 (aim for 20+)")
-    res = calibrate(views, W, H, a.rational)
+    res = calibrate(views, W, H, a.rational, a.model)
     K = res["K"]
-    print(f"{a.camera}: {res['n_views']} views, RMS {res['rms_px']:.3f} px (good: < 0.5 px at 299x224)")
+    cams = a.cameras if a.cmd == "pooled" else [a.camera]
+    print(f"{'+'.join(cams)}: {res['n_views']} views, model {res['model']}, RMS {res['rms_px']:.3f} px (good: < 0.5 px at 299x224)")
     print(f"  fx {K[0, 0]:.2f} fy {K[1, 1]:.2f} cx {K[0, 2]:.2f} cy {K[1, 2]:.2f}  dist {np.round(res['dist'][:5], 4).tolist()}")
     print(f"  focal 1-sigma {100 * res['sigma_f_rel']:.1f} % (need < 3 %), principal point 1-sigma {res['sigma_c_px']:.1f} px, "
           f"max board tilt ~{res['max_tilt_deg']} deg (want >= 30)")
@@ -227,7 +250,9 @@ def main():
         raise SystemExit("NOT saved: the focal length is poorly constrained. Recapture with the board clearly TILTED "
                          "(30-45 deg towards/away from the camera, left/right/up/down) and nearer the image corners; "
                          "or pass --force.")
-    print(f"  wrote {save(a.camera, res, W, H, a.square_mm)}; now rerun: python -m perception.calib_scene --live")
+    for cam in cams:
+        print(f"  wrote {save(cam, res, W, H, a.square_mm, note)}")
+    print("  now rerun: python -m perception.calib_scene --live")
 
 
 if __name__ == "__main__":
