@@ -314,7 +314,8 @@ async def _faults(now, plan, grip=False):
 
 
 async def _drive(plan: dict, step: float = STEP, dt: float = DT, track_tol: int | None = None,
-                 settle: bool = True, contact: bool = True, grip: bool = False) -> str:
+                 settle: bool = True, contact: bool = True, grip: bool = False,
+                 window: int | None = None, iters: int | None = None) -> str:
     """plan {motor_id: target norm}. Creep, then settle closed-loop. Returns 'reached ...' or 'ABORTED ...'.
     A status flag on the gripper motor alone (overload from squeezing an object) never aborts an arm move."""
     track_tol = am.TRACK_TOL if track_tol is None else track_tol
@@ -358,7 +359,8 @@ async def _drive(plan: dict, step: float = STEP, dt: float = DT, track_tol: int 
     if not settle:
         return f"reached in {n} steps."
     cmd = dict(raw_goal)
-    for it in range(MO.settle_iters):
+    window = MO.settle_window if window is None else window      # how far past the target a goal may be pushed (= force)
+    for it in range(MO.settle_iters if iters is None else iters):
         await asyncio.sleep(MO.settle_wait_s)
         now = await am._read()
         err = {m: raw_goal[m] - now[m]["raw"] for m in plan}
@@ -372,7 +374,7 @@ async def _drive(plan: dict, step: float = STEP, dt: float = DT, track_tol: int 
         for m, e in err.items():
             if abs(e) > SETTLE_TOL:
                 c = cmd[m] + round(MO.settle_gain * e)
-                c = max(raw_goal[m] - MO.settle_window, min(raw_goal[m] + MO.settle_window, c))
+                c = max(raw_goal[m] - window, min(raw_goal[m] + window, c))
                 cmd[m] = max(now[m]["lo"] + MO.range_margin, min(now[m]["hi"] - MO.range_margin, c))
         await am._write(GOAL_REG, {**_holds(now), **cmd}, 2)
     left = {NAME[m]: e for m, e in err.items() if abs(e) > SETTLE_TOL}
@@ -778,11 +780,13 @@ except (OSError, ValueError):
 def _table_tcp_z(x: float, y: float):
     """Measured gripper (TCP) height at which the fingertips touch the table near (x, y), or None if never felt there."""
     near = [(float(np.hypot(t[0] - x, t[1] - y)), t[2]) for t in TABLE_TOUCHES]
-    near = [n for n in near if n[0] <= TS.reuse_radius]
+    near = [n for n in near if n[0] <= TS.reuse_radius and abs(n[1] - TS.nominal_table_tcp_z) <= TS.plausible]
     return min(near)[1] if near else None
 
 
 def _remember_touch(x: float, y: float, z: float) -> None:
+    if abs(z - TS.nominal_table_tcp_z) > TS.plausible:      # that was an object or a false stop, not the table
+        return
     TABLE_TOUCHES.append([round(x, 4), round(y, 4), round(z, 4)])
     del TABLE_TOUCHES[:-TS.keep]
     try:
@@ -792,36 +796,48 @@ def _remember_touch(x: float, y: float, z: float) -> None:
 
 
 async def _descend_guarded(x: float, y: float, z_to: float, yaw: float):
-    """Go straight down to z_to in small steps, feeling for contact. Returns (text, contact_z or None).
-    Contact = the measured gripper height stops following the commanded one (blocked servos stop short), or the
-    load of an arm motor changes by more than TS.load_delta. On contact the arm stops pushing and backs off a hair."""
+    """Go straight down to z_to, feeling for contact near the table. Returns (text, contact_z or None).
+    Above the table zone it moves normally. In the zone it goes in small steps, each settled with LIMITED effort.
+    Contact (measured on hardware): a joint stays short of its target while the two most loaded arm motors together
+    carry more than TS.load_sum, on TS.reads steps in a row. Motor load alone is no sign: it swings by 100-200 with
+    the arm's own motion. On contact the arm stops pushing and backs off a little."""
     q, st = await measured()
     cur, seed = IK.fk(q)[0], q
-    base = {m: st[m]["load"] for m in ARM_IDS}
-    zs = list(np.arange(cur[2] - TS.step, z_to, -TS.step)) + [z_to]
-    off0, last = None, cur[2]
-    for z in zs:
+    last = float(cur[2])
+    start = max(z_to, TS.nominal_table_tcp_z + TS.guard_from)
+    if cur[2] > start + TS.step:                              # the free part of the way down, at normal speed
+        sol, _ = await asyncio.to_thread(_solve_tcp, np.array([x, y, start]), seed, yaw)
+        if sol is None:
+            return f"stopped at z = {last:.3f}: no joint solution lower down", None
+        res = await _go(sol, settle=True)
+        if res.startswith("ABORTED"):
+            return res, None
+        q, st = await measured()
+        seed, last = sol, float(IK.fk(q)[0][2])
+    hits = 0
+    for z in list(np.arange(last - TS.step, z_to, -TS.step)) + [z_to]:
         sol, _ = await asyncio.to_thread(_solve_tcp, np.array([x, y, z]), seed, yaw)
         if sol is None:
             return f"stopped at z = {last:.3f}: no joint solution lower down", None
         seed = sol
-        res = await _drive({ARM_IDS[i]: float(v) for i, v in enumerate(to_norm(sol))}, STEP, TS.dt, settle=False, contact=False)
+        norm = to_norm(sol)
+        res = await _drive({ARM_IDS[i]: float(v) for i, v in enumerate(norm)}, STEP, TS.dt, settle=True, contact=False,
+                           window=TS.window, iters=TS.iters)
         if res.startswith("ABORTED"):
             return res, None
-        await asyncio.sleep(TS.wait_s)
         qn, st = await measured()
         meas = float(IK.fk(qn)[0][2])
-        gap = meas - z                                   # how far the gripper is above where it was told to be
-        if off0 is None:
-            off0 = gap                                   # the normal offset (gravity sag) before any contact
-        load = max(abs(st[m]["load"] - base[m]) for m in ARM_IDS)
-        if gap - off0 > TS.stall_gap or load > TS.load_delta:
-            await _stop_here(st, ARM_IDS)                # stop pushing: goals = where the joints are
+        short = max(abs(st[ARM_IDS[i]]["lo"] + float(norm[i]) * (st[ARM_IDS[i]]["hi"] - st[ARM_IDS[i]]["lo"]) - st[ARM_IDS[i]]["raw"])
+                    for i in range(NA))
+        loads = sorted((st[m]["load"] for m in ARM_IDS), reverse=True)
+        hits = hits + 1 if (short >= TS.short_ticks and loads[0] + loads[1] >= TS.load_sum) else 0
+        if hits >= TS.reads:
+            await _stop_here(st, ARM_IDS)                     # stop pushing: goals = where the joints are
             up, _ = await asyncio.to_thread(_solve_tcp, np.array([x, y, meas + TS.backoff]), qn, yaw)
             if up is not None:
-                await _drive({ARM_IDS[i]: float(v) for i, v in enumerate(to_norm(up))}, STEP, TS.dt, settle=False, contact=False)
-            why = f"gripper stopped {(gap - off0) * 1000:.0f} mm short" if gap - off0 > TS.stall_gap else f"motor load changed by {load}"
-            return f"TOUCHED at gripper height z = {meas:.3f} ({why}); backed off {TS.backoff * 1000:.0f} mm", meas
+                await _go(up, settle=False)
+            return (f"TOUCHED at gripper height z = {meas:.3f} (a joint stayed {short:.0f} ticks short with motor loads "
+                    f"{loads[0]}+{loads[1]}); backed off {TS.backoff * 1000:.0f} mm"), meas
         last = meas
     return f"reached z = {last:.3f} without touching anything", None
 
@@ -883,8 +899,14 @@ async def touch_table(x: float, y: float) -> str:
     if z is not None:
         _remember_touch(x, y, z)
     back = await move_tcp(x=x, y=y, z=TS.probe_from, top_down=True)
-    note = (f" The table is {abs(z - TS.nominal_table_tcp_z) * 1000:.0f} mm {'higher' if z > TS.nominal_table_tcp_z else 'lower'} "
-            f"here than the model assumes; picks within {TS.reuse_radius * 100:.0f} cm of this spot now use it.") if z is not None else ""
+    if z is None:
+        note = ""
+    elif abs(z - TS.nominal_table_tcp_z) > TS.plausible:
+        note = (f" That is {abs(z - TS.nominal_table_tcp_z) * 1000:.0f} mm from where the table should be, so it was an object or "
+                f"something else, not the table: NOT remembered.")
+    else:
+        note = (f" The table is {abs(z - TS.nominal_table_tcp_z) * 1000:.0f} mm {'higher' if z > TS.nominal_table_tcp_z else 'lower'} "
+                f"here than the model assumes; picks within {TS.reuse_radius * 100:.0f} cm of this spot now use it.")
     return text + "." + note + " " + _first(back)
 
 
