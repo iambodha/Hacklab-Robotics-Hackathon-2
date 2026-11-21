@@ -193,6 +193,35 @@ First findings (21 Nov, on `pick-place-2026-11-21.parquet`):
 - Holding under teleop looks different from holding under a script: teleop closes stopped at 0.22–0.29 opening with 1–5 mA, because mirroring copies the leader's position instead of squeezing. The scripted grasp showed 0.06 opening and 39 mA; empty scripted closes 0.03 and 0–2 mA. So `verify()` for a grasp should check "commanded closed, but stopped above ~0.05" or "current above ~15 mA", not current alone.
 - After a successful close the object is hidden by the jaws, so "no blob" right after closing is consistent with holding.
 
+## MCP servers (branch `MCP`, tested 21 Nov ~14:15)
+
+Two MCP servers live on the `MCP` branch (checked out at `../mcp-branch/`):
+`robot_mcp` (task-level skills) and `arm_mcp` (joint-level, fresh cameras). Both are served
+over HTTP with a shared bearer token, so any MCP client or model can connect by URL.
+
+Run on this laptop (from `mcp-branch/`; the camera relay is on branch `calculate-camera-position`):
+
+```bash
+NORMA_CORE_REPO=$PWD/norma-core python3 scripts/cam_stream.py --data-dir ../station-run   # :8890, needed by arm_mcp
+uv run --no-project --with 'mcp>=1.12,<2' --with pillow python -m robot_mcp --http        # :8765/mcp
+ROBOT_CAM_URL=http://localhost:8890 uv run --no-project --with 'mcp>=1.12,<2' --with pillow \
+  python -m robot_mcp.http_server --target arm_mcp.server:server --port 8766              # :8766/mcp
+```
+
+Add `--lan` to expose a server to other laptops. Token: top of the server's startup output, or
+`mcp-branch/robot_mcp/data/http_token.local.json`.
+
+Test results through the MCP tools over HTTP (Python MCP client, token auth):
+- `arm_mcp`: `look` returned fresh images from both cameras; `set_torque(true)` held the pose with no jump;
+  `move_to` j1 +/-0.03 (about 5 deg) reached within 2-3 ticks; `gripper` 0.85 and back reached within 4 ticks.
+- `robot_mcp`: `move_joints` j1 +/-0.02 worked. Its `observe` returned byte-identical images 3 s apart showing
+  an older table layout: stale whenever torque is off. Use `arm_mcp` `look` instead.
+- Not tested on hardware: `robot_mcp` skills (`home`, `pick`, `place`). Their poses and gripper thresholds
+  are from last year's arm; `pick` closes only to 0.18, while today's object was held at about 0.06.
+- Both servers can command the same arm, and each one's motion lock only covers itself. Use one at a time.
+- Calibration writes an offset into each servo (register 0x1F), so calibrating on one laptop invalidates
+  the ranges another laptop's Station stored. One machine should own the arm, or recalibrate after switching.
+
 ## Current state when this session ended (21 Nov, ~13:00)
 
 - Station running (`scripts/run-station.sh`), both arms calibrated and frozen.
