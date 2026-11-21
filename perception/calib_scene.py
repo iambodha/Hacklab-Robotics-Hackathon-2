@@ -158,6 +158,15 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
     intr_ov = load_intrinsics("overview")
     base_ids = [i for i in cfg.get("base_marker_ids", []) if i in med]
     ref_id = base_ids[0] if base_ids else min(med)
+    if intr_ov is not None and len(med) >= 3:
+        # cross-check: board intrinsics must explain the markers about as well as the marker-only estimate
+        f_board = scene_fit.fit(med, size, W, H, intr=intr_ov, sigma_px=sig, ref_id=ref_id)
+        f_free = scene_fit.fit(med, size, W, H, intr=None, sigma_px=sig, ref_id=ref_id)
+        log(f"board intrinsics check: markers reproject at {f_board.rms_px():.2f} px with them, "
+            f"{f_free.rms_px():.2f} px with f fitted to the markers")
+        if f_board.rms_px() > 2 * f_free.rms_px() + 0.3:
+            log("  -> board intrinsics REJECTED (inconsistent with the markers); recapture them. Using the marker estimate.")
+            intr_ov = None
     fit = scene_fit.fit(med, size, W, H, intr=intr_ov, sigma_px=sig, ref_id=ref_id,
                         free_f=intr_ov is None, free_k1=fit_k1)
     if intr_ov is None:

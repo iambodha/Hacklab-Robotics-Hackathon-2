@@ -30,6 +30,7 @@ def detector(name: str, refine: bool = True) -> cv2.aruco.ArucoDetector:
         p.cornerRefinementMaxIterations = 50
     # Small (299x224) frames: allow small markers and be generous with the adaptive threshold.
     p.minMarkerPerimeterRate = 0.02
+    p.minDistanceToBorder = 1          # default 3 drops marker 21, whose corner sits 2 px from the overview frame edge
     p.adaptiveThreshWinSizeMin, p.adaptiveThreshWinSizeMax, p.adaptiveThreshWinSizeStep = 3, 33, 4
     return cv2.aruco.ArucoDetector(dictionary(name), p)
 

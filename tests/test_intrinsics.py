@@ -41,6 +41,7 @@ def test_charuco_calibration_recovers_focal():
     assert len(views) >= 10
     res = ci.calibrate(views, W, H)
     assert res["rms_px"] < 0.5
+    assert res["sigma_f_rel"] < 0.03 and max(res["max_tilt_deg"]) > 20
     assert abs(res["K"][0, 0] / K[0, 0] - 1) < 0.02
     assert abs(res["K"][1, 1] / K[1, 1] - 1) < 0.02
 

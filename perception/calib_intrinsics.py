@@ -94,14 +94,32 @@ def calibrate(views: list[tuple[np.ndarray, np.ndarray]], W: int, H: int, ration
     def run(vs):
         obj = [v[0].astype(np.float32) for v in vs]
         img = [v[1].astype(np.float32).reshape(-1, 1, 2) for v in vs]
-        rms, K, dist, rv, tv, _, _, per = cv2.calibrateCameraExtended(obj, img, (W, H), None, None, flags=flags)
-        return rms, K, dist.ravel(), per.ravel(), rv, tv
+        rms, K, dist, rv, tv, sdi, _, per = cv2.calibrateCameraExtended(obj, img, (W, H), None, None, flags=flags)
+        return rms, K, dist.ravel(), per.ravel(), sdi.ravel()
 
-    rms, K, dist, per, rv, tv = run(views)
+    rms, K, dist, per, sdi = run(views)
     keep = [v for v, e in zip(views, per) if e <= 3 * np.median(per)]
     if len(keep) < len(views) and len(keep) >= 8:
-        rms, K, dist, per, rv, tv = run(keep)
-    return {"rms_px": float(rms), "K": K, "dist": dist, "per_view_px": per, "n_views": len(keep) if len(keep) >= 8 else len(views)}
+        rms, K, dist, per, sdi = run(keep)
+    tilts = np.array([tilt(v) for v in views])
+    return {"rms_px": float(rms), "K": K, "dist": dist, "per_view_px": per,
+            "n_views": len(keep) if len(keep) >= 8 else len(views),
+            "sigma_f_rel": float(max(sdi[0] / K[0, 0], sdi[1] / K[1, 1])), "sigma_c_px": float(max(sdi[2], sdi[3])),
+            "max_tilt_deg": np.degrees(np.abs(tilts).max(0)).round(1).tolist() if len(tilts) else [0, 0]}
+
+
+def tilt(view, W: int = 299, H: int = 224) -> np.ndarray:
+    """Board tilt (radians) about the camera x and y axes, 0 = facing the camera. From a planar PnP with
+    a nominal focal length (tilt angles hardly depend on it)."""
+    obj, img = view
+    f = 0.5 * W
+    K = np.array([[f, 0, (W - 1) / 2], [0, f, (H - 1) / 2], [0, 0, 1]])
+    ok, rv, _ = cv2.solvePnP(obj.astype(np.float64), img.astype(np.float64), K, None, flags=cv2.SOLVEPNP_IPPE)
+    if not ok:
+        return np.zeros(2)
+    n = cv2.Rodrigues(rv)[0][:, 2]                  # board normal in the camera frame
+    n = n if n[2] < 0 else -n                       # pointing back at the camera
+    return np.array([np.arctan2(n[1], -n[2]), np.arctan2(n[0], -n[2])])
 
 
 def save(cam: str, res: dict, W: int, H: int, square_mm: float) -> Path:
@@ -109,7 +127,8 @@ def save(cam: str, res: dict, W: int, H: int, square_mm: float) -> Path:
     out = {"camera": cam, "created": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
            "image_size": [W, H], "K_normalized": {"fx": K[0, 0] / W, "fy": K[1, 1] / H, "cx": K[0, 2] / W, "cy": K[1, 2] / H},
            "dist": [float(v) for v in d[:5]], "dist_full": [float(v) for v in d], "rms_px": round(res["rms_px"], 4),
-           "n_views": res["n_views"], "board": {"squares": SQUARES, "square_mm": square_mm, "marker_mm": square_mm * MARKER_MM / SQUARE_MM,
+           "n_views": res["n_views"], "sigma_f_rel": round(res["sigma_f_rel"], 4), "max_tilt_deg": res["max_tilt_deg"],
+           "board": {"squares": SQUARES, "square_mm": square_mm, "marker_mm": square_mm * MARKER_MM / SQUARE_MM,
                                                  "dictionary": DICT, "first_id": FIRST_ID},
            "hfov_deg": float(np.degrees(2 * np.arctan(W / 2 / K[0, 0]))), "vfov_deg": float(np.degrees(2 * np.arctan(H / 2 / K[1, 1])))}
     p = intrinsics_file(cam)
@@ -126,11 +145,15 @@ def save(cam: str, res: dict, W: int, H: int, square_mm: float) -> Path:
     return p
 
 
-def _novel(obs: np.ndarray, kept: list[np.ndarray], W: int) -> bool:
-    """A view is new if its corner centroid moved, or its apparent size/orientation changed enough."""
-    c, s = obs.mean(0), np.sqrt(np.prod(obs.std(0)))
-    for o in kept:
-        if np.linalg.norm(o.mean(0) - c) < 0.08 * W and abs(np.sqrt(np.prod(o.std(0))) / s - 1) < 0.15:
+def _novel(view, kept: list, W: int) -> bool:
+    """A view is new if its corner centroid moved, its apparent size changed, or its tilt changed.
+    Tilt matters most: fronto-parallel views leave the focal length unconstrained."""
+    obs = view[1]
+    c, s, t = obs.mean(0), np.sqrt(np.prod(obs.std(0))), tilt(view)
+    for k in kept:
+        o = k[1]
+        if np.linalg.norm(o.mean(0) - c) < 0.08 * W and abs(np.sqrt(np.prod(o.std(0))) / s - 1) < 0.15 \
+                and np.abs(tilt(k) - t).max() < np.radians(10):
             return False
     return True
 
@@ -148,13 +171,15 @@ async def capture_live(cam: str, n_views: int, b, square_mm: float, min_corners:
         img = sio.decode_jpeg(jpg)
         H, W = img.shape[:2]
         det = detect_board(img, b)
-        if det is None or len(det[0]) < min_corners or time.time() - last < 0.7 or not _novel(det[1], kept, W):
+        if det is None or len(det[0]) < min_corners or time.time() - last < 0.7 or not _novel(det, kept, W):
             continue
         views.append(det)
-        kept.append(det[1])
+        kept.append(det)
         last = time.time()
         (save_dir / f"{cam}_{len(views):02d}.jpg").write_bytes(jpg)
-        print(f"  view {len(views)}/{n_views}: {len(det[0])} corners at ({det[1].mean(0)[0]:.0f}, {det[1].mean(0)[1]:.0f})")
+        tl = np.degrees(tilt(det))
+        print(f"  view {len(views)}/{n_views}: {len(det[0])} corners at ({det[1].mean(0)[0]:.0f}, {det[1].mean(0)[1]:.0f}), "
+              f"tilt ~({tl[0]:+.0f}, {tl[1]:+.0f}) deg" + ("   <- tilt the board more" if np.abs(tl).max() < 15 else ""))
     print(f"saved frames in {save_dir}")
     return views, W, H
 
@@ -182,6 +207,7 @@ def main():
         p.add_argument("--views", type=int, default=25)
         p.add_argument("--square-mm", type=float, default=SQUARE_MM, help="measured printed square size")
         p.add_argument("--rational", action="store_true", help="8-coefficient distortion model (very wide lenses)")
+        p.add_argument("--force", action="store_true", help="save even if the focal length is poorly constrained")
     a = ap.parse_args()
     if a.cmd == "board":
         for p in make_board():
@@ -195,6 +221,12 @@ def main():
     K = res["K"]
     print(f"{a.camera}: {res['n_views']} views, RMS {res['rms_px']:.3f} px (good: < 0.5 px at 299x224)")
     print(f"  fx {K[0, 0]:.2f} fy {K[1, 1]:.2f} cx {K[0, 2]:.2f} cy {K[1, 2]:.2f}  dist {np.round(res['dist'][:5], 4).tolist()}")
+    print(f"  focal 1-sigma {100 * res['sigma_f_rel']:.1f} % (need < 3 %), principal point 1-sigma {res['sigma_c_px']:.1f} px, "
+          f"max board tilt ~{res['max_tilt_deg']} deg (want >= 30)")
+    if res["sigma_f_rel"] > 0.03 and not a.force:
+        raise SystemExit("NOT saved: the focal length is poorly constrained. Recapture with the board clearly TILTED "
+                         "(30-45 deg towards/away from the camera, left/right/up/down) and nearer the image corners; "
+                         "or pass --force.")
     print(f"  wrote {save(a.camera, res, W, H, a.square_mm)}; now rerun: python -m perception.calib_scene --live")
 
 
