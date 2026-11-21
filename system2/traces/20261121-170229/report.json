@@ -1,0 +1,295 @@
+{
+  "policy": "geometric",
+  "task": "pick_place",
+  "episodes": 6,
+  "successes": 5,
+  "runner": {
+    "decisions": 109,
+    "stale_discarded": 0,
+    "jev_failures": 0,
+    "agree": 0,
+    "compared": 0
+  },
+  "jev_latency": null,
+  "results": [
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.0 cm sideways and +0.0 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 2 deg off cube faces",
+          "steps": 7,
+          "seconds": 26.2
+        },
+        {
+          "goal": "holding the cube",
+          "status": "succeeded",
+          "reason": "holding cube; jaws 0.02",
+          "steps": 3,
+          "seconds": 6.4
+        },
+        {
+          "goal": "cube lifted 8 cm",
+          "status": "succeeded",
+          "reason": "cube at z = 8.5 cm",
+          "steps": 2,
+          "seconds": 3.4
+        },
+        {
+          "goal": "cube carried over the box opening",
+          "status": "succeeded",
+          "reason": "cube is 1.2 cm sideways and -0.4 cm vertically from box + [0.0, 0.0, 10.0] cm",
+          "steps": 7,
+          "seconds": 13.0
+        },
+        {
+          "goal": "cube released inside the box",
+          "status": "succeeded",
+          "reason": "cube is 1.6 cm from the centre of box (inside radius 8.0 cm; belief: released at [0.225, 0.028, 0.12]); jaws 1.00 open (want >= 0.9)",
+          "steps": 1,
+          "seconds": 4.0
+        }
+      ],
+      "all_goals_succeeded": true,
+      "seconds": 55.2,
+      "cube_truth": {
+        "xyz": [
+          0.2336,
+          0.015,
+          0.0139
+        ],
+        "in_bin": "grey_box"
+      },
+      "success": true
+    },
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.2 cm sideways and -0.1 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 0 deg off cube faces",
+          "steps": 7,
+          "seconds": 32.2
+        },
+        {
+          "goal": "holding the cube",
+          "status": "succeeded",
+          "reason": "holding cube; jaws 0.04",
+          "steps": 2,
+          "seconds": 10.1
+        },
+        {
+          "goal": "cube lifted 8 cm",
+          "status": "succeeded",
+          "reason": "cube at z = 8.5 cm",
+          "steps": 2,
+          "seconds": 12.3
+        },
+        {
+          "goal": "cube carried over the box opening",
+          "status": "succeeded",
+          "reason": "cube is 0.3 cm sideways and -0.2 cm vertically from box + [0.0, 0.0, 10.0] cm",
+          "steps": 9,
+          "seconds": 28.0
+        },
+        {
+          "goal": "cube released inside the box",
+          "status": "succeeded",
+          "reason": "cube is 1.2 cm from the centre of box (inside radius 8.0 cm; belief: released at [0.243, 0.032, 0.124]); jaws 1.00 open (want >= 0.9)",
+          "steps": 1,
+          "seconds": 3.4
+        }
+      ],
+      "all_goals_succeeded": true,
+      "seconds": 87.1,
+      "cube_truth": {
+        "xyz": [
+          0.2508,
+          0.0366,
+          0.0139
+        ],
+        "in_bin": "grey_box"
+      },
+      "success": true
+    },
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.3 cm sideways and +0.0 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 2 deg off cube faces",
+          "steps": 6,
+          "seconds": 28.9
+        },
+        {
+          "goal": "holding the cube",
+          "status": "succeeded",
+          "reason": "holding cube; jaws 0.02",
+          "steps": 2,
+          "seconds": 9.8
+        },
+        {
+          "goal": "cube lifted 8 cm",
+          "status": "succeeded",
+          "reason": "cube at z = 8.6 cm",
+          "steps": 2,
+          "seconds": 12.0
+        },
+        {
+          "goal": "cube carried over the box opening",
+          "status": "succeeded",
+          "reason": "cube is 0.1 cm sideways and -0.1 cm vertically from box + [0.0, 0.0, 10.0] cm",
+          "steps": 8,
+          "seconds": 32.1
+        },
+        {
+          "goal": "cube released inside the box",
+          "status": "succeeded",
+          "reason": "cube is 0.9 cm from the centre of box (inside radius 8.0 cm; belief: released at [0.234, 0.028, 0.119]); jaws 1.00 open (want >= 0.9)",
+          "steps": 1,
+          "seconds": 3.3
+        }
+      ],
+      "all_goals_succeeded": true,
+      "seconds": 87.3,
+      "cube_truth": {
+        "xyz": [
+          0.2629,
+          0.0148,
+          0.0139
+        ],
+        "in_bin": "grey_box"
+      },
+      "success": true
+    },
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.5 cm sideways and +0.0 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 4 deg off cube faces",
+          "steps": 6,
+          "seconds": 39.9
+        },
+        {
+          "goal": "holding the cube",
+          "status": "failed",
+          "reason": "no available motion is predicted to help: cube is between the jaws; jaws 0.00 open. Restate the goal in terms of the gripper or a held object.",
+          "steps": 2,
+          "seconds": 12.0
+        }
+      ],
+      "all_goals_succeeded": false,
+      "seconds": 53.0,
+      "cube_truth": {
+        "xyz": [
+          -0.0352,
+          0.2394,
+          0.0099
+        ],
+        "in_bin": null
+      },
+      "success": false
+    },
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.1 cm sideways and +0.0 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 1 deg off cube faces",
+          "steps": 7,
+          "seconds": 26.6
+        },
+        {
+          "goal": "holding the cube",
+          "status": "succeeded",
+          "reason": "holding cube; jaws 0.01",
+          "steps": 3,
+          "seconds": 6.1
+        },
+        {
+          "goal": "cube lifted 8 cm",
+          "status": "succeeded",
+          "reason": "cube at z = 8.4 cm",
+          "steps": 2,
+          "seconds": 3.1
+        },
+        {
+          "goal": "cube carried over the box opening",
+          "status": "succeeded",
+          "reason": "cube is 0.3 cm sideways and -0.1 cm vertically from box + [0.0, 0.0, 10.0] cm",
+          "steps": 7,
+          "seconds": 17.9
+        },
+        {
+          "goal": "cube released inside the box",
+          "status": "succeeded",
+          "reason": "cube is 0.4 cm from the centre of box (inside radius 8.0 cm; belief: released at [0.236, 0.023, 0.121]); jaws 1.00 open (want >= 0.9)",
+          "steps": 1,
+          "seconds": 3.5
+        }
+      ],
+      "all_goals_succeeded": true,
+      "seconds": 58.6,
+      "cube_truth": {
+        "xyz": [
+          0.2706,
+          0.0298,
+          0.0139
+        ],
+        "in_bin": "grey_box"
+      },
+      "success": true
+    },
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.3 cm sideways and +0.1 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 0 deg off cube faces",
+          "steps": 7,
+          "seconds": 30.9
+        },
+        {
+          "goal": "holding the cube",
+          "status": "succeeded",
+          "reason": "holding cube; jaws 0.03",
+          "steps": 3,
+          "seconds": 15.1
+        },
+        {
+          "goal": "cube lifted 8 cm",
+          "status": "succeeded",
+          "reason": "cube at z = 8.6 cm",
+          "steps": 2,
+          "seconds": 12.7
+        },
+        {
+          "goal": "cube carried over the box opening",
+          "status": "succeeded",
+          "reason": "cube is 0.1 cm sideways and -0.1 cm vertically from box + [0.0, 0.0, 10.0] cm",
+          "steps": 8,
+          "seconds": 27.5
+        },
+        {
+          "goal": "cube released inside the box",
+          "status": "succeeded",
+          "reason": "cube is 3.2 cm from the centre of box (inside radius 8.0 cm; seen); jaws 1.00 open (want >= 0.9)",
+          "steps": 1,
+          "seconds": 3.6
+        }
+      ],
+      "all_goals_succeeded": true,
+      "seconds": 91.0,
+      "cube_truth": {
+        "xyz": [
+          0.2698,
+          0.0312,
+          0.0139
+        ],
+        "in_bin": "grey_box"
+      },
+      "success": true
+    }
+  ]
+}

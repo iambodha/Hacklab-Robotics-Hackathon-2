@@ -1,0 +1,45 @@
+{
+  "policy": "geometric",
+  "task": "pick_place",
+  "episodes": 1,
+  "successes": 0,
+  "runner": {
+    "decisions": 8,
+    "stale_discarded": 0,
+    "jev_failures": 0,
+    "agree": 0,
+    "compared": 0
+  },
+  "jev_latency": null,
+  "results": [
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.5 cm sideways and -0.2 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 0 deg off cube faces",
+          "steps": 6,
+          "seconds": 23.7
+        },
+        {
+          "goal": "holding the cube",
+          "status": "failed",
+          "reason": "no available motion is predicted to help: cube is between the jaws; jaws 0.03 open. Restate the goal in terms of the gripper or a held object.",
+          "steps": 2,
+          "seconds": 4.9
+        }
+      ],
+      "all_goals_succeeded": false,
+      "seconds": 30.5,
+      "cube_truth": {
+        "xyz": [
+          0.022,
+          0.1592,
+          0.0097
+        ],
+        "in_bin": null
+      },
+      "success": false
+    }
+  ]
+}

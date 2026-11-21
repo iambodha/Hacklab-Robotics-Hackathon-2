@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "elrobot-system2": {
+      "command": "wsl.exe",
+      "args": ["-d", "Ubuntu", "--", "env", "ROBOT_SIM_GUI=1", "S2_POLICY=geometric",
+               "bash", "/path/in/wsl/to/Hacklab-Robotics-Hackathon-2/system2/run_server.sh"]
+    }
+  }
+}

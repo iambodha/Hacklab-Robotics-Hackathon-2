@@ -53,6 +53,7 @@ from arm_mcp import server as am  # noqa: E402  (real Station access; its own MC
 
 IMG_SCALE = int(os.environ.get("ROBOT_IMG_SCALE", "2"))
 GRID = os.environ.get("ROBOT_GRID", "1") == "1"
+DROP_LINE = os.environ.get("ROBOT_DROP_LINE", "1") == "1"   # 0: clean wrist images (system2 perception)
 MIN_Z = float(os.environ.get("ROBOT_MIN_TCP_Z", "0.012"))
 WRIST_CAM = os.environ.get("ROBOT_WRIST_CAM", "e091eeda")       # cam_stream hash prefixes (per machine)
 OVERVIEW_CAM = os.environ.get("ROBOT_OVERVIEW_CAM", "5cd55831")
@@ -363,7 +364,7 @@ def _grid(jpeg: bytes, drop=None) -> bytes:
 async def _wrist_image(data: bytes) -> bytes:
     """Wrist frame with the grid and, when the gripper is raised, the green DROP line."""
     q, _ = await measured()
-    return _grid(data, _drop_line(q))
+    return _grid(data, _drop_line(q) if DROP_LINE else None)
 
 
 async def _fresh_frame(prefix: str):
@@ -523,8 +524,9 @@ async def tcp_pose() -> str:
     pos, rot = IK.fk(q)
     approach, jaw = rot[:, 1], rot[:, 0]
     tilt = np.degrees(np.arccos(np.clip(-approach[2], -1, 1)))
+    level = np.degrees(np.arcsin(np.clip(abs(jaw[2]), 0, 1)))
     return (f"tcp xyz = [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}] m; jaws point {tilt:.0f} deg from straight down; "
-            f"jaw closing axis yaw = {np.degrees(np.arctan2(jaw[1], jaw[0])):.0f} deg.\n{FRAME}")
+            f"jaw closing axis yaw = {np.degrees(np.arctan2(jaw[1], jaw[0])):.0f} deg ({level:.0f} deg from level).\n{FRAME}")
 
 
 @server.tool(annotations={"destructiveHint": True})
@@ -624,6 +626,28 @@ async def pixel_to_table(camera: str, u: float, v: float, height: float = 0.0, v
     p = origin + t * d
     return (f"{camera} pixel ({u:.0f}, {v:.0f}) -> table point [{p[0]:.3f}, {p[1]:.3f}, {p[2]:.3f}] "
             f"({t:.2f} m from the camera, {np.hypot(p[0], p[1]):.3f} m from the arm base).\n{FRAME}")
+
+
+@server.tool(annotations={"readOnlyHint": True})
+@recorded
+async def camera_info() -> str:
+    """Camera calibration as JSON, the model pixel_to_table uses (same contract as sim_arm_mcp.camera_info): per
+    camera the look() image size, pinhole fx, fy, cx, cy in look() pixels and the pose in the base frame in the
+    OpenCV convention (x right, y down, z forward): p_base = R_base_cam @ p_cam + t_base_cam. The wrist pose
+    follows the current joints; the overview camera is listed only once sim/real_overview_camera.json exists."""
+    q, _ = await measured()
+    poses = {"wrist": _wrist_pose(q)}
+    if OVERVIEW_CAL.exists():
+        cal = json.loads(OVERVIEW_CAL.read_text())
+        poses["overview"] = (np.array(cal["pos"]), np.array(cal["xmat"]).reshape(3, 3), float(cal["fovy"]))
+    out = {}
+    for name, (pos, mat, fovy) in poses.items():
+        f = (H / 2) / np.tan(np.radians(fovy) / 2) * IMG_SCALE
+        out[name] = {"width": W * IMG_SCALE, "height": H * IMG_SCALE, "fx": f, "fy": f,
+                     "cx": W * IMG_SCALE / 2, "cy": H * IMG_SCALE / 2,
+                     "R_base_cam": (mat @ np.diag([1.0, -1.0, -1.0])).round(6).tolist(),
+                     "t_base_cam": pos.round(6).tolist()}
+    return json.dumps(out)
 
 
 async def _views(which=("wrist", "overview")) -> list:

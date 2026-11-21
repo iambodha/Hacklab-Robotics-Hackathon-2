@@ -1,0 +1,190 @@
+{
+  "policy": "geometric",
+  "task": "pick_place",
+  "episodes": 6,
+  "successes": 0,
+  "runner": {
+    "decisions": 53,
+    "stale_discarded": 0,
+    "jev_failures": 0,
+    "agree": 0,
+    "compared": 0
+  },
+  "jev_latency": null,
+  "results": [
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.0 cm sideways and +0.0 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 2 deg off cube faces",
+          "steps": 7,
+          "seconds": 26.4
+        },
+        {
+          "goal": "holding the cube",
+          "status": "failed",
+          "reason": "no available motion is predicted to help: not holding cube: 0.9 cm of approach left; jaws 1.00 open. Restate the goal in terms of the gripper or a held object.",
+          "steps": 2,
+          "seconds": 2.3
+        }
+      ],
+      "all_goals_succeeded": false,
+      "seconds": 30.7,
+      "cube_truth": {
+        "xyz": [
+          0.025,
+          0.16,
+          0.0099
+        ],
+        "in_bin": null
+      },
+      "success": false
+    },
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.4 cm sideways and +0.0 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 1 deg off cube faces",
+          "steps": 7,
+          "seconds": 33.5
+        },
+        {
+          "goal": "holding the cube",
+          "status": "failed",
+          "reason": "no available motion is predicted to help: not holding cube: 0.8 cm of approach left; jaws 1.00 open. Restate the goal in terms of the gripper or a held object.",
+          "steps": 2,
+          "seconds": 12.2
+        }
+      ],
+      "all_goals_succeeded": false,
+      "seconds": 47.0,
+      "cube_truth": {
+        "xyz": [
+          -0.0537,
+          0.2057,
+          0.0099
+        ],
+        "in_bin": null
+      },
+      "success": false
+    },
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.2 cm sideways and +0.0 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 0 deg off cube faces",
+          "steps": 7,
+          "seconds": 31.7
+        },
+        {
+          "goal": "holding the cube",
+          "status": "failed",
+          "reason": "no available motion is predicted to help: not holding cube: 0.7 cm of approach left; jaws 1.00 open. Restate the goal in terms of the gripper or a held object.",
+          "steps": 2,
+          "seconds": 11.7
+        }
+      ],
+      "all_goals_succeeded": false,
+      "seconds": 44.8,
+      "cube_truth": {
+        "xyz": [
+          -0.0806,
+          0.1728,
+          0.0099
+        ],
+        "in_bin": null
+      },
+      "success": false
+    },
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.2 cm sideways and +0.1 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 0 deg off cube faces",
+          "steps": 7,
+          "seconds": 31.4
+        },
+        {
+          "goal": "holding the cube",
+          "status": "failed",
+          "reason": "no available motion is predicted to help: not holding cube: 0.8 cm of approach left; jaws 1.00 open. Restate the goal in terms of the gripper or a held object.",
+          "steps": 2,
+          "seconds": 11.6
+        }
+      ],
+      "all_goals_succeeded": false,
+      "seconds": 44.3,
+      "cube_truth": {
+        "xyz": [
+          -0.0571,
+          0.1881,
+          0.0099
+        ],
+        "in_bin": null
+      },
+      "success": false
+    },
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.1 cm sideways and +0.0 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 0 deg off cube faces",
+          "steps": 6,
+          "seconds": 17.8
+        },
+        {
+          "goal": "holding the cube",
+          "status": "failed",
+          "reason": "no available motion is predicted to help: not holding cube: 0.9 cm of approach left; jaws 1.00 open. Restate the goal in terms of the gripper or a held object.",
+          "steps": 2,
+          "seconds": 2.4
+        }
+      ],
+      "all_goals_succeeded": false,
+      "seconds": 21.4,
+      "cube_truth": {
+        "xyz": [
+          -0.0191,
+          0.1622,
+          0.0099
+        ],
+        "in_bin": null
+      },
+      "success": false
+    },
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.1 cm sideways and +0.0 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 0 deg off cube faces",
+          "steps": 7,
+          "seconds": 18.0
+        },
+        {
+          "goal": "holding the cube",
+          "status": "failed",
+          "reason": "no available motion is predicted to help: not holding cube: 0.8 cm of approach left; jaws 1.00 open. Restate the goal in terms of the gripper or a held object.",
+          "steps": 2,
+          "seconds": 2.2
+        }
+      ],
+      "all_goals_succeeded": false,
+      "seconds": 21.5,
+      "cube_truth": {
+        "xyz": [
+          0.0756,
+          0.1566,
+          0.0099
+        ],
+        "in_bin": null
+      },
+      "success": false
+    }
+  ]
+}

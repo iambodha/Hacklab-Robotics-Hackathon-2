@@ -1,0 +1,7 @@
+# System 2 / goal-runner MCP server (its own venv; the arm simulator keeps its own environment).
+mcp==1.30.0
+numpy==2.5.5
+pillow==13.0.0
+opencv-python-headless==4.14.0.94
+httpx==0.28.1
+pytest==8.4.2

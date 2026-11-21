@@ -231,13 +231,15 @@ class SimArm:
             out = {}
             for spec in self.layout['objects']:
                 p = self.data.body(spec['name']).xpos.copy()
+                rot = self.data.body(spec['name']).xmat.reshape(3, 3)
+                yaw = float(np.degrees(np.arctan2(rot[1, 0], rot[0, 0])))
                 inside = None
                 for b in self.layout['bins']:
                     body = self.data.body(b['name'])
                     local = body.xmat.reshape(3, 3).T @ (p - body.xpos)
                     if abs(local[0]) < b['size'][0]/2 and abs(local[1]) < b['size'][1]/2 and local[2] < b['size'][2]:
                         inside = b['name']
-                out[spec['name']] = {'xyz': [round(float(v), 4) for v in p], 'in_bin': inside}
+                out[spec['name']] = {'xyz': [round(float(v), 4) for v in p], 'yaw_deg': round(yaw, 1), 'in_bin': inside}
             return {'sim_time': round(float(self.data.time), 2), 'objects': out}
 
 
@@ -377,12 +379,14 @@ CAMERA_NAMES = {'wrist': 'wrist_cam', 'overview': 'overview_cam'}
 async def tcp_pose() -> str:
     """Where the gripper is, from the measured joints and the arm's kinematic model (like FK on
     the real arm): the TCP (point between the fingertip pads) in the base frame, whether the jaws
-    point down, and the jaw axis direction."""
+    point down, and the jaw axis direction (yaw, and its angle from level: a tilted closing axis
+    puts one jaw under a held object, so it may not drop out when the jaws open)."""
     pos, rot = arm.ik.fk(arm.measured_q())
     approach, jaw = rot[:, 1], rot[:, 0]
     tilt = np.degrees(np.arccos(np.clip(-approach[2], -1, 1)))
+    level = np.degrees(np.arcsin(np.clip(abs(jaw[2]), 0, 1)))
     return (f'tcp xyz = [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}] m; jaws point {tilt:.0f} deg from straight down; '
-            f'jaw closing axis yaw = {np.degrees(np.arctan2(jaw[1], jaw[0])):.0f} deg.\n{FRAME}')
+            f'jaw closing axis yaw = {np.degrees(np.arctan2(jaw[1], jaw[0])):.0f} deg ({level:.0f} deg from level).\n{FRAME}')
 
 
 async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg: float = 0.0,
@@ -407,13 +411,19 @@ async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg:
     waypoints.append(target.tolist())
     seed, log, notes = q, [], []
     for wp in waypoints:
-        sol = arm.ik.solve(np.array(wp), top_down=top_down, q0=seed, yaw_deg=yaw_deg)
-        if sol is None and top_down:  # jaws-down is impossible here (too high/far): accept a tilted gripper
+        if top_down:  # least-tilted reachable pose, as on the real arm (real_arm_mcp.py)
+            sol, lean = arm.ik.solve_least_lean(np.array(wp), seed, yaw_deg)
+            if sol is not None and lean:
+                notes.append(f'jaws-down unreachable at {np.round(wp, 3).tolist()}: gripper leans {abs(lean)} deg from '
+                             f'vertical ({"away from" if lean > 0 else "toward"} the base)')
+            if sol is None:  # last resort: position only, orientation free
+                sol = arm.ik.solve(np.array(wp), top_down=False, q0=seed)
+                if sol is not None:
+                    _, rot = arm.ik.fk(sol)
+                    notes.append(f'no near-vertical pose at {np.round(wp, 3).tolist()}: gripper is '
+                                 f'{np.degrees(np.arccos(np.clip(-rot[2, 1], -1, 1))):.0f} deg from vertical; do not grasp like this')
+        else:
             sol = arm.ik.solve(np.array(wp), top_down=False, q0=seed)
-            if sol is not None:
-                _, rot = arm.ik.fk(sol)
-                notes.append(f'jaws-down unreachable at {np.round(wp, 3).tolist()}: used a gripper tilted '
-                             f'{np.degrees(np.arccos(np.clip(-rot[2, 1], -1, 1))):.0f} deg from vertical')
         if sol is None:
             return (f'UNREACHABLE: no joint solution for tcp {np.round(wp, 3).tolist()} '
                     f'({"jaws down" if top_down else "any orientation"}); nothing moved after: {log}\n' + arm.table())
@@ -450,10 +460,30 @@ async def pixel_to_table(camera: str, u: float, v: float, height: float = 0.0) -
             f'({t:.2f} m from the camera, {np.hypot(p[0], p[1]):.3f} m from the arm base).\n{FRAME}')
 
 
+async def camera_info() -> str:
+    """Camera calibration as JSON, the same model pixel_to_table uses: per camera ('wrist',
+    'overview') the look() image size, pinhole intrinsics fx, fy, cx, cy in look() pixels, and the
+    camera pose in the base frame in the OpenCV convention (x right, y down, z forward):
+    p_base = R_base_cam @ p_cam + t_base_cam. The wrist pose follows the current joints."""
+    w, h = arm.layout['image_size']
+    out = {}
+    for name, cam in CAMERA_NAMES.items():
+        cid = arm.model.camera(cam).id
+        with arm.lock:
+            pos, mat = arm.data.cam_xpos[cid].copy(), arm.data.cam_xmat[cid].reshape(3, 3).copy()
+        f = (h / 2) / np.tan(np.radians(arm.model.cam_fovy[cid]) / 2) * IMG_SCALE
+        out[name] = {'width': w * IMG_SCALE, 'height': h * IMG_SCALE, 'fx': f, 'fy': f,
+                     'cx': w * IMG_SCALE / 2, 'cy': h * IMG_SCALE / 2,
+                     'R_base_cam': (mat @ np.diag([1.0, -1.0, -1.0])).round(6).tolist(),
+                     't_base_cam': pos.round(6).tolist()}
+    return json.dumps(out)
+
+
 if KINEMATICS:
     server.tool(annotations={'readOnlyHint': True})(recorded(tcp_pose))
     server.tool(annotations={'destructiveHint': True})(recorded(move_tcp))
     server.tool(annotations={'readOnlyHint': True})(recorded(pixel_to_table))
+    server.tool(annotations={'readOnlyHint': True})(recorded(camera_info))
 
 
 @server.tool(annotations={'destructiveHint': True})
