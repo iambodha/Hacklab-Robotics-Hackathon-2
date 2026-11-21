@@ -1,0 +1,274 @@
+{
+  "_about": "Robot profile for an SO-101 follower arm (5 arm joints + gripper, STS3215 servos). UNTESTED ON HARDWARE: the kinematics come from the public SO-101 URDF and were only exercised offline. Before the first real move, fill in or verify every field listed in _to_verify. Base frame of this URDF: +x = straight ahead of the arm, +y = the arm's left, +z up.",
+  "name": "so101_follower",
+  "mcp_server_name": "elrobot-real",
+  "bus_serial": "SET_ME",
+  "motors": {
+    "arm": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "gripper": 6,
+    "names": {
+      "1": "shoulder_pan",
+      "2": "shoulder_lift",
+      "3": "elbow_flex",
+      "4": "wrist_flex",
+      "5": "wrist_roll",
+      "6": "gripper"
+    },
+    "ticks_per_turn": 4096,
+    "goal_register": 42
+  },
+  "kinematics": {
+    "backend": "urdf",
+    "urdf": "so101/so101_new_calib.urdf",
+    "arm_joints": [
+      "shoulder_pan",
+      "shoulder_lift",
+      "elbow_flex",
+      "wrist_flex",
+      "wrist_roll"
+    ],
+    "gripper_joint": "gripper",
+    "tcp_link": "gripper_frame_link",
+    "tcp_xyz": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "tcp_R": [
+      [
+        -1,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        1,
+        0
+      ]
+    ],
+    "wrist_camera": {
+      "link": "gripper_frame_link",
+      "fovy": 72,
+      "T_link_camera": [
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.9063,
+          0.4226,
+          0.05
+        ],
+        [
+          0.0,
+          0.4226,
+          0.9063,
+          -0.07
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ]
+    },
+    "arm_mapping": "ticks_centered",
+    "zero_ticks": [
+      2048,
+      2048,
+      2048,
+      2048,
+      2048
+    ],
+    "signs": [
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "gripper_mapping": "range_fraction"
+  },
+  "frame_text": "Base frame, metres: origin = centre of the arm base on the table top, +z up, +x = straight ahead of the arm, +y = the arm's left-hand side.",
+  "cameras": {
+    "wrist": "SET_ME",
+    "overview": "SET_ME",
+    "width": 299,
+    "height": 224,
+    "scale": 2,
+    "grid": true,
+    "grid_step": 50,
+    "jpeg_quality": 85,
+    "fresh_tries": 4,
+    "fresh_wait_s": 0.3
+  },
+  "workspace": {
+    "min_tcp_z": 0.012,
+    "max_tcp_z": 0.45,
+    "max_radius": 0.4,
+    "comfortable_radius": 0.3,
+    "travel_height": 0.08,
+    "travel_slack": 0.01,
+    "direct_move_within": 0.03
+  },
+  "poses": {
+    "park": [
+      0.18,
+      0.0,
+      0.06
+    ],
+    "retreat_min_z": 0.12,
+    "carry_z": 0.18,
+    "handover": [
+      0.18,
+      0.0,
+      0.12
+    ],
+    "survey_yaw": 0.0,
+    "survey": [
+      [
+        "left",
+        0.18,
+        0.1,
+        0.2
+      ],
+      [
+        "centre",
+        0.2,
+        0.0,
+        0.2
+      ],
+      [
+        "right",
+        0.18,
+        -0.1,
+        0.2
+      ]
+    ],
+    "survey_settle_s": 0.4
+  },
+  "motion": {
+    "step": 0.02,
+    "dt": 0.12,
+    "max_ticks_per_step": 45,
+    "chunk": 0.3,
+    "chunk_tries": 6,
+    "arrive_tol": 0.004,
+    "settle_tol": 6,
+    "settle_iters": 12,
+    "settle_wait_s": 0.2,
+    "settle_gain": 0.6,
+    "settle_window": 150,
+    "range_margin": 20,
+    "load_abort": 550,
+    "goal_reset_gap": 300,
+    "fault_recheck_s": 0.15,
+    "unload_wait_s": 0.8,
+    "reconfig_note": 0.3
+  },
+  "gripper": {
+    "open_max": 0.96,
+    "open_enough": 0.88,
+    "closed_norm": 0.045,
+    "squeeze_ticks": 45,
+    "squeeze_slack": 15,
+    "open_stop_slack": 25,
+    "step_fraction": 0.06,
+    "step_wait_s": 0.1,
+    "stall_lag": 200,
+    "stall_still": 6,
+    "stall_reads": 3,
+    "after_wait_s": 0.35,
+    "squeeze_wait_s": 0.3,
+    "jaw_opening": 0.045,
+    "max_grip_width": 0.04
+  },
+  "ik": {
+    "leans_small": [
+      0,
+      10,
+      -10,
+      20,
+      -20,
+      30,
+      -30
+    ],
+    "leans_large": [
+      40,
+      -40,
+      50,
+      60,
+      70
+    ],
+    "restarts": 12,
+    "iterations": 300,
+    "pos_tol": 0.002,
+    "rot_tol": 0.02,
+    "rot_weight": 0.1,
+    "damping": 0.0001,
+    "max_step": 0.08,
+    "limit_margin": 0.001,
+    "seed": 3,
+    "pos_only_attempts": 16,
+    "pos_only_tol": 0.003
+  },
+  "pick": {
+    "default_height": 0.02,
+    "hover_above": 0.05,
+    "hover_min": 0.07,
+    "grasp_above_mid": 0.008,
+    "flat_below": 0.01,
+    "flat_z": 0.006,
+    "flat_step": 0.01,
+    "backoff_z": 0.09,
+    "close_view_z": 0.09
+  },
+  "drop": {
+    "default_z": 0.17,
+    "box_z": 0.18,
+    "min_z_over_box": 0.15,
+    "line_min_tcp_z": 0.12,
+    "line_top_gap": 0.02,
+    "line_points": 8,
+    "deadband_px": 14,
+    "line_extend": 0.3,
+    "center_max_shift": 0.25,
+    "center_min_z": 0.15,
+    "default_box_height": 0.1
+  },
+  "stir": {
+    "default_radius": 0.015,
+    "min_radius": 0.003,
+    "max_radius": 0.04,
+    "default_turns": 3,
+    "max_turns": 10,
+    "max_tool_length": 0.2,
+    "default_clearance": 0.08,
+    "points_per_turn": 12,
+    "dt": 0.06,
+    "tip_iterations": 3
+  },
+  "_to_verify": [
+    "bus_serial: the serial of this arm's servo bus as Station reports it",
+    "kinematics.zero_ticks and kinematics.signs: raw servo tick at the URDF zero pose and the direction of each arm joint (move one joint at a time by a few degrees and compare with tcp_pose)",
+    "kinematics.wrist_camera.T_link_camera and fovy: where the wrist camera sits on gripper_frame_link (PLACEHOLDER values here)",
+    "cameras.wrist / cameras.overview: camera hash prefixes on this machine (open the cam_stream page)",
+    "workspace, poses.park, poses.survey, poses.carry_z: tune to this arm's reach (values here are scaled guesses)",
+    "gripper.*: open_max, closed_norm and squeeze_ticks depend on the jaw mechanics; pick.flat_z on the fingertip length"
+  ]
+}

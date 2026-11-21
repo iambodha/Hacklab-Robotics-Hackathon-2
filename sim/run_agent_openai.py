@@ -142,7 +142,8 @@ async def run(a) -> int:
             await mcp.initialize()
             tools = (await mcp.list_tools()).tools
             names = {t.name for t in tools}
-            system = (HERE / "OPERATOR_REAL.md").read_text()
+            import operator_prompt
+            system = operator_prompt.render()
             if a.tool_mode == "json":
                 system += PROTOCOL % tool_doc(tools)
             messages = [{"role": "system", "content": system},

@@ -14,6 +14,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import threading
 import time
 import urllib.request
@@ -24,7 +25,14 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 SESS = HERE / "real_sessions"
 CAM_URL = os.environ.get("ROBOT_CAM_URL", "http://127.0.0.1:8890")
-CAMS = {"wrist": os.environ.get("ROBOT_WRIST_CAM", "e091eeda"), "overview": os.environ.get("ROBOT_OVERVIEW_CAM", "5cd55831")}
+def _cams() -> dict:
+    sys.path.insert(0, str(HERE))
+    import operator_prompt
+    c = operator_prompt.profile()["cameras"]
+    return {"wrist": os.environ.get("ROBOT_WRIST_CAM", c["wrist"]), "overview": os.environ.get("ROBOT_OVERVIEW_CAM", c["overview"])}
+
+
+CAMS = _cams()
 RUN = {"proc": None, "file": None, "t0": None, "task": "", "model": "", "stopped": False}
 LOCK = threading.Lock()
 
@@ -127,7 +135,8 @@ def enhance(rough: str) -> str:
             seen.append(name)
         except Exception:
             pass
-    system = ENHANCER % (HERE / "OPERATOR_REAL.md").read_text()
+    import operator_prompt
+    system = ENHANCER % operator_prompt.render()
     if len(seen) < 2:
         system += f"\n(Only these images could be captured: {seen or 'none'}; work from the text for the rest.)"
     cmd = ["claude", "-p", "The person's instruction: " + rough, "--model", "sonnet", "--effort", "low",
@@ -140,8 +149,14 @@ def enhance(rough: str) -> str:
     return out
 
 
+def _profile() -> dict:
+    sys.path.insert(0, str(HERE))
+    import operator_prompt
+    return operator_prompt.profile()
+
+
 PARK = """
-import asyncio, os, sys
+import asyncio, json, os, sys
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 async def main():
@@ -149,7 +164,7 @@ async def main():
     async with stdio_client(p) as (r, w):
         async with ClientSession(r, w) as s:
             await s.initialize()
-            res = await s.call_tool("move_tcp", {"x": 0.0, "y": 0.19, "z": 0.06})
+            res = await s.call_tool("move_tcp", dict(zip("xyz", json.loads(sys.argv[2]))))
             print(res.content[0].text.splitlines()[0])
 asyncio.run(main())
 """
@@ -158,7 +173,7 @@ asyncio.run(main())
 def park():
     if running() or other_agent_running():
         return "stop the run first"
-    r = subprocess.run(["uv", "run", "-q", "--no-project", "--with", "mcp>=1.12,<2", "python", "-c", PARK, str(HERE / "run_real_server.sh")],
+    r = subprocess.run(["uv", "run", "-q", "--no-project", "--with", "mcp>=1.12,<2", "python", "-c", PARK, str(HERE / "run_real_server.sh"), json.dumps(_profile()["poses"]["park"])],
                        cwd=REPO, env=env(), capture_output=True, text=True, timeout=120)
     lines = [l for l in r.stdout.splitlines() if l.strip()]
     return lines[-1] if lines else ("park failed: " + r.stderr.strip()[-200:])
