@@ -803,32 +803,92 @@ async def release_here() -> list:
     return [f"RELEASED at [{tcp[0]:.3f}, {tcp[1]:.3f}, {tcp[2]:.3f}].\n" + "\n".join(log)] + await _views()
 
 
+def _solve_tip(tip, length: float, seed, yaw: float):
+    """Joints that put the TIP of a tool held along the gripper axis (length below the TCP) at `tip`."""
+    sol = seed
+    for _ in range(3 if length > 0 else 1):
+        _, rot = IK.fk(sol)
+        nxt, _ = _solve_tcp(np.asarray(tip, float) - length * rot[:, 1], sol, yaw)     # rot[:, 1] = approach axis
+        if nxt is None:
+            return None
+        sol = nxt
+    return sol
+
+
+def _tip_of(q, length: float):
+    pos, rot = IK.fk(q)
+    return pos + length * rot[:, 1]
+
+
+async def _go(sol, settle: bool, dt: float = 0.12) -> str:
+    return await _drive({i + 1: float(v) for i, v in enumerate(to_norm(sol))}, 0.02, dt, settle=settle)
+
+
 @server.tool(annotations={"destructiveHint": True})
 @recorded
-async def stir(x: float, y: float, z: float, radius: float = 0.015, turns: int = 3) -> list:
-    """Move the gripper tip in smooth horizontal circles: centre (x, y), height z, `turns` times round, then back
-    to the centre. For stirring with a tool held pointing DOWN in the jaws: the tool's tip is then (tool length
-    below the jaws) under the gripper, so choose z = cup rim height + 0.03 or more and a radius well inside the
-    cup (at most 0.04). The gripper keeps its rotation. Stops and holds on contact or a tracking error."""
-    radius, turns = float(min(max(radius, 0.003), 0.04)), int(min(max(turns, 1), 10))
-    out = await move_tcp(x=x + radius, y=y, z=z, top_down=True)
-    if _stopped(out):
-        return ["STIR not started. " + _first(out)] + await _views()
+async def stir(x: float, y: float, z: float, radius: float = 0.015, turns: int = 3, tool_length: float = 0.0,
+               clearance: float = 0.08) -> list:
+    """Stir: move the TIP of a tool held pointing down in the jaws in smooth horizontal circles around (x, y) at
+    height z, `turns` times, then lift it out. tool_length = how far the tool sticks out below the fingertips
+    (metres; 0 = stir with the gripper tip itself). The tool is steered by its tip, so a leaning gripper is
+    compensated. Sequence: tip to (x, y, z + clearance) above the cup, straight down to z, circles, straight back
+    up. For a cup choose z = rim height - 0.03 (tip inside the cup), clearance so that z + clearance is above the
+    rim, and a radius of at most a third of the cup's inner width (max 0.04). Stops and holds on contact."""
+    radius, turns, L = float(min(max(radius, 0.003), 0.04)), int(min(max(turns, 1), 10)), float(min(max(tool_length, 0.0), 0.20))
     q, _ = await measured()
-    yaw = _yaw_now(q)
-    seed, n_pts = q, 12
-    for k in range(1, turns * n_pts + 1):
-        ang = 2 * np.pi * k / n_pts
-        wp = np.array([x + radius * np.cos(ang), y + radius * np.sin(ang), z])
-        sol, _ = _solve_tcp(wp, seed, yaw)
-        if sol is None:
-            return [f"STIR stopped after {k / n_pts:.1f} turns: {wp.round(3).tolist()} is not reachable."] + await _views()
-        res = await _drive({i + 1: float(v) for i, v in enumerate(to_norm(sol))}, 0.02, 0.06, settle=False)
+    yaw, seed = _yaw_now(q), q
+    # IK runs in a worker thread: solving a whole path inline froze the event loop and the Station reads timed out
+    above = await asyncio.to_thread(_solve_tip, [x, y, z + clearance], L, seed, yaw)
+    down = await asyncio.to_thread(_solve_tip, [x, y, z], L, above, yaw) if above is not None else None
+    if above is None or down is None:
+        return [f"STIR not started: the tool tip cannot reach {[round(x, 3), round(y, 3), round(z, 3)]} "
+                f"(or the point {clearance} m above it) with tool_length {L}. Nothing moved."] + await _views()
+    tcp_low = IK.fk(down)[0]
+    if tcp_low[2] < MIN_Z:
+        return [f"STIR not started: the gripper itself would have to go to z = {tcp_low[2]:.3f}. Check z and tool_length."] + await _views()
+    log = []
+    for name, sol in (("above the cup", above), ("lowered", down)):
+        for _ in range(4):                       # big moves in chunks of <= 0.3 norm, like move_tcp
+            now = to_norm((await measured())[0])
+            goal = to_norm(sol)
+            if float(np.abs(goal - now).max()) <= 0.3:
+                break
+            res = await _drive({i + 1: float(now[i] + np.clip(goal[i] - now[i], -0.3, 0.3)) for i in range(7)}, 0.02, 0.12, settle=False)
+            if res.startswith("ABORTED"):
+                return [f"STIR stopped on the way ({name}). " + res] + await _views()
+        res = await _go(sol, settle=True)
         if res.startswith("ABORTED"):
-            return [f"STIR stopped after {k / n_pts:.1f} turns. " + res] + await _views()
-        seed = sol
-    back = await move_tcp(x=x, y=y, z=z, top_down=True)
-    return [f"stirred {turns} turns of radius {radius * 100:.1f} cm at height {z:.3f}. " + _first(back)] + await _views()
+            return [f"STIR stopped on the way ({name}). " + res] + await _views()
+        log.append(f"{name}: tip at {np.round(_tip_of((await measured())[0], L), 3).tolist()}")
+    seed, n_pts = down, 12
+    def plan():
+        pts = [_solve_tip([x + radius, y, z], L, seed, yaw)]
+        for k in range(1, n_pts + 1):                    # one turn; the same joint path is repeated
+            if pts[-1] is None:
+                break
+            ang = 2 * np.pi * k / n_pts
+            pts.append(_solve_tip([x + radius * np.cos(ang), y + radius * np.sin(ang), z], L, pts[-1], yaw))
+        return pts
+    ring = await asyncio.to_thread(plan)
+    path = ring + ring[1:] * (turns - 1) if all(p is not None for p in ring) else [None]
+    if not path or any(p is None for p in path):
+        log.append("circles not reachable at this radius: stirred nothing")
+    else:
+        for k, sol in enumerate(path):
+            res = await _go(sol, settle=False, dt=0.06)
+            if res.startswith("ABORTED"):
+                log.append(f"stopped after {k / n_pts:.1f} turns: {res}")
+                break
+        else:
+            log.append(f"stirred {turns} turns of radius {radius * 100:.1f} cm with the tip at height {z:.3f}")
+    for sol in (down, above):
+        res = await _go(sol, settle=True)
+        if res.startswith("ABORTED"):
+            log.append("lifting out: " + res)
+            break
+    else:
+        log.append(f"lifted out: tip at {np.round(_tip_of((await measured())[0], L), 3).tolist()}")
+    return ["STIR: " + "; ".join(log)] + await _views()
 
 
 if __name__ == "__main__":
