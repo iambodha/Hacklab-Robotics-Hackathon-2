@@ -161,20 +161,39 @@ def build_xml(layout, out_dir):
     add_gripper_parts(root, layout)
 
     table = layout['table']; tw, td = table['size']; th = table['thickness']
-    cy = table['back_edge_y'] + td/2
-    tbody = ET.SubElement(world, 'body', name='table', pos=fmt([0, cy, 0]))
+    cx, cy = table.get('center_x', 0.0), table['back_edge_y'] + td/2
+    tbody = ET.SubElement(world, 'body', name='table', pos=fmt([cx, cy, 0]))
     ET.SubElement(tbody, 'geom', name='table_top', type='box', pos=fmt([0, 0, -th/2]), size=fmt([tw/2, td/2, th/2]),
                   rgba=fmt(table['rgba']), friction='0.8 0.01 0.001', **STATIC_CONTACT)
+    if table.get('texture'):
+        # Real table top (orthomosaic from the phone video, scripts/realsim/table_texture.py), stretched once over
+        # the top face: image right = +x, image up = +y.
+        asset = root.find('asset')
+        ET.SubElement(asset, 'texture', name='table_tex', type='2d', file=str((HERE / table['texture']).resolve()))
+        ET.SubElement(asset, 'material', name='table_mat', texture='table_tex', texuniform='false', texrepeat='1 1',
+                      specular=str(table.get('specular', 0.15)), shininess='0.3', reflectance='0')
+        ET.SubElement(tbody, 'geom', name='table_skin', type='plane', size=fmt([tw/2, td/2, 0.05]), pos='0 0 0.0002',
+                      material='table_mat', group='0', **NO_CONTACT)
     for i, (sx, sy) in enumerate([(-1, -1), (1, -1), (-1, 1), (1, 1)]):
         ET.SubElement(tbody, 'geom', name=f'table_leg{i}', type='box', size=fmt([0.02, 0.02, (table['height']-th)/2]),
                       pos=fmt([sx*(tw/2-0.05), sy*(td/2-0.05), -th - (table['height']-th)/2]),
                       rgba='0.75 0.75 0.75 1', **STATIC_CONTACT)
-    ET.SubElement(world, 'geom', name='floor', type='plane', size='3 3 0.1', pos=fmt([0, cy, -table['height']]),
-                  rgba='0.45 0.45 0.47 1', **STATIC_CONTACT)
-    ET.SubElement(world, 'light', name='ceiling_a', directional='true', pos=fmt([0.3, cy, 2]), dir='-0.15 -0.1 -1',
-                  diffuse='0.4 0.4 0.4', specular='0.1 0.1 0.1')
-    ET.SubElement(world, 'light', name='ceiling_b', directional='true', pos=fmt([-0.3, cy, 2]), dir='0.2 0.3 -1',
-                  diffuse='0.2 0.2 0.2', specular='0 0 0', castshadow='false')
+    ET.SubElement(world, 'geom', name='floor', type='plane', size='3 3 0.1', pos=fmt([cx, cy, -table['height']]),
+                  rgba=fmt(table.get('floor_rgba', [0.45, 0.45, 0.47, 1])), **STATIC_CONTACT)
+    lighting = layout.get('lighting', {})
+    if 'headlight' in lighting:
+        root.find('visual/headlight').attrib.update({k: fmt(v) for k, v in lighting['headlight'].items()})
+    if 'skybox' in lighting:
+        sky = root.find('asset/texture[@type="skybox"]')
+        sky.attrib.update(rgb1=fmt(lighting['skybox'][0]), rgb2=fmt(lighting['skybox'][1]))
+    lights = lighting.get('lights', [
+        {'name': 'ceiling_a', 'directional': True, 'pos': [0.3, cy, 2], 'dir': [-0.15, -0.1, -1],
+         'diffuse': [0.4, 0.4, 0.4], 'specular': [0.1, 0.1, 0.1]},
+        {'name': 'ceiling_b', 'directional': True, 'pos': [-0.3, cy, 2], 'dir': [0.2, 0.3, -1],
+         'diffuse': [0.2, 0.2, 0.2], 'specular': [0, 0, 0], 'castshadow': False}])
+    for spec in lights:
+        attrs = {k: (str(v).lower() if isinstance(v, bool) else fmt(v)) for k, v in spec.items() if k != 'name'}
+        ET.SubElement(world, 'light', name=spec['name'], **attrs)
 
     for spec in layout['bins']: add_bin(world, spec)
     for spec in layout['fixed']:
@@ -255,6 +274,65 @@ class ArmIK:
                 dq = jac.T @ np.linalg.solve(jac @ jac.T + 1e-4*np.eye(len(e)), e)
                 q[:7] = np.clip(q[:7] + np.clip(dq, -.08, .08), self.low[:7] + .001, self.high[:7] - .001)
         return None
+
+    # Least-lean IK, the same algorithm as sim/real_arm_mcp.py (_target_rot/_solve_rot/_solve_tcp) so the twin
+    # behaves like the hardware: solve() falls back to ignoring orientation, which can leave the gripper steeply
+    # tilted; here the lean away from (or toward) the base is stepped up gradually, near the current joints first.
+    LEAN_SMALL, LEAN_LARGE = (0, 10, -10, 20, -20, 30, -30), (40, -40, 50, 60, 70)
+
+    @staticmethod
+    def target_rot(xyz, lean_deg, yaw_deg):
+        """TCP rotation whose approach axis (+y) points down, leaned lean_deg away from the base (negative: toward it)."""
+        r = np.asarray(xyz[:2], float)
+        r = r / np.linalg.norm(r) if np.linalg.norm(r) > 1e-6 else np.array([0.0, 1.0])
+        t, yw = np.radians(lean_deg), np.radians(yaw_deg)
+        a = np.array([np.sin(t) * r[0], np.sin(t) * r[1], -np.cos(t)])
+        j = np.array([np.cos(yw), np.sin(yw), 0.0])
+        j = j - (j @ a) * a
+        if np.linalg.norm(j) < 1e-6:
+            j = np.array([-r[1], r[0], 0.0])
+        j /= np.linalg.norm(j)
+        return np.column_stack([j, a, np.cross(j, a)])
+
+    def solve_rot(self, xyz, Rt, q0, restarts=0, seed=3):
+        """Damped least squares to position + rotation Rt. First from q0; with restarts, the solution nearest q0."""
+        m, d = self.model, self.data
+        rng = np.random.default_rng(seed)
+        jp, jr = np.zeros((3, m.nv)), np.zeros((3, m.nv))
+        best = None
+        for attempt in range(1 + restarts):
+            q = np.array(q0, float)
+            if attempt:
+                q[:7] = rng.uniform(self.low[:7], self.high[:7])
+            for _ in range(300):
+                d.qpos[self.qids] = q
+                mujoco.mj_kinematics(m, d); mujoco.mj_comPos(m, d)
+                err = np.asarray(xyz) - d.site_xpos[self.site]
+                mujoco.mj_jacSite(m, d, jp, jr, self.site)
+                quat = np.zeros(4)
+                mujoco.mju_mat2Quat(quat, (Rt @ d.site_xmat[self.site].reshape(3, 3).T).reshape(-1))
+                if quat[0] < 0: quat *= -1
+                ln = np.linalg.norm(quat[1:])
+                err_r = quat[1:] * (2 * np.arctan2(ln, quat[0]) / max(ln, 1e-9))
+                if np.linalg.norm(err) < 0.002 and np.linalg.norm(err_r) < 0.02:
+                    if best is None or np.abs(q[:7] - q0[:7]).max() < np.abs(best[:7] - q0[:7]).max():
+                        best = q.copy()
+                    break
+                jac, e = np.vstack([jp[:, self.dofs], .1 * jr[:, self.dofs]]), np.r_[err, .1 * err_r]
+                dq = jac.T @ np.linalg.solve(jac @ jac.T + 1e-4 * np.eye(6), e)
+                q[:7] = np.clip(q[:7] + np.clip(dq, -.08, .08), self.low[:7] + .001, self.high[:7] - .001)
+            if attempt == 0 and best is not None:
+                return best
+        return best
+
+    def solve_least_lean(self, xyz, q0, yaw_deg=0.0):
+        """(q, lean_deg) of the least-leaning reachable pose, preferring one near q0; (None, None) if none."""
+        for leans, restarts in ((self.LEAN_SMALL, 0), (self.LEAN_SMALL, 12), (self.LEAN_LARGE, 0), (self.LEAN_LARGE, 12)):
+            for lean in leans:
+                q = self.solve_rot(xyz, self.target_rot(xyz, lean, yaw_deg), q0, restarts)
+                if q is not None:
+                    return q, lean
+        return None, None
 
 
 def sample_reach(model, samples, top_down_deg, seed=0):
