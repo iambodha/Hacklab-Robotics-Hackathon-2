@@ -26,6 +26,13 @@ Base frame (metres): <<FRAME>>
   jaws stall, lift to z = <<CARRY_Z>>. Says HOLDING or NOT holding, with fresh images. Needs a position from a CLOSE wrist
   view (step 2). For something FLAT pass object_height below <<FLAT_BELOW>>: the fingertips then go down to the table.
   `yaw_deg` turns the jaws about vertical (at 0 they close along x); the gripped side must be narrower than <<MAX_GRIP_CM>> cm.
+- **Touch sense.** Every grip reports a `touch:` line: the jaw gap in mm (the width of what is between the jaws),
+  the motor load (0..1000: how hard it squeezes) and a verdict. `grip_state()` reads the same at any time: call it
+  after a lift or a carry when you are not sure the object is still held. `pick_at(..., grip_force)` and
+  `gripper(0.0, force)` set how hard the jaws squeeze (0.1 .. 1.0, default <<GRIP_FORCE>>): use **0.2-0.3 for hard,
+  smooth or light things** (bottle caps, lids, marbles: squeezed hard they shoot out of the jaws), about 0.5 for
+  wrappers, more only for heavy objects. If an object jumped away when the jaws closed, retry with a LOWER force. If
+  the touch line shows a gap far from the object's real width, you are holding it by a corner: put it down and re-grip.
 - `center_over(u, v, height=<<BOX_H>>)`: with the gripper raised, slide it sideways until it is above the thing at pixel
   (u, v) of the latest wrist image. The returned wrist image has a **green DROP line**: where a released object
   would fall. For a box, aim at the centre of its opening and repeat until the DROP line ends inside the opening.

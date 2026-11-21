@@ -4,9 +4,26 @@
   "mcp_server_name": "elrobot-real",
   "bus_serial": "5B61033301",
   "motors": {
-    "arm": [1, 2, 3, 4, 5, 6, 7],
+    "arm": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
     "gripper": 8,
-    "names": {"1": "j1", "2": "j2", "3": "j3", "4": "j4", "5": "j5", "6": "j6", "7": "j7", "8": "j8"},
+    "names": {
+      "1": "j1",
+      "2": "j2",
+      "3": "j3",
+      "4": "j4",
+      "5": "j5",
+      "6": "j6",
+      "7": "j7",
+      "8": "j8"
+    },
     "ticks_per_turn": 4096,
     "goal_register": 42
   },
@@ -41,12 +58,39 @@
     "direct_move_within": 0.03
   },
   "poses": {
-    "park": [0.0, 0.19, 0.06],
+    "park": [
+      0.0,
+      0.19,
+      0.06
+    ],
     "retreat_min_z": 0.12,
-    "carry_z": 0.20,
-    "handover": [0.0, 0.19, 0.12],
+    "carry_z": 0.2,
+    "handover": [
+      0.0,
+      0.19,
+      0.12
+    ],
     "survey_yaw": 0.0,
-    "survey": [["left", -0.10, 0.19, 0.24], ["centre", 0.0, 0.20, 0.24], ["right", 0.10, 0.20, 0.24]],
+    "survey": [
+      [
+        "left",
+        -0.1,
+        0.19,
+        0.24
+      ],
+      [
+        "centre",
+        0.0,
+        0.2,
+        0.24
+      ],
+      [
+        "right",
+        0.1,
+        0.2,
+        0.24
+      ]
+    ],
     "survey_settle_s": 0.4
   },
   "motion": {
@@ -83,11 +127,38 @@
     "after_wait_s": 0.35,
     "squeeze_wait_s": 0.3,
     "jaw_opening": 0.045,
-    "max_grip_width": 0.04
+    "max_grip_width": 0.04,
+    "torque_limit_register": 48,
+    "torque_full": 1000,
+    "torque_min": 120,
+    "force_default": 0.35,
+    "close_step_fraction": 0.03,
+    "contact_lag": 60,
+    "contact_reads": 3,
+    "squeeze_min_ticks": 12,
+    "jaw_travel_each": 0.0255,
+    "holding_load": 30,
+    "probe_ticks": 30,
+    "probe_wait_s": 0.3,
+    "probe_moved_fraction": 0.6
   },
   "ik": {
-    "leans_small": [0, 10, -10, 20, -20, 30, -30],
-    "leans_large": [40, -40, 50, 60, 70],
+    "leans_small": [
+      0,
+      10,
+      -10,
+      20,
+      -20,
+      30,
+      -30
+    ],
+    "leans_large": [
+      40,
+      -40,
+      50,
+      60,
+      70
+    ],
     "restarts": 12,
     "iterations": 300,
     "pos_tol": 0.002,
@@ -113,7 +184,7 @@
   },
   "drop": {
     "default_z": 0.19,
-    "box_z": 0.20,
+    "box_z": 0.2,
     "min_z_over_box": 0.17,
     "line_min_tcp_z": 0.12,
     "line_top_gap": 0.02,
@@ -122,7 +193,7 @@
     "line_extend": 0.3,
     "center_max_shift": 0.25,
     "center_min_z": 0.15,
-    "default_box_height": 0.10
+    "default_box_height": 0.1
   },
   "stir": {
     "default_radius": 0.015,
@@ -130,7 +201,7 @@
     "max_radius": 0.04,
     "default_turns": 3,
     "max_turns": 10,
-    "max_tool_length": 0.20,
+    "max_tool_length": 0.2,
     "default_clearance": 0.08,
     "points_per_turn": 12,
     "dt": 0.06,

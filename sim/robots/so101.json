@@ -196,7 +196,20 @@
     "after_wait_s": 0.35,
     "squeeze_wait_s": 0.3,
     "jaw_opening": 0.045,
-    "max_grip_width": 0.04
+    "max_grip_width": 0.04,
+    "torque_limit_register": 48,
+    "torque_full": 1000,
+    "torque_min": 120,
+    "force_default": 0.35,
+    "close_step_fraction": 0.03,
+    "contact_lag": 60,
+    "contact_reads": 3,
+    "squeeze_min_ticks": 12,
+    "jaw_travel_each": 0.0255,
+    "holding_load": 30,
+    "probe_ticks": 30,
+    "probe_wait_s": 0.3,
+    "probe_moved_fraction": 0.6
   },
   "ik": {
     "leans_small": [
