@@ -321,7 +321,23 @@ async def _drive(plan: dict, step: float = 0.02, dt: float = 0.12, track_tol: in
 
 # --- cameras -------------------------------------------------------------------------------------------
 
-def _grid(jpeg: bytes) -> bytes:
+def _drop_line(q):
+    """Pixels (in the returned 2x image) of the vertical line from the TCP down to the table: where a released
+    object falls. None when the gripper is low (nothing to drop into from there)."""
+    tcp, _ = IK.fk(q)
+    if tcp[2] < 0.12:
+        return None
+    pos, mat, fovy = _wrist_pose(q)
+    f = (H / 2) / np.tan(np.radians(fovy) / 2)
+    pts = []
+    for z in np.linspace(tcp[2] - 0.02, 0.0, 8):
+        pc = mat.T @ (np.array([tcp[0], tcp[1], z]) - pos)
+        if pc[2] < -1e-6:
+            pts.append(((W / 2 + f * pc[0] / -pc[2]) * IMG_SCALE, (H / 2 - f * pc[1] / -pc[2]) * IMG_SCALE))
+    return pts if len(pts) >= 2 else None
+
+
+def _grid(jpeg: bytes, drop=None) -> bytes:
     im = PILImage.open(io.BytesIO(jpeg)).convert("RGB")
     if IMG_SCALE != 1:
         im = im.resize((im.width * IMG_SCALE, im.height * IMG_SCALE), PILImage.BICUBIC)
@@ -333,9 +349,21 @@ def _grid(jpeg: bytes) -> bytes:
         for y in range(0, im.height, 50):
             draw.line([(0, y), (im.width, y)], fill=(255, 64, 64, 70 if y % 100 else 120))
             if y: draw.text((2, y + 1), str(y), fill=(255, 40, 40, 255))
+    if drop:
+        draw = ImageDraw.Draw(im, "RGBA")
+        draw.line(drop, fill=(0, 230, 0, 255), width=3)
+        for (x, y) in (drop[0], drop[-1]):
+            draw.ellipse([x - 5, y - 5, x + 5, y + 5], outline=(0, 230, 0, 255), width=2)
+        draw.text((drop[-1][0] + 8, drop[-1][1] - 6), "DROP", fill=(0, 200, 0, 255))
     buf = io.BytesIO()
     im.save(buf, format="JPEG", quality=85)
     return buf.getvalue()
+
+
+async def _wrist_image(data: bytes) -> bytes:
+    """Wrist frame with the grid and, when the gripper is raised, the green DROP line."""
+    q, _ = await measured()
+    return _grid(data, _drop_line(q))
 
 
 async def _fresh_frame(prefix: str):
@@ -364,6 +392,28 @@ def _wrist_pose(q):
     return KD.cam_xpos[WRIST_ID].copy(), KD.cam_xmat[WRIST_ID].reshape(3, 3).copy(), float(MODEL.cam_fovy[WRIST_ID])
 
 
+VIEWS: dict[int, tuple] = {}     # view id -> (camera position, rotation, fovy) of each wrist image handed out
+
+
+VIEWS_FILE = LOG_DIR / "views.json"      # kept on disk so view numbers survive a server restart
+try:
+    VIEWS.update({int(k): (np.array(v[0]), np.array(v[1]).reshape(3, 3), float(v[2])) for k, v in json.loads(VIEWS_FILE.read_text()).items()})
+except (OSError, ValueError):
+    pass
+
+
+async def _remember_view() -> int:
+    q, _ = await measured()
+    vid = max(VIEWS, default=0) + 1
+    VIEWS[vid] = _wrist_pose(q)
+    keep = sorted(VIEWS)[-60:]
+    try:
+        VIEWS_FILE.write_text(json.dumps({k: [VIEWS[k][0].tolist(), VIEWS[k][1].reshape(-1).tolist(), VIEWS[k][2]] for k in keep}))
+    except OSError:
+        pass
+    return vid
+
+
 def _ray(pos, mat, fovy, u, v):
     """Same pinhole maths as sim_arm_mcp.pixel_ray (MuJoCo camera: looks along -z, y up)."""
     u, v = u / IMG_SCALE, v / IMG_SCALE
@@ -386,7 +436,7 @@ async def look() -> list:
             out.append(f"{label} {prefix}: {note}, not shown")
             continue
         out.append(f"{label} {prefix} {note}, captured {time.strftime('%H:%M:%S')}")
-        out.append(Image(data=_grid(data), format="jpeg"))
+        out.append(Image(data=await _wrist_image(data) if prefix == WRIST_CAM else _grid(data), format="jpeg"))
     out.append(am._table(await am._read()))
     return out
 
@@ -546,12 +596,17 @@ async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg:
 
 @server.tool(annotations={"readOnlyHint": True})
 @recorded
-async def pixel_to_table(camera: str, u: float, v: float, height: float = 0.0) -> str:
+async def pixel_to_table(camera: str, u: float, v: float, height: float = 0.0, view: str = "latest") -> str:
     """Turn a pixel of a look() image into a base-frame point using the camera calibration (wrist: CAD mount pose
     + current joints; overview: fixed extrinsics, once measured). (u, v) are pixel coordinates in the returned
     598x448 image (red grid labels), u right, v down. Returns where the viewing ray hits the plane z = height
-    (0 = table top; e.g. 0.01 for the centre of a 2 cm cube, ~0.09 for a box rim)."""
-    if camera == "wrist":
+    (0 = table top; e.g. 0.01 for the centre of a 2 cm cube, ~0.10 for a box rim). view="latest" means the wrist
+    image taken where the arm is NOW; for a pixel of a survey() image pass view="left", "centre" or "right"."""
+    if camera == "wrist" and view != "latest":
+        if view not in SURVEY_VIEWS:
+            raise ValueError(f"view must be 'latest' or one of {sorted(SURVEY_VIEWS)} (the images of the last survey())")
+        pos, mat, fovy = SURVEY_VIEWS[view]
+    elif camera == "wrist":
         q, _ = await measured()
         pos, mat, fovy = _wrist_pose(q)
     elif camera == "overview":
@@ -576,7 +631,10 @@ async def _views(which=("wrist", "overview")) -> list:
     for label, prefix in (("wrist", WRIST_CAM), ("overview", OVERVIEW_CAM)):
         if label in which:
             data, note = await _fresh_frame(prefix)
-            out += [f"{label} camera {note}", Image(data=_grid(data), format="jpeg")] if data else [f"{label} camera: {note}"]
+            if data:
+                out += [f"{label} camera {note}", Image(data=await _wrist_image(data) if label == "wrist" else _grid(data), format="jpeg")]
+            else:
+                out.append(f"{label} camera: {note}")
     return out
 
 
@@ -655,6 +713,72 @@ async def drop_at(x: float, y: float, z: float = 0.19) -> list:
     out = await move_tcp(x=0.0, y=0.19, z=max(z, 0.12), top_down=True)
     log.append("retreat: " + _first(out))
     return ["RELEASED at " + str([round(x, 3), round(y, 3), round(z, 3)]) + ".\n" + "\n".join(log)] + await _views()
+
+
+SURVEY_VIEWS: dict[str, tuple] = {}     # camera pose of each image of the last survey()
+SURVEY_POSES = (("left", -0.10, 0.19, 0.24), ("centre", 0.0, 0.20, 0.24), ("right", 0.10, 0.20, 0.24))
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+async def survey() -> list:
+    """Look at the whole workspace: moves the gripper high to three poses (left, centre, right of the arm) and
+    returns one wrist image from each, plus the overview image. Use it at the start to find the items and the
+    boxes: nothing about the table layout is known beforehand. To turn a pixel of one of these three images into a
+    position, call pixel_to_table("wrist", u, v, height, view="left" | "centre" | "right")."""
+    out: list = []
+    st = await am._read()
+    if st[8]["norm"] < 0.88 and st[8]["norm"] <= CLOSED_NORM + 0.01:   # closed and empty jaws hide the middle of the view
+        await gripper(open_fraction=1.0)
+    for name, x, y, z in SURVEY_POSES:
+        r = await move_tcp(x=x, y=y, z=z, top_down=True)
+        if _stopped(r):
+            out.append(f"{name} pose not reached: {_first(r)}")
+            continue
+        await asyncio.sleep(0.4)
+        data, note = await _fresh_frame(WRIST_CAM)
+        if data is None:
+            out.append(f"{name}: wrist camera {note}")
+            continue
+        SURVEY_VIEWS[name] = _wrist_pose((await measured())[0])
+        out += [f'wrist image "{name}" (gripper at x={x}, y={y}, z={z}); for its pixels use pixel_to_table(..., view="{name}")',
+                Image(data=await _wrist_image(data), format="jpeg")]
+    out += await _views(("overview",))
+    return out
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+async def center_over(u: float, v: float, height: float = 0.10) -> list:
+    """Move the gripper sideways, keeping its height, so that it ends up above the thing seen at pixel (u, v) of
+    the LATEST wrist image (for a box: the centre of its opening). height is a rough guess of that thing's height
+    above the table (box rim: about 0.10); it does not need to be right, because you check the result: the returned
+    wrist image has a green DROP line showing where a released object would fall. Repeat center_over on the new
+    image until the DROP line ends inside the box opening, then call release_here()."""
+    q, _ = await measured()
+    tcp, _ = IK.fk(q)
+    origin, d = _ray(*_wrist_pose(q), float(u), float(v))
+    if d[2] > -1e-3:
+        return [f"the ray through ({u}, {v}) does not go down: pick a pixel on the box opening"]
+    p = origin + ((height - origin[2]) / d[2]) * d
+    shift = float(np.hypot(p[0] - tcp[0], p[1] - tcp[1]))
+    if shift > 0.25:
+        return [f"that pixel is {shift:.2f} m away sideways, which is too far for one correction: move_tcp closer first"]
+    out = await move_tcp(x=float(p[0]), y=float(p[1]), z=float(max(tcp[2], 0.15)), top_down=True)
+    return [f"moved {shift * 100:.1f} cm sideways. " + _first(out)] + await _views(("wrist",))
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+async def release_here() -> list:
+    """Open the jaws where the gripper is now (dropping what it holds), then retreat at the same height to above
+    the parking spot. Use it after center_over shows the DROP line inside the box opening."""
+    q, _ = await measured()
+    tcp, _ = IK.fk(q)
+    log = ["release: " + _first(await gripper(open_fraction=1.0))]
+    out = await move_tcp(x=0.0, y=0.19, z=float(max(tcp[2], 0.12)), top_down=True)
+    log.append("retreat: " + _first(out))
+    return [f"RELEASED at [{tcp[0]:.3f}, {tcp[1]:.3f}, {tcp[2]:.3f}].\n" + "\n".join(log)] + await _views()
 
 
 if __name__ == "__main__":

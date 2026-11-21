@@ -31,11 +31,9 @@ LOCK = threading.Lock()
 DEFAULT_TASK = """Sort the loose items on the white table into the two boxes.
 - GARBAGE (wrappers, foil, paper) goes into the WHITE cardboard box.
 - Everything else goes into the GREY box.
-For a flat or crumpled wrapper: if a pick with its real height closes on nothing, retry with object_height 0.005.
-Box drop points (measured, use as given): WHITE box: drop_at(0.155, 0.225, 0.19). GREY box: drop_at(-0.14, 0.17, 0.18).
-One survey look from move_tcp(0.0, 0.20, 0.22) shows the area in front of the arm. At most 3 pick tries per item.
-If a tool call returns an error with no message, call joint_state once and then retry the same call once.
-When finished, park with move_tcp(0.0, 0.19, 0.06) and report DONE with what went where, or BLOCKED."""
+Nothing about positions is given: start with survey() and find the items and both boxes yourself.
+Ignore the printed black-and-white marker sheets on the table.
+When finished, park and report DONE with what went where, or BLOCKED."""
 
 
 def env():
