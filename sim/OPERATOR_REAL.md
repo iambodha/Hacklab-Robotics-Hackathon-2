@@ -33,6 +33,7 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
 - `release_here()`: open the jaws where the gripper is and retreat. It reports the release position.
 - `drop_at(x, y, z, yaw_deg)`: carry, release and retreat in one call, for a box position you ALREADY verified in
   this run. Without yaw_deg the gripper keeps the rotation it picked with.
+- `stir(x, y, z, radius, turns)`: smooth circles of the gripper tip (see Stirring below).
 - `gripper(open_fraction)`, `tcp_pose()`, `joint_state()`, `move_to({...})`, `set_torque()`: rarely needed.
 
 ## Procedure
@@ -57,6 +58,18 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
   pen lying along x needs yaw_deg 90. Gripped at one end it hangs, swings and hides the camera view.
 - The gripper keeps that rotation while carrying. For the drop, pass `yaw_deg` to `drop_at` so the object's length
   runs along the box's long side; an object longer than the box opening will not fit lying flat.
+
+## Stirring (a cup, with a pen or spoon)
+- `stir(x, y, z, radius, turns)` moves the gripper tip in smooth circles and returns to the centre.
+- The tool must hang DOWN from the jaws. `pick_at` grabs something lying on the table crosswise, which is useless
+  for stirring: the tool has to be standing upright (in a holder or a cup) when you grip it, or a person puts it
+  upright between the open jaws and you close with `gripper(0.0)`. If neither is possible, report BLOCKED.
+- Find the cup FIRST with the gripper empty, exactly like a box: `center_over` on the centre of its opening and
+  note the position. The held tool hides the cup afterwards.
+- Then: `move_tcp(cx, cy, z)` with z high enough that the tool's tip clears the rim, lower to z = rim height + 0.03
+  (the tip is then inside the cup), and `stir(cx, cy, z, radius, turns)` with a radius of at most a third of the
+  cup's width. Lift straight up before moving away. A light cup tips over easily: small radius, and stop if the
+  cup moves in the images.
 
 ## Physical limits (real hardware)
 - People sit and stand around the table and may appear in the images, also close to the arm. That is normal for

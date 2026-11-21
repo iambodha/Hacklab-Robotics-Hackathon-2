@@ -803,5 +803,33 @@ async def release_here() -> list:
     return [f"RELEASED at [{tcp[0]:.3f}, {tcp[1]:.3f}, {tcp[2]:.3f}].\n" + "\n".join(log)] + await _views()
 
 
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+async def stir(x: float, y: float, z: float, radius: float = 0.015, turns: int = 3) -> list:
+    """Move the gripper tip in smooth horizontal circles: centre (x, y), height z, `turns` times round, then back
+    to the centre. For stirring with a tool held pointing DOWN in the jaws: the tool's tip is then (tool length
+    below the jaws) under the gripper, so choose z = cup rim height + 0.03 or more and a radius well inside the
+    cup (at most 0.04). The gripper keeps its rotation. Stops and holds on contact or a tracking error."""
+    radius, turns = float(min(max(radius, 0.003), 0.04)), int(min(max(turns, 1), 10))
+    out = await move_tcp(x=x + radius, y=y, z=z, top_down=True)
+    if _stopped(out):
+        return ["STIR not started. " + _first(out)] + await _views()
+    q, _ = await measured()
+    yaw = _yaw_now(q)
+    seed, n_pts = q, 12
+    for k in range(1, turns * n_pts + 1):
+        ang = 2 * np.pi * k / n_pts
+        wp = np.array([x + radius * np.cos(ang), y + radius * np.sin(ang), z])
+        sol, _ = _solve_tcp(wp, seed, yaw)
+        if sol is None:
+            return [f"STIR stopped after {k / n_pts:.1f} turns: {wp.round(3).tolist()} is not reachable."] + await _views()
+        res = await _drive({i + 1: float(v) for i, v in enumerate(to_norm(sol))}, 0.02, 0.06, settle=False)
+        if res.startswith("ABORTED"):
+            return [f"STIR stopped after {k / n_pts:.1f} turns. " + res] + await _views()
+        seed = sol
+    back = await move_tcp(x=x, y=y, z=z, top_down=True)
+    return [f"stirred {turns} turns of radius {radius * 100:.1f} cm at height {z:.3f}. " + _first(back)] + await _views()
+
+
 if __name__ == "__main__":
     server.run()
