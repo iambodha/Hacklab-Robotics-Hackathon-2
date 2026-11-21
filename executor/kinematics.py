@@ -174,7 +174,10 @@ class Kinematics:
             yaw_w = self.yaw_now(seed) if yaw_deg is None else yaw_deg
             yaw_b = yaw_w - self.yaw_offset
             IKP = self.P.ik
-            for leans, restarts in ((IKP.leans_small, 0), (IKP.leans_small, IKP.restarts), (IKP.leans_large, 0), (IKP.leans_large, IKP.restarts)):
+            # Order differs from real_arm_mcp in one place: a larger lean NEAR the seed is tried before random
+            # restarts (other arm configurations) with a small lean. Same result where a near solution exists;
+            # it avoids big reconfigurations and cuts planning from ~6 s to ~0.1 s for high lifts close to the base.
+            for leans, restarts in ((IKP.leans_small, 0), (IKP.leans_large, 0), (IKP.leans_small, IKP.restarts), (IKP.leans_large, IKP.restarts)):
                 for lean in leans:
                     q = self._solve_rot(xyz_b, self._target_rot(xyz_b, lean, yaw_b), seed, restarts)
                     if q is not None:

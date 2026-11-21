@@ -66,6 +66,19 @@ class SimBackend(Backend):
                 i = mid - 1
                 self.arm.data.ctrl[i] = self.arm.rad(i, float(min(1.0, max(0.0, n))))
 
+    def camera_info(self, kin) -> dict:
+        """The twin's overview camera as s2.geometry.Camera info (OpenCV axes) in the WORLD frame."""
+        import numpy as np
+        m, d = self.arm.model, self.arm.data
+        cid = m.camera(CAMS["overview"]).id
+        with self.arm.lock:
+            pos, mat = d.cam_xpos[cid].copy(), d.cam_xmat[cid].reshape(3, 3).copy()
+        w, h = self.arm.layout["image_size"]
+        f = (h / 2) / np.tan(np.radians(m.cam_fovy[cid]) / 2)
+        R = kin.R @ mat @ np.diag([1.0, -1.0, -1.0])
+        return {"overview": {"width": w, "height": h, "fx": f, "fy": f, "cx": w / 2, "cy": h / 2, "R_base_cam": R.tolist(),
+                             "t_base_cam": kin.to_world(pos).tolist(), "source": "twin camera"}}
+
     def truth(self) -> dict:
         """Simulator ground truth: for the independent evaluator only, never shown to an advisor."""
         return self.arm.truth()

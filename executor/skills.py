@@ -217,7 +217,7 @@ class Gripper(Skill):
 class Pick(Skill):
     name, version, freshness_s = "pick", "1", 1.5
     params_doc = {"xyz_world": "[x, y, z] object centre on the table, metres, world frame (z ignored: table)",
-                  "object_height": "metres, default 0.02", "yaw_deg": "world yaw of the jaw axis, default 0",
+                  "object_height": "metres, default 0.02", "yaw_deg": "world yaw of the jaw closing axis (omit = keep current)",
                   "grip_force": "optional 0.1..1"}
     doc = "Open, hover, guarded descent, close with touch, lift to carry height. Uses the table height felt for this setup."
 
@@ -225,7 +225,7 @@ class Pick(Skill):
         P, PK = ctx.P, ctx.P.pick
         x, y, _ = _vec(params.get("xyz_world"))
         h = float(params.get("object_height", PK.default_height))
-        yaw = float(params.get("yaw_deg", 0.0))
+        yaw = float(params["yaw_deg"]) if params.get("yaw_deg") is not None else ctx.kin.yaw_now(ctx.q0)
         hover = np.array([x, y, max(h + PK.hover_above, PK.hover_min)])
         approach, lean, _ = self.travel(ctx, hover, ctx.q0, yaw, label="hover")
         table = ctx.table_z(x, y)

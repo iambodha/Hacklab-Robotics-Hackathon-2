@@ -81,6 +81,11 @@ def evaluate(ex, eid: str) -> Outcome:
         rel = r.achieved.get("release_tcp_world")
         if not rel or not plan:
             return Outcome(eid, "release_error_mm", float("nan"), "mm", None, ev)
+        if truth:
+            objs = [(float(np.linalg.norm(ex.kin.to_world(o["xyz"])[:2] - np.array(rel[:2]))), n, o) for n, o in truth["objects"].items()]
+            d, name, o = min(objs)
+            return Outcome(eid, "object_to_release_xy_m", round(d, 3), "m", bool(o.get("in_bin")) if d < 0.1 else False,
+                           ev + [f"{name} in_bin={o.get('in_bin')} (sim truth)"])
         err = float(np.linalg.norm(np.array(rel) - np.array(plan.target["xyz_world"]))) * 1000
         return Outcome(eid, "release_error_mm", round(err, 1), "mm", None if not joints_fresh else err < 10, ev +
                        ["release point from the measured joints at release; whether the object landed needs a camera check"])
