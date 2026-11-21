@@ -144,7 +144,8 @@ def evaluate(before: np.ndarray, after: np.ndarray, *, H: np.ndarray, board: Boa
     stats["contamination_reduction"] = round(red, 4)
     width = None
     if len(strokes):
-        cleaned = cb["dirt"] & ~ca["dirt"] & ~ca["dark"]
+        # cleaned = stain chroma at least halved: a 50 % threshold keeps pixels that straddle a band edge unbiased
+        cleaned = cb["dirt"] & (ca["chroma"] < 0.5 * cb["chroma"]) & ~ca["dark"]
         width = fit_width(X, Y, valid, cb["dirt"], cleaned, strokes, cfg)
         width.evidence = list(evidence)
         stats["width"] = {"w_observed_mm": None if width.w_observed is None else round(width.w_observed * 1000, 1),
