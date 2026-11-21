@@ -1,0 +1,59 @@
+{
+  "policy": "geometric",
+  "task": "pick_place",
+  "episodes": 1,
+  "successes": 1,
+  "runner": {
+    "decisions": 18,
+    "stale_discarded": 0,
+    "jev_failures": 0,
+    "agree": 0,
+    "compared": 0
+  },
+  "jev_latency": null,
+  "results": [
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.5 cm sideways and -0.2 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 0 deg off cube faces",
+          "steps": 6,
+          "seconds": 23.7
+        },
+        {
+          "goal": "holding the cube",
+          "status": "succeeded",
+          "reason": "holding cube; jaws 0.02",
+          "steps": 2,
+          "seconds": 5.3
+        },
+        {
+          "goal": "cube lifted 8 cm",
+          "status": "succeeded",
+          "reason": "cube at z = 8.1 cm",
+          "steps": 2,
+          "seconds": 3.0
+        },
+        {
+          "goal": "cube carried over the box opening",
+          "status": "failed",
+          "reason": "lost the grip on cube (released at [0.187, 0.068, 0.118])",
+          "steps": 8,
+          "seconds": 40.7
+        }
+      ],
+      "all_goals_succeeded": false,
+      "seconds": 74.7,
+      "cube_truth": {
+        "xyz": [
+          0.1628,
+          0.0846,
+          0.0139
+        ],
+        "in_bin": "grey_box"
+      },
+      "success": true
+    }
+  ]
+}

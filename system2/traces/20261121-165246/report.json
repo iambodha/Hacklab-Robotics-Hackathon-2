@@ -1,0 +1,145 @@
+{
+  "policy": "geometric",
+  "task": "pick_place",
+  "episodes": 3,
+  "successes": 1,
+  "runner": {
+    "decisions": 49,
+    "stale_discarded": 0,
+    "jev_failures": 0,
+    "agree": 0,
+    "compared": 0
+  },
+  "jev_latency": null,
+  "results": [
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.5 cm sideways and -0.2 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 0 deg off cube faces",
+          "steps": 6,
+          "seconds": 24.0
+        },
+        {
+          "goal": "holding the cube",
+          "status": "succeeded",
+          "reason": "holding cube; jaws 0.01",
+          "steps": 2,
+          "seconds": 5.4
+        },
+        {
+          "goal": "cube lifted 8 cm",
+          "status": "succeeded",
+          "reason": "cube at z = 8.1 cm",
+          "steps": 2,
+          "seconds": 3.0
+        },
+        {
+          "goal": "cube carried over the box opening",
+          "status": "succeeded",
+          "reason": "cube is 0.1 cm sideways and -0.9 cm vertically from box + [0.0, 0.0, 10.0] cm",
+          "steps": 8,
+          "seconds": 22.8
+        },
+        {
+          "goal": "cube released inside the box",
+          "status": "succeeded",
+          "reason": "cube is 0.5 cm from the centre of box (inside radius 8.0 cm; belief: released at [0.234, 0.021, 0.113]); jaws 1.00 open (want >= 0.9)",
+          "steps": 1,
+          "seconds": 3.6
+        }
+      ],
+      "all_goals_succeeded": true,
+      "seconds": 60.8,
+      "cube_truth": {
+        "xyz": [
+          0.2508,
+          0.0549,
+          0.0139
+        ],
+        "in_bin": "grey_box"
+      },
+      "success": true
+    },
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.4 cm sideways and -0.6 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 1 deg off cube faces",
+          "steps": 7,
+          "seconds": 31.7
+        },
+        {
+          "goal": "holding the cube",
+          "status": "succeeded",
+          "reason": "holding cube; jaws 0.05",
+          "steps": 2,
+          "seconds": 9.9
+        },
+        {
+          "goal": "cube lifted 8 cm",
+          "status": "succeeded",
+          "reason": "cube at z = 8.0 cm",
+          "steps": 2,
+          "seconds": 12.2
+        },
+        {
+          "goal": "cube carried over the box opening",
+          "status": "failed",
+          "reason": "lost the grip on cube (released at [0.208, 0.04, 0.132])",
+          "steps": 7,
+          "seconds": 21.7
+        }
+      ],
+      "all_goals_succeeded": false,
+      "seconds": 76.8,
+      "cube_truth": {
+        "xyz": [
+          0.2187,
+          0.0391,
+          0.1321
+        ],
+        "in_bin": null
+      },
+      "success": false
+    },
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "succeeded",
+          "reason": "jaws 1.00 open (want >= 0.9); gripper is 0.4 cm sideways and -0.8 cm vertically from cube + [0.0, 0.0, 6.0] cm; jaw axis 0 deg off cube faces",
+          "steps": 7,
+          "seconds": 48.4
+        },
+        {
+          "goal": "holding the cube",
+          "status": "succeeded",
+          "reason": "holding cube; jaws 0.03",
+          "steps": 2,
+          "seconds": 5.2
+        },
+        {
+          "goal": "cube lifted 8 cm",
+          "status": "failed",
+          "reason": "no available motion is predicted to help: cube at z = 7.8 cm. Restate the goal in terms of the gripper or a held object.",
+          "steps": 3,
+          "seconds": 17.8
+        }
+      ],
+      "all_goals_succeeded": false,
+      "seconds": 72.6,
+      "cube_truth": {
+        "xyz": [
+          0.0815,
+          0.2205,
+          0.0762
+        ],
+        "in_bin": null
+      },
+      "success": false
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+# The MuJoCo twin (sim/sim_arm_mcp.py). Versions match the hackathon workspace's envs/simulation.
+mujoco==3.17.0
+numpy==2.5.5
+pillow==13.0.0
+mcp==1.30.0

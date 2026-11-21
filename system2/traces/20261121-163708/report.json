@@ -1,0 +1,38 @@
+{
+  "policy": "geometric",
+  "task": "pick_place",
+  "episodes": 1,
+  "successes": 0,
+  "runner": {
+    "decisions": 1,
+    "stale_discarded": 0,
+    "jev_failures": 0,
+    "agree": 0,
+    "compared": 0
+  },
+  "jev_latency": null,
+  "results": [
+    {
+      "goals": [
+        {
+          "goal": "jaws open, 6 cm above the cube, lined up with its faces",
+          "status": "failed",
+          "reason": "arm error: move_tcp failed: Error executing tool move_tcp: target [0.008, 0.059, 0.453] is outside the workspace (z 0..0.45 m, radius <= 0.45 m)",
+          "steps": 0,
+          "seconds": 0.3
+        }
+      ],
+      "all_goals_succeeded": false,
+      "seconds": 2.4,
+      "cube_truth": {
+        "xyz": [
+          0.025,
+          0.16,
+          0.0099
+        ],
+        "in_bin": null
+      },
+      "success": false
+    }
+  ]
+}
