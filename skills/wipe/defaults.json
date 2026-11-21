@@ -1,0 +1,7 @@
+{
+  "_about": "Seed values of the wipe skill's adaptable parameters (editable by the improvement loop; bounds in bounds.json).",
+  "w_hat": 0.04,
+  "beta": 0.8,
+  "overshoot": 0.01,
+  "passes": 1
+}

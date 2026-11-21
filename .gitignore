@@ -9,3 +9,6 @@ __pycache__/
 robot_mcp/data/*.local.json
 recordings/
 recorder/serve.log
+.scratch/
+skills/.loop/
+skills/data/

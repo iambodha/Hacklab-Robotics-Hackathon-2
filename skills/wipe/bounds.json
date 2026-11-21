@@ -1,0 +1,7 @@
+{
+  "_about": "PROTECTED: bounds of the wipe skill's adaptable parameters. The improvement loop may not edit this file.",
+  "w_hat": {"lo": 0.01, "hi": 0.08, "unit": "m", "about": "estimated effective cleaning width of the held tissue"},
+  "beta": {"lo": 0.5, "hi": 1.0, "unit": "", "about": "lane spacing as a fraction of w_hat (< 1 = overlap)"},
+  "overshoot": {"lo": 0.0, "hi": 0.03, "unit": "m", "about": "how far strokes run past the region ends"},
+  "passes": {"lo": 1, "hi": 3, "unit": "", "about": "passes per lane", "integer": true}
+}
