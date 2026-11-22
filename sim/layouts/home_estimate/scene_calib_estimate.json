@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "created": "2026-11-22T00:43:50",
+  "src": "estimate (sim/estimate_home.py)",
+  "world_frame": "follower base_link origin on table plane, z up, x forward at j1=0",
+  "table": {
+    "plane_world": [0, 0, 1, 0],
+    "height_m": 0.0,
+    "center_xy": [0.3234, -0.0226],
+    "size_xy": [0.92, 0.6848],
+    "yaw_deg": 88.728,
+    "edges_P": {
+      "x_min": -0.7781,
+      "x_max": 0.1419,
+      "y_max": 0.068,
+      "y_min": -0.6168
+    }
+  },
+  "markers": {
+    "dictionary": "DICT_4X4_50",
+    "size_m": 0.1,
+    "items": [
+      {
+        "id": 20,
+        "role": "top",
+        "T_world_marker": [[-0.01783, -0.99984, 0.0, 0.47511], [0.99984, -0.01783, 0.0, -0.35771], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+      },
+      {
+        "id": 21,
+        "role": "top",
+        "T_world_marker": [[0.00116, -1.0, 0.0, 0.47852], [1.0, 0.00116, 0.0, 0.29647], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+      },
+      {
+        "id": 22,
+        "role": "base",
+        "T_world_marker": [[0.0222, -0.99975, 0.0, 0.0561], [0.99975, 0.0222, 0.0, 0.3015], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+      },
+      {
+        "id": 23,
+        "role": "base",
+        "T_world_marker": [[-0.0009, -1.0, 0.0, 0.05269], [1.0, -0.0009, 0.0, -0.35269], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+      }
+    ]
+  },
+  "cameras": {
+    "overview": {
+      "queue": "usbvideo/9ea4cacd5be94751e1eea7be90bcf628",
+      "image_size": [299, 224],
+      "K_normalized": {
+        "fx": 0.49864934527729,
+        "fy": 0.6656078314192397,
+        "cx": 0.5,
+        "cy": 0.5
+      },
+      "dist": [-0.05795821628329199, 0, 0, 0, 0],
+      "T_world_cam": [[0.0016, 0.67151, -0.741, 0.67403], [0.99985, -0.0139, -0.01044, -0.03467], [-0.01731, -0.74087, -0.67143, 0.34867], [0.0, 0.0, 0.0, 1.0]],
+      "reproj_px": 0.609,
+      "fovy_deg": 73.827
+    },
+    "wrist": {
+      "queue": "usbvideo/28ff0ca87978e8f993c2ac64a84d188a",
+      "image_size": [299, 224],
+      "fovy_deg": 73.827,
+      "link": "Gripper_Base_v1_1",
+      "source": "CAD (camera_pose/wrist_camera.json)",
+      "pitch_offset_deg": 0.15,
+      "fovy_source": "overview camera fit (same camera model)"
+    }
+  },
+  "arm": {
+    "bus": "5B61033301",
+    "urdf": "norma-core/hardware/elrobot/simulation/elrobot_follower.urdf",
+    "joint_mapping": "range_fraction (sim/real_joints.py)",
+    "T_world_base": [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+    "raw_ticks_at_estimate": {
+      7: 2204,
+      5: 1854,
+      2: 1015,
+      1: 2006,
+      3: 1907,
+      8: 2169,
+      4: 3196,
+      6: 1944
+    },
+    "ranges_at_estimate": {
+      7: [109, 3987],
+      5: [126, 3970],
+      2: [975, 3121],
+      1: [1056, 3040],
+      3: [879, 3217],
+      8: [1225, 2871],
+      4: [880, 3216],
+      6: [1005, 3091]
+    }
+  },
+  "notes": {
+    "jaw_silhouette_pitch_deg": null,
+    "jaw_iou": [null, null],
+    "base_prior_P": [-0.3048, 0.0479],
+    "markers_guessed": [21],
+    "table_edges_guessed": [],
+    "wrist_markers": [20],
+    "wrist_bare_squares": [],
+    "wrist_reproj_px": 1.15,
+    "base_P": [-0.3027, 0.0494, 3.1638, 0.0026]
+  }
+}

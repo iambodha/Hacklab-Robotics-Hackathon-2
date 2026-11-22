@@ -13,7 +13,8 @@ overload trip: a servo held at its torque limit for ROBOT_SIM_OVERLOAD_S seconds
 reports status 0x20 and goes limp until it is unloaded.
 
 Env: ROBOT_SIM_GUI=1 (MuJoCo viewer), ROBOT_MAX_DELTA (0.35), ROBOT_TRACK_TOL (250),
-ROBOT_GRIPPER_JOINT (j8), ROBOT_SIM_LAYOUT (sim/layout.json), ROBOT_SIM_SEED, ROBOT_SIM_RANDOMIZE (1: random start),
+ROBOT_GRIPPER_JOINT (j8), SIM_LAYOUT / ROBOT_SIM_LAYOUT (venue = sim/layout.json; home = sim/layouts/home.json;
+or a path), ROBOT_SIM_SEED, ROBOT_SIM_RANDOMIZE (1: random start),
 ROBOT_SIM_SKILLS (1; 0 hides task skills such as stir_spoon),
 ROBOT_SIM_OVERLOAD_S (2.0; 0 disables), ROBOT_SIM_TRUTH_LOG (optional JSONL of ground
 truth for a human judge; keep it out of the agent's reach).
@@ -35,7 +36,7 @@ import time
 from pathlib import Path
 
 GUI = os.environ.get('ROBOT_SIM_GUI') == '1'
-os.environ.setdefault('MUJOCO_GL', 'glfw' if GUI else 'osmesa')
+os.environ.setdefault('MUJOCO_GL', 'glfw' if GUI else ('cgl' if sys.platform == 'darwin' else 'osmesa'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import mujoco  # noqa: E402
@@ -46,7 +47,7 @@ from mcp.server.fastmcp import FastMCP, Image  # noqa: E402
 import build_scene  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-LAYOUT = Path(os.environ.get('ROBOT_SIM_LAYOUT', HERE / 'layout.json'))
+LAYOUT = build_scene.layout_path()  # ROBOT_SIM_LAYOUT / SIM_LAYOUT: a path or a name (venue | home)
 MAX_DELTA = float(os.environ.get('ROBOT_MAX_DELTA', '0.35'))
 TRACK_TOL = int(os.environ.get('ROBOT_TRACK_TOL', '250'))
 GRIPPER = os.environ.get('ROBOT_GRIPPER_JOINT', 'j8')
@@ -69,7 +70,7 @@ def spec_quat(spec):
 
 class SimArm:
     def __init__(self):
-        out_dir = HERE / 'generated' if LAYOUT.name == 'layout.json' else HERE / 'generated' / LAYOUT.stem
+        out_dir = build_scene.generated_dir(LAYOUT)
         scene = out_dir / 'workspace.xml'
         sources = [LAYOUT, HERE / 'build_scene.py']
         if not scene.exists() or scene.stat().st_mtime < max(p.stat().st_mtime for p in sources):

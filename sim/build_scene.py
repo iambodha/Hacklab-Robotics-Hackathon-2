@@ -1,6 +1,7 @@
 """Build the MuJoCo twin of the hackathon table: ElRobot follower, table, bins, objects, cameras.
 
-  python3 sim/build_scene.py [--layout sim/layout.json] [--out sim/generated] [--photo overview.jpg]
+  python3 sim/build_scene.py [--layout sim/layout.json | home] [--out sim/generated] [--photo overview.jpg]
+  SIM_LAYOUT=home python3 sim/build_scene.py        # the home table (sim/layouts/home.json)
 
 1. Converts the official URDF (NORMA_CORE_REPO/hardware/elrobot/simulation) to MJCF with
    eight position servos (URDF limits, ST3215 torque limit 2.94 N m, no gravity compensation).
@@ -14,10 +15,11 @@ import argparse
 import json
 import math
 import os
+import sys
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-os.environ.setdefault('MUJOCO_GL', 'osmesa')
+os.environ.setdefault('MUJOCO_GL', 'cgl' if sys.platform == 'darwin' else 'osmesa')
 import mujoco
 import numpy as np
 from PIL import Image
@@ -29,11 +31,33 @@ STATIC_CONTACT = {'contype': '2', 'conaffinity': '1'}
 PAD_CONTACT = {'contype': '4', 'conaffinity': '2'}
 NO_CONTACT = {'contype': '0', 'conaffinity': '0'}
 GRIPPER_TORQUE = 0.4  # N m on rev_motor_08 (0 rad = jaws open)
+CV_TO_MJ = np.diag([1.0, -1.0, -1.0])  # OpenCV camera axes (x right, y down, z forward) <-> MuJoCo (y up, looks along -z)
+
+
+def layout_path(choice=None):
+    """Layout file from a path or a name: None/'venue' -> sim/layout.json, 'home' -> sim/layouts/home.json.
+    Without an argument, env SIM_LAYOUT (or ROBOT_SIM_LAYOUT) decides."""
+    choice = str(choice or os.environ.get('SIM_LAYOUT') or os.environ.get('ROBOT_SIM_LAYOUT') or 'venue')
+    if choice in ('venue', 'layout'):
+        return HERE / 'layout.json'
+    p = Path(choice)
+    if p.exists():
+        return p.resolve()
+    named = HERE / 'layouts' / (choice if choice.endswith('.json') else choice + '.json')
+    if named.exists():
+        return named
+    raise FileNotFoundError(f'layout {choice!r} not found (tried {p} and {named})')
+
+
+def generated_dir(layout_file):
+    """sim/generated for the venue layout, sim/generated/<stem> for any other."""
+    layout_file = Path(layout_file)
+    return HERE / 'generated' if layout_file.name == 'layout.json' else HERE / 'generated' / layout_file.stem
 
 
 def find_urdf():
     candidates = [os.environ.get('NORMA_CORE_REPO', ''), REPO / 'norma-core', REPO.parent / 'norma-core',
-                  '/mnt/d/Robotics-Hackathon/repos/norma-core']
+                  REPO.parent.parent / 'repo/norma-core', '/mnt/d/Robotics-Hackathon/repos/norma-core']
     for base in candidates:
         path = Path(base) / 'hardware/elrobot/simulation/elrobot_follower.urdf'
         if base and path.exists():
@@ -110,7 +134,11 @@ def add_gripper_parts(root, layout):
                       rgba='.15 .15 .16 1', friction='1.2 .02 .002', condim='4', solref='.004 1', solimp='.95 .99 .001',
                       mass='.005', **PAD_CONTACT)
     cam = layout['wrist_camera']
-    T = np.array(json.loads((REPO / cam['pose_file']).read_text())['T_link_camera'])
+    # Inline T_link_cam (e.g. synced from scene_calib.json) or the CAD pose file; link = Gripper_Base_v1_1.
+    T = np.array(cam['T_link_cam'] if 'T_link_cam' in cam else json.loads((REPO / cam['pose_file']).read_text())['T_link_camera'])
+    if cam.get('pitch_offset_deg'):  # mount tilted vs the CAD: rotate about the camera's own x axis
+        a = math.radians(cam['pitch_offset_deg'])
+        T = T.copy(); T[:3, :3] = T[:3, :3] @ np.array([[1, 0, 0], [0, math.cos(a), -math.sin(a)], [0, math.sin(a), math.cos(a)]])
     # OpenCV (x right, y down, z forward) -> MuJoCo camera (x right, y up, looks along -z).
     ET.SubElement(gripper, 'camera', name='wrist_cam', pos=fmt(T[:3, 3]), xyaxes=fmt(np.r_[T[:3, 0], -T[:3, 1]]),
                   fovy=str(cam['fovy']))
@@ -201,8 +229,9 @@ def build_xml(layout, out_dir):
     add_gripper_parts(root, layout)
 
     table = layout['table']; tw, td = table['size']; th = table['thickness']
-    cx, cy = table.get('center_x', 0.0), table['back_edge_y'] + td/2
-    tbody = ET.SubElement(world, 'body', name='table', pos=fmt([cx, cy, 0]))
+    # 'center' [x, y] + 'yaw' (deg, table axes vs the arm frame), or the venue form center_x + back_edge_y.
+    cx, cy = table['center'] if 'center' in table else (table.get('center_x', 0.0), table['back_edge_y'] + td/2)
+    tbody = ET.SubElement(world, 'body', name='table', pos=fmt([cx, cy, 0]), quat=fmt(yaw_quat(table.get('yaw', 0))))
     ET.SubElement(tbody, 'geom', name='table_top', type='box', pos=fmt([0, 0, -th/2]), size=fmt([tw/2, td/2, th/2]),
                   rgba=fmt(table['rgba']), friction='0.8 0.01 0.001', **STATIC_CONTACT)
     if table.get('texture'):
@@ -248,10 +277,65 @@ def build_xml(layout, out_dir):
             add_part(body, part, f"{spec['name']}_g{i}", None if part.get('visual_only') else spec['mass']/len(physical))
         for site_name, pos in sites.items():
             ET.SubElement(body, 'site', name=site_name, pos=fmt(pos), size='.003', rgba='1 0 1 1', group='3')
+    if layout.get('markers'):
+        add_markers(root, layout['markers'], out_dir)
     for cam in layout['cameras']:
-        ET.SubElement(world, 'camera', name=cam['name'], pos=fmt(cam['pos']),
-                      xyaxes=fmt(camera_axes(cam['pos'], cam['lookat'])), fovy=str(cam['fovy']))
+        if 'T_cv' in cam:  # full pose, OpenCV axes, in the sim frame (from a marker calibration)
+            T = np.asarray(cam['T_cv'], float)
+            pos, axes = T[:3, 3], np.r_[T[:3, 0], -T[:3, 1]]
+        else:
+            pos, axes = cam['pos'], camera_axes(cam['pos'], cam['lookat'])
+        ET.SubElement(world, 'camera', name=cam['name'], pos=fmt(pos), xyaxes=fmt(axes), fovy=str(cam['fovy']))
     return root
+
+
+def marker_pose(item):
+    """4x4 T_sim_marker of a marker item: 'T' (4x4), or 'pos' [x, y(, z)] + 'yaw' (deg). Marker axes as in OpenCV
+    ArUco: x = image right, y = image up, z out of the paper."""
+    if 'T' in item:
+        return np.asarray(item['T'], float)
+    a = math.radians(item.get('yaw', 0))
+    T = np.eye(4)
+    T[:2, :2] = [[math.cos(a), -math.sin(a)], [math.sin(a), math.cos(a)]]
+    T[:3, 3] = [*item['pos'][:2], item['pos'][2] if len(item['pos']) > 2 else 0.0]
+    return T
+
+
+def marker_texture(dictionary, marker_id, out_dir, px=240, levels=(0.0, 1.0)):
+    """PNG of an ArUco marker (black square incl. its 1-cell border = the nominal size), generated with OpenCV;
+    levels = (ink, paper) grey levels in 0..1 (printed markers are not pure black and white under room light)."""
+    import cv2
+    ink, paper = (int(round(255 * v)) for v in levels)
+    path = Path(out_dir) / 'markers' / f'{dictionary}_{marker_id}_{ink}_{paper}.png'
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        d = cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, dictionary))
+        img = cv2.aruco.generateImageMarker(d, int(marker_id), px).astype(np.float32) / 255
+        cv2.imwrite(str(path), cv2.cvtColor((ink + img * (paper - ink)).astype(np.uint8), cv2.COLOR_GRAY2BGR))
+    return path
+
+
+def add_markers(root, spec, out_dir):
+    """ArUco markers as visual-only textured planes lying on the table, with the white paper margin around them."""
+    asset, world = root.find('asset'), root.find('worldbody')
+    s, margin = spec['size_m'], spec.get('paper_margin_m', 0.012)
+    levels = spec.get('levels', [0.0, 1.0])
+    for item in spec['items']:
+        T, mid = marker_pose(item), item['id']
+        tex = marker_texture(spec['dictionary'], mid, out_dir, levels=levels)
+        ET.SubElement(asset, 'texture', name=f'aruco_tex_{mid}', type='2d', file=str(tex.resolve()))
+        ET.SubElement(asset, 'material', name=f'aruco_mat_{mid}', texture=f'aruco_tex_{mid}', texuniform='false',
+                      texrepeat='1 1', specular='0.1', shininess='0.2', reflectance='0')
+        quat = np.zeros(4)
+        mujoco.mju_mat2Quat(quat, T[:3, :3].flatten())
+        body = ET.SubElement(world, 'body', name=f'aruco_{mid}', pos=fmt(T[:3, 3]), quat=fmt(quat))
+        ET.SubElement(body, 'geom', name=f'aruco_{mid}_paper', type='box', size=fmt([s/2 + margin, s/2 + margin, 0.0002]),
+                      pos='0 0 0.0003', rgba=fmt(spec.get('paper_rgba', [levels[1]] * 3 + [1])), group='0', **NO_CONTACT)
+        ET.SubElement(body, 'geom', name=f'aruco_{mid}', type='plane', size=fmt([s/2, s/2, 0.01]), pos='0 0 0.0006',
+                      material=f'aruco_mat_{mid}', group='0', **NO_CONTACT)
+        for k, (cx_, cy_) in enumerate([(-1, 1), (1, 1), (1, -1), (-1, -1)]):  # OpenCV corner order: TL, TR, BR, BL
+            ET.SubElement(body, 'site', name=f'aruco_{mid}_c{k}', pos=fmt([cx_ * s/2, cy_ * s/2, 0.0006]),
+                          size='.002', rgba='1 0 0 1', group='4')
 
 
 def add_reach_rings(root, radii):
@@ -480,11 +564,12 @@ def build(layout_path=HERE / 'layout.json', out_dir=HERE / 'generated', photo=No
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('--layout', type=Path, default=HERE / 'layout.json')
-    p.add_argument('--out', type=Path, default=HERE / 'generated')
+    p.add_argument('--layout', help='layout file or name (venue | home); default: env SIM_LAYOUT, else venue')
+    p.add_argument('--out', type=Path, help='output folder (default sim/generated[/<layout name>])')
     p.add_argument('--photo', type=Path, help='real overview photo to put next to the overview_cam render')
     args = p.parse_args()
-    print(json.dumps(build(args.layout, args.out, args.photo)[1], indent=2))
+    path = layout_path(args.layout)
+    print(json.dumps(build(path, args.out or generated_dir(path), args.photo)[1], indent=2))
 
 
 if __name__ == '__main__':

@@ -1,0 +1,168 @@
+{
+  "_notes": [
+    "Home table twin (2026-11-22). Select it with SIM_LAYOUT=home (sim/layout.json stays the venue table).",
+    "Frame = the sim frame (URDF base_link on the table top): +y = arm forward at j1 = 0, +z up. The contract world of scene_calib.json has +x forward: p_sim = T_sim_world @ p_world.",
+    "Every calibrated block carries 'src': 'estimate' (sim/estimate_home.py, from the live cameras) or 'scene_calib' (perception's calibration via sim/sync_from_calib.py). 'fixed' = hand-set.",
+    "Re-sync: python3 sim/sync_from_calib.py ../perception/calibration/scene_calib.json ; re-estimate: python3 sim/estimate_home.py",
+    "Sizes: table/bin sizes are full lengths; 'fixed' and object part sizes are MuJoCo half-sizes."
+  ],
+  "table": {
+    "size": [0.92, 0.6848],
+    "center": [0.0226, 0.3234],
+    "yaw": 178.728,
+    "thickness": 0.025,
+    "height": 0.75,
+    "rgba": [0.8, 0.69, 0.57, 1],
+    "floor_rgba": [0.42, 0.36, 0.3, 1],
+    "src": "estimate",
+    "calib_extent_inside": false,
+    "texture": "assets/home_table_texture.png",
+    "specular": 0.05,
+    "texture_meta": {
+      "size_px": [460, 342],
+      "mm_per_px": 2.0,
+      "seen_fraction": 0.849,
+      "filled_fraction": 0.361,
+      "src": "fit_appearance",
+      "from": "/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/twin/sim/layouts/home_estimate/overview.jpg"
+    }
+  },
+  "lighting": {
+    "headlight": {
+      "ambient": [0.751, 0.751, 0.751],
+      "diffuse": [0, 0, 0],
+      "specular": [0, 0, 0]
+    },
+    "skybox": [[0.75, 0.75, 0.74], [0.45, 0.43, 0.4]],
+    "lights": [
+      {
+        "name": "key",
+        "directional": true,
+        "pos": [0.0, 0.3, 2.0],
+        "dir": [0.1, 0.2, -1.0],
+        "diffuse": [0.25, 0.25, 0.25],
+        "specular": [0.03, 0.03, 0.03],
+        "castshadow": true
+      }
+    ],
+    "src": "fit_appearance",
+    "_about": "gain fitted to the real overview (table colour error 0.16 -> 0.12 rgb)"
+  },
+  "arm_rgba": [0.12, 0.12, 0.13, 1],
+  "arm": {
+    "joint_mapping": {
+      "mode": "range_fraction"
+    },
+    "bus": "5B61033301"
+  },
+  "rest_pose": [-0.066, -1.552, -0.212, 1.723, 0.02, 0.037, 0.005, 0.939],
+  "_rest_pose_about": "the real follower's (limp, folded) pose when the estimate was taken (sim/layouts/home_estimate/joints.json)",
+  "bins": [],
+  "objects": [],
+  "fixed": [
+    {
+      "name": "cam_stand_pole",
+      "type": "cylinder",
+      "pos": [0.0248, 0.6772, 0.1451],
+      "size": [0.008, 0.2451],
+      "yaw": 0,
+      "rgba": [0.05, 0.05, 0.05, 1],
+      "src": "scene_calib",
+      "_about": "overview camera stand just beyond the near edge, under the camera: the wrist camera sees it rise from the table edge; the overview camera does not see it"
+    }
+  ],
+  "markers": {
+    "dictionary": "DICT_4X4_50",
+    "size_m": 0.1,
+    "items": [
+      {
+        "id": 20,
+        "role": "top",
+        "T": [[-0.99998, 0.00588, 0.0, 0.35794], [-0.00588, -0.99998, 0.0, 0.46118], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "src": "scene_calib",
+        "rms_mm": 1.439
+      },
+      {
+        "id": 21,
+        "role": "top",
+        "T": [[-0.99979, 0.02072, 0.0, -0.30356], [-0.02072, -0.99979, 0.0, 0.45907], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "src": "estimate",
+        "note": "id hidden in the overview (cable over the bits): parallelogram from the other three moved with markers [20, 22, 23] onto scene_calib"
+      },
+      {
+        "id": 22,
+        "role": "base",
+        "T": [[-0.99804, 0.06262, 0.0, -0.30188], [-0.06262, -0.99804, 0.0, 0.03188], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "src": "scene_calib",
+        "rms_mm": 4.566
+      },
+      {
+        "id": 23,
+        "role": "base",
+        "T": [[-0.99988, 0.01579, 0.0, 0.3499], [-0.01579, -0.99988, 0.0, 0.06111], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "src": "scene_calib",
+        "rms_mm": 1.522
+      }
+    ],
+    "levels": [0.133, 0.723]
+  },
+  "cameras": [
+    {
+      "name": "overview_cam",
+      "fovy": 74.24,
+      "src": "scene_calib",
+      "T_cv": [[-0.99958, -0.01506, 0.02475, 0.02368], [-0.02807, 0.71494, -0.69863, 0.64721], [-0.00718, -0.69903, -0.71506, 0.39026], [0.0, 0.0, 0.0, 1.0]],
+      "queue": "usbvideo/9ea4cacd5be94751e1eea7be90bcf628",
+      "K_normalized": {
+        "fx": 0.494907,
+        "fy": 0.660612,
+        "cx": 0.498328,
+        "cy": 0.497768
+      },
+      "dist": [0.0, 0.0, 0.0, 0.0, 0.0],
+      "reproj_px": 0.536
+    },
+    {
+      "name": "top_cam",
+      "pos": [0.0, 0.3, 1.1],
+      "lookat": [0.0, 0.29, 0.0],
+      "fovy": 55
+    },
+    {
+      "name": "side_cam",
+      "pos": [-1.0, 0.3, 0.55],
+      "lookat": [0.0, 0.25, 0.1],
+      "fovy": 45
+    }
+  ],
+  "wrist_camera": {
+    "pose_file": "camera_pose/wrist_camera.json",
+    "fovy": 75.729,
+    "src": "scene_calib",
+    "K_normalized": {
+      "fx": 0.481789,
+      "fy": 0.643102,
+      "cx": 0.498328,
+      "cy": 0.497768
+    },
+    "dist": [0.0, 0.0, 0.0, 0.0, 0.0],
+    "queue": "usbvideo/28ff0ca87978e8f993c2ac64a84d188a",
+    "pose_source": "CAD (camera_pose/wrist_camera.json)",
+    "T_link_cam": [[0.999967, -0.003511, 0.007382, 0.001517], [-0.008175, -0.429537, 0.903012, 0.022752], [0.0, -0.903043, -0.429551, 0.06075], [0.0, 0.0, 0.0, 1.0]],
+    "link": "Gripper_Base_v1_1"
+  },
+  "image_size": [299, 224],
+  "reach": {
+    "show_rings": false,
+    "samples": 150000,
+    "top_down_tolerance_deg": 30,
+    "position_tolerance": 0.015,
+    "bin_drop_clearance": 0.05
+  },
+  "T_sim_world": {
+    "value": [[-0.0, -1.0, -0.0, -0.0], [1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+    "src": "scene_calib",
+    "_about": "p_sim = T_sim_world @ p_world (contract world: x forward; sim/URDF: y forward)"
+  },
+  "_synced_from": ["/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/perception/calibration/scene_calib.json"]
+}
