@@ -8,6 +8,7 @@
   python -m generaloid.comms client --url URL --robot-id human-ops peers | requests | log
   python -m generaloid.comms mcp    [--robot-id ID] [--connector NAME]   # stdio MCP server with only comms_* tools
   python -m generaloid.comms twin   [--robot-id ID]                      # MuJoCo twin MCP + comms_* tools
+  python -m generaloid.comms demo   [--twin] [--log hub.jsonl]           # A hosts, B asks for help, A helps
 
 The join token comes from $GENERALOID_COMMS_TOKEN or --token-file, never from the command line (other users of the
 machine can read command lines in `ps`). `hub` generates one if neither is set and writes it to --token-file (0600)
@@ -20,7 +21,6 @@ import json
 import os
 import secrets
 import sys
-import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -100,6 +100,11 @@ def cmd_twin(args):
     main(args.robot_id)
 
 
+def cmd_demo(args):
+    from .demo import main as demo_main
+    demo_main((["--twin"] if args.twin else []) + (["--log", args.log] if args.log else []))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m generaloid.comms", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -130,6 +135,10 @@ def main(argv=None):
     t = sub.add_parser("twin", help="MuJoCo twin MCP server + comms tools")
     t.add_argument("--robot-id")
     t.set_defaults(fn=cmd_twin)
+    d = sub.add_parser("demo", help="two robot MCP processes on localhost: B asks A for help")
+    d.add_argument("--twin", action="store_true")
+    d.add_argument("--log")
+    d.set_defaults(fn=cmd_demo)
     args = ap.parse_args(argv)
     args.fn(args)
 

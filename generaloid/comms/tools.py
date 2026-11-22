@@ -68,7 +68,7 @@ def profile_from_connector(connector, robot_id: str | None = None) -> dict:
     return {
         "robot_id": _slug(rid),
         "connector": str(name),
-        "display_name": prof.get("display_name") or str(name),
+        "display_name": prof.get("display_name") or getattr(connector, "display_name", None) or str(name),
         "capabilities": prof.get("capabilities") or _names(getattr(connector, "capabilities", None)),
         "skills": prof.get("skills") or _names(getattr(connector, "skills", None)),
         "frames": prof.get("frames") or getattr(connector, "frames", None) or DEFAULT_FRAMES,

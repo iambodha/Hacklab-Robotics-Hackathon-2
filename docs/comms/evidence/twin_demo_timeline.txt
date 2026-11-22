@@ -1,0 +1,17 @@
+[ 2.70s] -: two MuJoCo twin MCP server processes up
+[ 2.86s] A: comms_host -> hub at http://127.0.0.1:59026 (A is elrobot-a)
+[ 2.94s] B: comms_join -> joined as so101-standin-b; peers: ['elrobot-a']
+[ 2.94s] B: comms_peers -> elrobot-a: connector=elrobot, skills=['twist_cap', 'check_cap', 'stir_spoon', 'move_tcp', 'gripper', 'look']
+[ 2.95s] B: comms_send help -> request 7b3b549c state=open, deadline in 120.0 s
+[ 2.95s] B: comms_send observation -> bottle pose in the shared table frame
+[ 2.95s] A: comms_inbox -> help from so101-standin-b: "hold the bottle body still while I unscrew the cap" (untrusted; A's agent decides)
+[ 2.96s] A: comms_reply accept -> state=accepted
+[ 2.96s] A: comms_reply progress 0.3 (approach)
+[ 3.47s] A: gripper(0.9) on its own twin
+[ 3.47s] A: gripper(0.2) REFUSED by A's own envelope: j8: 0.900->0.200 exceeds max delta 0.35; use waypoints
+[ 5.29s] A: gripper(0.6), gripper(0.3): closes in waypoints
+[ 5.30s] A: comms_reply progress 0.8 (holding)
+[ 5.30s] A: comms_reply result ok -> state=done
+[ 5.31s] B: comms_inbox -> ['accept', 'progress', 'progress', 'result']; result: "holding the bottle; go ahead"
+[ 5.31s] B: comms_requests -> 7b3b549c done, history ['help', 'accept', 'progress', 'progress', 'result']
+[ 5.74s] -: hub log: docs/comms/evidence/twin_demo_hub.jsonl
