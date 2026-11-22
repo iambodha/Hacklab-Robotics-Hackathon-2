@@ -294,6 +294,19 @@ def test_preflight_skipped_when_twin_unavailable_or_out_of_time(kin):
 
 
 # --- 2. wipe: executed through the phases, scored by skills/eval ----------------------------------------------------------
+def test_executor_overview_camera_matches_calibration_with_distortion():
+    from executor.evaluator import _camera
+    from executor.perception import camera_info_from_scene
+    from skills.eval import Camera
+    sc = load_scene_calib()
+    ref = Camera.from_scene_calib(sc)
+    info = camera_info_from_scene(sc)["overview"]
+    assert np.allclose(info["dist"][:5], sc["cameras"]["overview"]["dist"][:5])
+    pts = np.array([[x, y, 0.0] for x in (0.15, 0.3, 0.45) for y in (-0.15, 0.0, 0.15)])
+    uv = ref.project(pts)
+    assert np.abs(_camera(info).project(pts) - uv).max() < 1e-6
+
+
 def test_wipe_plan_scored_by_skills_eval(wex):
     from skills.eval import Camera, synth
     from skills.wipe import WipeSkill
@@ -319,3 +332,17 @@ def test_wipe_plan_scored_by_skills_eval(wex):
     o = ex.evaluate(results[-1].execution_id)                     # after the plan's park: the board is in clear view
     assert o.metric == "contamination_reduction" and o.success is True and o.value >= 0.9, o
     assert any("skills/eval" in e for e in o.evidence)
+
+
+def test_make_locator_finds_the_repo_perception_even_when_shadowed(tmp_path):
+    """perception/locate.py at the repo root wins over another `perception` found first on sys.path (an older
+    worktree's package, or executor/perception.py itself when a script runs from executor/)."""
+    import subprocess
+    import sys
+    shadow = tmp_path / "perception.py"
+    shadow.write_text("SHADOW = True\n")
+    code = ("import sys; sys.path.append(sys.argv[1]); import perception; assert perception.SHADOW; "
+            "from executor.perception import make_locator; l = make_locator(None); print(l.name, l.describe())")
+    r = subprocess.run([sys.executable, "-c", code, str(ROOT)], cwd=tmp_path, capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr[-2000:]
+    assert r.stdout.startswith("perception.locate"), r.stdout

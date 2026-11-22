@@ -48,10 +48,24 @@ def load_hints(path: str | Path | None = None) -> list[Hint]:
     return [Hint.of(d) for d in json.loads(p.read_text())] if p.exists() else [Hint("blue object", "blue")]
 
 
+def repo_perception():
+    """(perception.locate, perception.scene) of THIS repo (perception/ at the repo root), even when another
+    `perception` was imported first (an older worktree's package, or this file run with executor/ on sys.path)."""
+    import importlib
+    mod = sys.modules.get("perception")
+    if mod is None or Path(getattr(mod, "__file__", None) or "").resolve().parent != (REPO / "perception").resolve():
+        for k in [k for k in sys.modules if k == "perception" or k.startswith("perception.")]:
+            del sys.modules[k]
+        if str(REPO) in sys.path:
+            sys.path.remove(str(REPO))
+        sys.path.insert(0, str(REPO))
+    return importlib.import_module("perception.locate"), importlib.import_module("perception.scene")
+
+
 def colour_in(text: str | None) -> str | None:
     """The first perception colour name in free text ("the blue cap" -> "blue")."""
     try:
-        from perception.locate import HSV_RANGES
+        HSV_RANGES = repo_perception()[0].HSV_RANGES
     except ImportError:
         return None
     words = str(text or "").lower().replace(",", " ").split()
@@ -71,19 +85,16 @@ class Locator:
         return {"ok": False, "reason": f"locator {self.name} has no pixel-to-world map"}
 
     def describe(self) -> dict:
-        return {"name": self.name}
+        return {"name": self.name, **({"fallback_reason": r} if (r := getattr(self, "fallback_reason", None)) else {})}
 
 
 class PerceptionLocator(Locator):
     name = "perception.locate"
 
     def __init__(self, scene: dict | None = None, hints: list[Hint] | None = None):
-        if str(REPO) not in sys.path:
-            sys.path.insert(0, str(REPO))
-        from perception import locate as pl
-        from perception.scene import Scene
-        self.pl, self.Scene = pl, Scene
-        self.base = Scene.from_dict(scene) if scene else pl.scene()
+        pl, ps = repo_perception()
+        self.pl, self.Scene = pl, ps.Scene
+        self.base = self.Scene.from_dict(scene) if scene else pl.scene()
         self.hints = load_hints() if hints is None else hints
         self._scenes: dict = {}
 
@@ -98,7 +109,7 @@ class PerceptionLocator(Locator):
             W, H = int(info["width"]), int(info["height"])
             T = np.eye(4)
             T[:3, :3], T[:3, 3] = np.array(info["R_base_cam"], float), np.array(info["t_base_cam"], float)
-            d["cameras"]["overview"].update(image_size=[W, H], dist=[0.0] * 5, T_world_cam=T.tolist(), intrinsics_source=info.get("source"),
+            d["cameras"]["overview"].update(image_size=[W, H], dist=list(info.get("dist") or [0.0] * 5), T_world_cam=T.tolist(), intrinsics_source=info.get("source"),
                                             K_normalized={"fx": info["fx"] / W, "fy": info["fy"] / H, "cx": info["cx"] / W, "cy": info["cy"] / H})
             self._scenes = {key: self.Scene.from_dict(d)}
         return self._scenes[key]
@@ -199,14 +210,17 @@ class BlobLocator(Locator):
 
 
 def make_locator(scene: dict | None) -> Locator:
+    """PerceptionLocator, else BlobLocator, else none; a fallback carries why (describe()["fallback_reason"])."""
     try:
         return PerceptionLocator(scene)
-    except Exception:  # noqa: BLE001  (no cv2 / no calibration: fall back to blobs; the console shows which locator is used)
-        pass
+    except Exception as e:  # noqa: BLE001  (no cv2 / no calibration: fall back to blobs; the console shows which locator is used)
+        why = f"perception.locate unavailable: {type(e).__name__}: {e}"
     try:
-        return BlobLocator()
+        loc = BlobLocator()
     except ImportError:
-        return Locator()
+        loc = Locator()
+    loc.fallback_reason = why
+    return loc
 
 
 def camera_info_from_scene(scene: dict | None) -> dict:
@@ -218,4 +232,5 @@ def camera_info_from_scene(scene: dict | None) -> dict:
     W, H = c["image_size"]
     K = c["K_normalized"]
     return {"overview": {"width": W, "height": H, "fx": K["fx"] * W, "fy": K["fy"] * H, "cx": K["cx"] * W, "cy": K["cy"] * H,
-                         "R_base_cam": T[:3, :3].tolist(), "t_base_cam": T[:3, 3].tolist(), "source": "scene_calib.json"}}
+                         "R_base_cam": T[:3, :3].tolist(), "t_base_cam": T[:3, 3].tolist(), "dist": [float(d) for d in c.get("dist", [0.0] * 5)],
+                         "source": "scene_calib.json"}}

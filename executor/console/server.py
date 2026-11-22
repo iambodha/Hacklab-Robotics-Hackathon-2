@@ -53,15 +53,6 @@ def _port_open(addr, timeout: float = 0.3) -> bool:
         return False
 
 
-def _one_render_thread(backend) -> None:
-    """The twin's mujoco.Renderer (and its GL context) belongs to the thread that first rendered; rendering from the
-    HTTP server's per-request threads hangs. Route every frames() call of this backend through one thread."""
-    from concurrent.futures import ThreadPoolExecutor
-    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sim-render")
-    render = backend.frames
-    backend.frames = lambda: pool.submit(render).result(timeout=10)
-
-
 class ApiError(Exception):
     def __init__(self, code: int, msg: str):
         super().__init__(msg)
@@ -114,8 +105,6 @@ class Console:
             if b is None:
                 # fake: real-time clock and jaws that stop on an object part-way, so a pick can succeed
                 b = make_backend(name, kin=self.kin, **({"realtime": True, "object_norm": 0.3} if name == "fake" else {}))
-                if name == "sim":
-                    _one_render_thread(b)
                 if name in ("sim", "real"):     # one twin / one Station capture per process
                     self.backends[name] = b
             mode = "service" if name == "real" and service_up() else "local"

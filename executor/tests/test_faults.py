@@ -1,5 +1,6 @@
 """Fault-injection tests on the fake backend (no hardware, no Station)."""
 import threading
+import time
 
 import numpy as np
 
@@ -84,13 +85,16 @@ def test_cancel_mid_skill_stops_commands(make_ex):
     ex, fake = make_ex(step_delay=0.003)
     obs = ex.observe()
     eid = ex.submit(_move(ex, obs, [0.08, 0.05, 0.06]))
-    while len(fake.motion_writes(eid)) < 5:
-        pass
+    deadline = time.monotonic() + 30
+    while len(fake.motion_writes(eid)) < 5:               # sleep-poll: a bare spin starves the motion thread under load
+        assert time.monotonic() < deadline and ex.busy(), "motion never got going"
+        time.sleep(0.0005)
+    marks, set_ev = [], ex.cancel_ev.set
+    ex.cancel_ev.set = lambda: (marks.append(len(fake.log)), set_ev())[1]   # log position at the instant cancel lands
     assert ex.cancel(eid)
-    n_at_cancel = len(fake.log)
     r = ex.wait(eid)
     assert r.status == Status.CANCELLED
-    after = fake.log[n_at_cancel:]
+    after = fake.log[marks[0]:]
     kinds = [e[1] for e in after]
     assert kinds.count("goals") <= 1, after              # at most the write already in flight
     assert "hold" in kinds and kinds[-1] == "hold"        # then hold, then nothing

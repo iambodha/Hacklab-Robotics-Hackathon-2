@@ -105,19 +105,24 @@ def _camera(info: dict):
     K = np.array([[info["fx"], 0, info["cx"]], [0, info["fy"], info["cy"]], [0, 0, 1]], float)
     T = np.eye(4)
     T[:3, :3], T[:3, 3] = np.array(info["R_base_cam"], float), np.array(info["t_base_cam"], float)
-    return Camera(K, T, (int(info["width"]), int(info["height"])))
+    dist = np.array(info.get("dist") or [], float)[:5]
+    return Camera(K, T, (int(info["width"]), int(info["height"])), dist if np.any(np.abs(dist) > 1e-9) else None)
 
 
 def arm_over_board(ex, q, board, cam, margin: float = 0.01) -> bool:
-    """Does any part of the arm (body origins and the segments between them) project onto the board in the overview
-    camera? Rays from the camera centre through the arm points, intersected with the table plane."""
+    """Does any part of the arm (the body origins on the base -> TCP chain, the TCP itself, and the segments between
+    them) project onto the board in the overview camera? Rays from the camera centre through the arm points,
+    intersected with the board plane. The TCP matters: the wrist body origin can sit outside the board's shadow while
+    the jaws below it cover the board."""
     K = ex.kin.kin
     m = K.model
-    root = m.body_rootid[m.jnt_bodyid[m.actuator_trnid[0, 0]]] if m.nu else m.body_rootid[m.jnt_bodyid[0]]
-    arm = [b for b in range(1, m.nbody) if m.body_rootid[b] == root]
+    chain, b = [], int(m.site_bodyid[K.site])
+    while b > 0:
+        chain.append(b)
+        b = int(m.body_parentid[b])
     with ex.kin.lock:
         ex.kin.fk(q)
-        pts = np.array([ex.kin.to_world(K.data.xpos[b]) for b in arm])
+        pts = np.array([ex.kin.to_world(K.data.xpos[b]) for b in chain[::-1]] + [ex.kin.to_world(K.data.site_xpos[K.site])])
     pts = np.concatenate([pts] + [pts[:-1] + (pts[1:] - pts[:-1]) * t for t in (0.25, 0.5, 0.75)])
     c = cam.T_world_cam[:3, 3]
     for p in pts:

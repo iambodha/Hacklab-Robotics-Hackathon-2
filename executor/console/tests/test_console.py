@@ -85,10 +85,12 @@ def test_overlay_projects_grid_estimates_and_last_path(make_ex):
 
 
 def test_sim_frames_are_rendered_on_one_thread():
-    from executor.console.server import _one_render_thread
+    from concurrent.futures import ThreadPoolExecutor
+    from executor.backends.sim import SimBackend
     seen = []
-    b = SimpleNamespace(frames=lambda: seen.append(threading.current_thread().name) or {})
-    _one_render_thread(b)
+    b = SimBackend.__new__(SimBackend)          # no twin: only the render routing is under test
+    b.render_pool = ThreadPoolExecutor(max_workers=1)
+    b._render = lambda: seen.append(threading.current_thread().name) or {}
     ts = [threading.Thread(target=b.frames) for _ in range(6)]
     [t.start() for t in ts]
     [t.join() for t in ts]

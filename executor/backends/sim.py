@@ -3,6 +3,9 @@
 Joint conventions are the sim's own, which match the real arm: norm in the calibrated range, j8 1 = open.
 Camera frames are rendered on demand; seq counts renders, t_capture is the render time. No camera stamps exist
 in the twin, so a frozen sim camera cannot happen (the fake backend covers that case).
+The twin's mujoco.Renderer (and its GL context) belongs to the thread that first rendered; rendering from another
+thread (e.g. an HTTP server's per-request threads) hangs, so the backend owns one render thread and every frames()
+call runs on it.
 """
 from __future__ import annotations
 
@@ -10,6 +13,7 @@ import io
 import os
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .base import Backend, FrameSample, MotorRead
@@ -32,6 +36,7 @@ class SimBackend(Backend):
         import sim_arm_mcp   # builds the scene if needed and starts the physics thread (module-level SimArm)
         self.mod, self.arm = sim_arm_mcp, sim_arm_mcp.arm
         self.render_lock = threading.Lock()
+        self.render_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sim-render")
         self.seq = {r: 0 for r in CAMS}
         self.layout_name = Path(os.environ.get("ROBOT_SIM_LAYOUT", "layout.json")).stem
 
@@ -46,6 +51,9 @@ class SimBackend(Backend):
         return MotorRead(t, out)
 
     def frames(self) -> dict[str, FrameSample]:
+        return self.render_pool.submit(self._render).result(timeout=10)
+
+    def _render(self) -> dict[str, FrameSample]:
         from PIL import Image
         out = {}
         for role, cam in CAMS.items():

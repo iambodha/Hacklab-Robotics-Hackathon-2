@@ -22,6 +22,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 RZ90 = np.array([[0, -1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1.0]])
 PRIORITY = {"fixed": 0, "estimate": 1, "scene_calib": 2}
+POSE_FILE = "camera_pose/wrist_camera.json"
 
 
 def r(x, n=5):
@@ -152,7 +153,11 @@ def apply_calib(calib: dict, layout: dict, src: str = "scene_calib", force: bool
     wr = cams.get("wrist")
     if wr and allowed(layout.get("wrist_camera")):
         w = layout["wrist_camera"]
-        if wr.get("T_link_cam"):
+        if wr.get("T_link_cam") and POSE_FILE in str(wr.get("source", "")):
+            w.pop("T_link_cam", None)             # the mount's single source: build_scene reads the pose file itself
+            w.update(pose_file=POSE_FILE, link=wr.get("link", "Gripper_Base_v1_1"))
+            w.pop("pitch_offset_deg", None)
+        elif wr.get("T_link_cam"):
             w["T_link_cam"] = r(wr["T_link_cam"], 6)
             w["link"] = wr.get("link", "Gripper_Base_v1_1")
             w.pop("pitch_offset_deg", None)       # a calibrated pose replaces the jaw-silhouette tilt estimate

@@ -33,7 +33,10 @@
     "tcp_site": "grasp_tcp",
     "wrist_camera": "wrist_cam",
     "arm_mapping": "range_fraction",
-    "gripper_mapping": "upper_times_one_minus_norm"
+    "gripper_mapping": "upper_times_one_minus_norm",
+    "joint_offsets_deg": {"j1": 0.0, "j2": 0.0, "j3": 0.0, "j4": 0.0, "j5": 0.0, "j6": 0.0, "j7": 0.0, "j8": 0.0},
+    "_joint_offsets_about": "q = range_fraction angle + offset (deg), read by sim/real_joints.to_q, executor Kinematics.q_from_norm/norm_from_q and camera_pose/elrobot_camera.joints_to_q (perception FK). All 0 = applied nothing: no offset passed leave-one-pose-out validation on the 22 Nov hand-moved wrist poses (camera_pose/fit_wrist_chain.py, camera_pose/wrist_chain_fit_20261122.json).",
+    "_joint_offsets_measured_not_applied": {"j1": -2.0, "j8": -5.5, "j2": 5.3, "source": "r2-twinfix render-and-compare, one folded pose; j1 is degenerate with the base yaw in the wrist data (corr -1.00), j8 does not move the wrist camera, j2 multi-pose fit +1.3 +- 1.0 with no leave-one-out gain"}
   },
   "frame_text": "Base frame, metres: origin = centre of the arm base on the table top, +z up, +y = straight ahead of the arm (towards the overview camera), +x = the arm's right-hand side (image-LEFT in the overview camera).",
   "cameras": {
