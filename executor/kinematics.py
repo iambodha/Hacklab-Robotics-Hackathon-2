@@ -4,7 +4,10 @@ frame has +x forward: p_world = T_world_base @ p_base, T_world_base from calibra
 
 The IK is the same algorithm as sim/real_arm_mcp.py (_target_rot/_solve_rot/_solve_tcp): jaws as close to
 straight down as the target allows, stepping the lean up gradually and staying near the seed. It is copied rather
-than imported because importing real_arm_mcp connects the arm_mcp Station client and an MCP server.
+than imported because importing real_arm_mcp connects the arm_mcp Station client and an MCP server. The lean list,
+restarts and the search order come from the shared skill config (learning/skillcfg.py: ik.leans, ik.restarts and the
+executor's own executor.ik.search), read on every solve from the config of `cfg_target` (the Executor sets it from
+its backend: the real arm reads "real", every other backend "twin").
 """
 from __future__ import annotations
 
@@ -23,6 +26,8 @@ if str(REPO) not in sys.path:
 if str(SIM) not in sys.path:
     sys.path.append(str(SIM))      # appended: sim/recorder.py must not shadow the recorder package
 os.environ.setdefault("MUJOCO_GL", "cgl" if sys.platform == "darwin" else "egl")
+
+from learning import skillcfg as SC  # noqa: E402
 
 DEFAULT_T_WORLD_BASE = np.array([[0.0, 1.0, 0.0, 0.0], [-1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
 
@@ -48,6 +53,7 @@ class Kinematics:
         self.P = profile or robot_profile.load()
         self.kin = robot_profile.Kin(self.P)
         self.lock = threading.RLock()
+        self.cfg_target: str | None = None        # skill-config target ("real" | "twin"); None = the process's
         P = self.P
         self.arm_ids = [int(m) for m in P.motors.arm]
         self.grip_id = int(P.motors.gripper)
@@ -177,16 +183,14 @@ class Kinematics:
                 return (q, None) if q is not None else (None, None)
             yaw_w = self.yaw_now(seed) if yaw_deg is None else yaw_deg
             yaw_b = yaw_w - self.yaw_offset
-            IKP = self.P.ik
-            # Order differs from real_arm_mcp in one place: a larger lean NEAR the seed is tried before random
-            # restarts (other arm configurations) with a small lean. Same result where a near solution exists;
-            # it avoids big reconfigurations and cuts planning from ~6 s to ~0.1 s for high lifts close to the base.
-            for leans, restarts in ((IKP.leans_small, 0), (IKP.leans_large, 0), (IKP.leans_small, IKP.restarts), (IKP.leans_large, IKP.restarts)):
-                for lean in leans:
-                    q = self._solve_rot(xyz_b, self._target_rot(xyz_b, lean, yaw_b), seed, restarts)
-                    if q is not None:
-                        return q, float(lean)
-        return None, None
+            # executor.ik.search defaults to near_first, which differs from real_arm_mcp in one place: a larger lean NEAR
+            # the seed is tried before random restarts (other arm configurations) with a small lean. Same result where
+            # a near solution exists; it avoids big reconfigurations and cuts planning from ~6 s to ~0.1 s for high
+            # lifts close to the base.
+            c = SC.active(self.cfg_target)["values"]
+            q, lean = SC.lean_search(lambda l, rs: self._solve_rot(xyz_b, self._target_rot(xyz_b, l, yaw_b), seed, rs),
+                                     c["ik.leans"], c["ik.restarts"], c["executor.ik.search"])
+        return (q, float(lean)) if q is not None else (None, None)
 
     def solve_tip(self, tip_world, length: float, seed, yaw_deg: float | None):
         """Joints that put the TIP of a tool held along the approach axis (length below the TCP) at tip_world."""

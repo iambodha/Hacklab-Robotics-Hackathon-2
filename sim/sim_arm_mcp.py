@@ -649,7 +649,9 @@ if SKILLS:
 # --- bottle cap: attempt records + the twist skill (learning/, same tools as real_arm_mcp.py) ----------------------
 if str(HERE.parent) not in sys.path:
     sys.path.append(str(HERE.parent))
-from learning import episodes as LE, tools as LT  # noqa: E402
+from learning import episodes as LE, skillcfg as SC, tools as LT  # noqa: E402
+
+SC.set_target(os.environ.get('SKILLCFG_TARGET', 'twin'))
 
 
 class SimRig:
@@ -811,6 +813,26 @@ async def check_cap() -> list:
 @_learn_doc
 async def episode_end(outcome: str, lesson: str, next_change: dict | None = None) -> list:
     return _content(*await LT.episode_end(_store(), RIG, outcome, lesson, next_change))
+
+
+def _skill_doc(fn):
+    fn.__doc__ = LT.skill_doc(fn.__name__, 'twin')
+    return fn
+
+
+@server.tool(annotations={'readOnlyHint': True})
+@recorded
+@_skill_doc
+async def skill_config() -> str:
+    return (await LT.skill_config())[0]
+
+
+@server.tool()
+@recorded
+@_skill_doc
+async def propose_skill_change(changes: dict, reason: str, evidence: list[str], twin_check: bool = False) -> str:
+    return (await LT.propose_skill_change(changes, reason, evidence, twin_check, author='operator (sim_arm_mcp)',
+                                          auto_apply=True))[0]
 
 
 @server.tool(annotations={'destructiveHint': True})

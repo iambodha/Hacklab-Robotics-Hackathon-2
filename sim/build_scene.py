@@ -404,9 +404,8 @@ class ArmIK:
 
     # Least-lean IK, the same algorithm as sim/real_arm_mcp.py (_target_rot/_solve_rot/_solve_tcp) so the twin
     # behaves like the hardware: solve() falls back to ignoring orientation, which can leave the gripper steeply
-    # tilted; here the lean away from (or toward) the base is stepped up gradually, near the current joints first.
-    LEAN_SMALL, LEAN_LARGE = (0, 10, -10, 20, -20, 30, -30), (40, -40, 50, 60, 70)
-
+    # tilted; here the lean away from (or toward) the base is stepped up gradually. The lean list and the search order
+    # are the shared skill config (learning/skillcfg.py: ik.leans, ik.search, ik.restarts), read at call time.
     @staticmethod
     def target_rot(xyz, lean_deg, yaw_deg):
         """TCP rotation whose approach axis (+y) points down, leaned lean_deg away from the base (negative: toward it)."""
@@ -453,19 +452,21 @@ class ArmIK:
         return best
 
     def solve_least_lean(self, xyz, q0, yaw_deg=0.0, max_jump=0.6):
-        """(q, lean_deg) of the least-leaning reachable pose, preferring one near q0; (None, None) if none.
-        First pass: only poses on the current arm configuration (no joint moves more than max_jump rad), so a
-        short TCP move never swings the arm through space onto another branch; then any pose."""
+        """(q, lean_deg) of the least-leaning reachable pose by skillcfg.lean_search; (None, None) if none. A solution
+        from the current joints counts as near only if no joint moves more than max_jump rad, so a short TCP move
+        never swings the arm through space onto another branch."""
         q0 = np.asarray(q0, float)
-        for continuous in (True, False):
-            for leans, restarts in ((self.LEAN_SMALL, 0), (self.LEAN_SMALL, 12), (self.LEAN_LARGE, 0), (self.LEAN_LARGE, 12)):
-                if continuous and restarts:
-                    continue  # random restarts land on other branches by design
-                for lean in leans:
-                    q = self.solve_rot(xyz, self.target_rot(xyz, lean, yaw_deg), q0, restarts)
-                    if q is not None and (not continuous or np.abs(q[:7] - q0[:7]).max() <= max_jump):
-                        return q, lean
-        return None, None
+        return _skillcfg().lean_search(lambda lean, rs: self.solve_rot(xyz, self.target_rot(xyz, lean, yaw_deg), q0, rs),
+                                       near=lambda q: np.abs(q[:7] - q0[:7]).max() <= max_jump)
+
+
+def _skillcfg():
+    try:
+        from learning import skillcfg
+    except ImportError:
+        sys.path.append(str(Path(__file__).resolve().parent.parent))
+        from learning import skillcfg
+    return skillcfg
 
 
 def sample_reach(model, samples, top_down_deg, seed=0):

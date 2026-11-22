@@ -28,6 +28,7 @@ from .perception import Locator, camera_info_from_scene, make_locator
 from .recording import RecorderLink, TableMemory
 from .skills import SKILLS, Verdict
 from .validation import validate, validate_in_sim
+from learning import skillcfg as SC  # noqa: E402  (kinematics put the repo on sys.path)
 
 REPO = Path(__file__).resolve().parent.parent
 WIPE_SKILLS = ("wipe", "wipe_region")
@@ -150,6 +151,7 @@ class Executor:
                 self.twin = TwinPreflight(self.kin, None if twin is True else str(twin))
             except ImportError:
                 self.twin = None
+        self.kin.cfg_target = "real" if backend.name == "real" else "twin"     # skill config the IK and skills read
         self.cancel_ev = threading.Event()
         self.motion = Motion(backend, self.kin, self.cancel_ev, log=lambda *a, **k: self.events.add("motion_log", text=" ".join(map(str, a)), **k))
         self.lock = threading.Lock()
@@ -264,6 +266,7 @@ class Executor:
             busy = self.current is not None
             v, plan, secs = validate(self, p, busy)
             v.checks["validation_s"] = {"result": "pass", "seconds": round(secs, 3)}
+            v.checks["skill_config"] = {"result": "pass", **SC.stamp(self.kin.cfg_target)}   # which version planned it
             self.proposals[eid] = p
             m = self.rec.marker("validation", {"execution_id": eid, "ok": v.ok, "reasons": v.reasons, "checks": v.checks})
             marks += [m] if m else []
@@ -388,6 +391,32 @@ class Executor:
         """Twin preflight of a proposal's whole planned path, without submitting it (nothing moves)."""
         return validate_in_sim(p, ex=self)
 
+    # --- skill config (learning/skillcfg.py): the same layer as the MCP servers ----------------------------------
+    def skill_config(self) -> dict:
+        """Active config of this executor's target, the registry (envelopes, classes) and the pending proposals."""
+        t = self.kin.cfg_target
+        return {**SC.active(t), "registry": {k: {**s, "envelope": SC.envelope_text(s)} for k, s in SC.registry().items()},
+                "pending": SC.proposals("pending", t), "text": SC.config_text(t)}
+
+    def propose_skill_change(self, changes: dict, reason: str, evidence=(), source: str = "operator",
+                             twin_check: bool = False) -> dict:
+        """Skills and advisors request a strategy change here. Validated, checked offline (skillcheck), applied at once
+        on a twin target when no check fails; the real target waits for `python -m learning.skillcfg approve`."""
+        from learning import skillcheck
+        t = self.kin.cfg_target
+        r = SC.propose(changes, reason, evidence, source, t)
+        if not r["ok"]:
+            self.events.add("skill_config", state="refused", errors=r["errors"], changes=changes)
+            return r
+        p = skillcheck.run_checks(r["proposal"]["id"], "async" if twin_check else False)
+        out = {"ok": True, "proposal": p, "applied": False}
+        if t == "twin" and not SC.checks_failed(p):
+            a = SC.apply(p["id"], by=f"auto (executor twin, {source})")
+            out.update(applied=a["ok"], version=a.get("version"), errors=a.get("errors", []))
+        self.events.add("skill_config", state="applied" if out["applied"] else "pending", proposal=p["id"], target=t,
+                        changes=p["changes"], version=SC.version(t))
+        return out
+
     # --- evaluate ------------------------------------------------------------------------------
     def evaluate(self, eid: str) -> Outcome:
         from .evaluator import evaluate
@@ -416,4 +445,5 @@ class Executor:
         return {"backend": self.backend.describe(), "skills": {k: s.describe() for k, s in self.skills.items()},
                 "locator": self.locator.name, "perception": self.locator.describe(), "scene_calib": str(scene_calib_path()) if scene_calib_path() else None,
                 "tool": self.tool, "layout": self.layout, "profile": self.kin.P.name,
-                "twin_preflight": self.twin.describe() if self.twin else None}
+                "twin_preflight": self.twin.describe() if self.twin else None,
+                "skill_config": SC.stamp(self.kin.cfg_target)}
