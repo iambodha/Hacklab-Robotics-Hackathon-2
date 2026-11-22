@@ -268,13 +268,25 @@ def _solve_rot(xyz, Rt, q0, restarts: int = 0, seed: int = IKP.seed):
 
 
 def _solve_tcp(xyz, q0, yaw_deg: float):
-    """(q, lean_deg) for the least-leaning reachable pose, preferring one near the current joints; (None, None)."""
-    for leans, restarts in ((LEAN_SMALL, 0), (LEAN_SMALL, IKP.restarts), (LEAN_LARGE, 0), (LEAN_LARGE, IKP.restarts)):
-        for lean in leans:
-            q = _solve_rot(xyz, _target_rot(xyz, lean, yaw_deg), q0, restarts)
-            if q is not None:
-                return q, lean
-    return None, None
+    """(q, lean_deg) for the least-leaning reachable pose, preferring one near the current joints; (None, None).
+    Pass 1 stays on the current arm configuration (no restarts). Pass 2 tries random restarts (solution nearest the
+    current joints) only for leans smaller than pass 1 found, so a less tilted pose always wins. (22 Nov: the old
+    order accepted 60 deg from the current joints before trying restarts at 40, where the arm reaches the bottle cap at
+    ~35 deg, which pushed twist_cap into the side approach.)"""
+    leans = LEAN_SMALL + LEAN_LARGE
+    first = (None, None)
+    for lean in leans:
+        q = _solve_rot(xyz, _target_rot(xyz, lean, yaw_deg), q0, 0)
+        if q is not None:
+            first = (q, lean)
+            break
+    for lean in leans:
+        if first[1] is not None and abs(lean) >= abs(first[1]):
+            continue
+        q = _solve_rot(xyz, _target_rot(xyz, lean, yaw_deg), q0, IKP.restarts)
+        if q is not None:
+            return q, lean
+    return first
 
 
 # --- motion on real servos ----------------------------------------------------------------------------

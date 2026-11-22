@@ -44,7 +44,7 @@ PARAMS: dict[str, tuple] = {
                              "gripper (TCP) height at the close, relative to 10 mm below the cap top (negative = "
                              "deeper; the fingertips reach 10 mm below the TCP)"),
     "twist_deg_per_stroke": ("float", 15.0, 120.0, 45.0, "counter-clockwise rotation per stroke"),
-    "strokes": ("int", 1, 8, 3, "grasp-twist-release-turn back cycles"),
+    "strokes": ("int", 1, 24, 3, "grasp-twist-release-turn back cycles (22 Nov: up to 24, keep spinning until the cap is free)"),
     "twist_speed": ("enum", ("slow", "medium"), None, "slow", "slow = 3 deg per step, medium = 6 deg per step"),
     "lift_per_turn_mm": ("float", 0.0, 4.0, 3.0, "how far the gripper rises per full turn (follow the thread)"),
     "yaw_start_deg": ("float", -90.0, 90.0, 0.0, "jaw closing axis at the first grasp (0 = jaws close along x)"),

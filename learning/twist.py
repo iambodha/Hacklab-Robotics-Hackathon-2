@@ -36,7 +36,9 @@ STEP_DEG = {"slow": 3.0, "medium": 6.0}
 STEP_DT = {"slow": 0.15, "medium": 0.10}
 HOVERS = (0.05, 0.035, 0.025)   # m above the cap top before the descent: the highest one the arm can reach there
 MAX_LEAN = 75.0              # deg from vertical: steeper poses are not used for the cap
-SIDE_LEAN = 45.0             # a grasp pose leaning more than this is approached from the side, not from above
+SIDE_LEAN = 90.0             # a grasp pose leaning more than this is approached from the side, not from above.
+                             # 22 Nov: always from above (hover + guarded vertical descent); with the least-lean IK the
+                             # real cap is reached at ~35 deg, and the side approach slid the jaws up onto the cap's bevel
 SIDE_BACK = 0.04             # side approach: start this far back along the jaws' approach axis
 SIDE_STEP = 0.005            # advance in steps of this
 SIDE_CONTACT = 0.006         # a step that ends this far short = contact
