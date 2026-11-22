@@ -809,16 +809,17 @@ def _remember_touch(x: float, y: float, z: float) -> None:
         pass
 
 
-async def _descend_guarded(x: float, y: float, z_to: float, yaw: float):
+async def _descend_guarded(x: float, y: float, z_to: float, yaw: float, guard_top: float | None = None):
     """Go straight down to z_to, feeling for contact near the table. Returns (text, contact_z or None).
     Above the table zone it moves normally. In the zone it goes in small steps, each settled with LIMITED effort.
     Contact (measured on hardware): a joint stays short of its target while the two most loaded arm motors together
     carry more than TS.load_sum, on TS.reads steps in a row. Motor load alone is no sign: it swings by 100-200 with
-    the arm's own motion. On contact the arm stops pushing and backs off a little."""
+    the arm's own motion. On contact the arm stops pushing and backs off a little.
+    guard_top: start the guarded zone at this TCP height instead of just above the table (e.g. above a bottle cap)."""
     q, st = await measured()
     cur, seed = IK.fk(q)[0], q
     last = float(cur[2])
-    start = max(z_to, TS.nominal_table_tcp_z + TS.guard_from)
+    start = max(z_to, TS.nominal_table_tcp_z + TS.guard_from if guard_top is None else guard_top)
     if cur[2] > start + TS.step:                              # the free part of the way down, at normal speed
         sol, _ = await asyncio.to_thread(_solve_tcp, np.array([x, y, start]), seed, yaw)
         if sol is None:
@@ -1402,6 +1403,114 @@ async def wipe(x: float, y: float, to_x: float, to_y: float, strokes: int = WP.d
     if held0 and not held1:
         log.append("the napkin is no longer in the jaws: it stayed on the table")
     return [("WIPED. " if done == strokes else "WIPE stopped early. ") + "\n".join(log)] + await _views()
+
+
+# --- bottle cap: attempt records + the twist skill (learning/, prompts/bottle-contract.md) --------------------------
+from learning import tools as LT  # noqa: E402
+
+
+class RealRig:
+    """learning.twist's rig interface on the real servos (same motion layer as every tool above)."""
+    # +1: a positive model rotation about +z turns the jaws counter-clockwise seen from above. The j7 sign is not yet
+    # verified on hardware (see the module docstring): set BOTTLE_TWIST_SIGN=-1 if the cap turns the wrong way.
+    twist_sign = env("BOTTLE_TWIST_SIGN", 1, int)
+
+    async def state(self) -> dict:
+        st = await am._read()
+        return {NAME[m]: st[m] for m in ALL_IDS}
+
+    async def q(self):
+        return (await measured())[0]
+
+    def fk(self, q):
+        return IK.fk(q)
+
+    def solve(self, xyz, R, seed):
+        return _solve_rot(np.asarray(xyz, float), np.asarray(R, float), np.asarray(seed, float))
+
+    async def move_down(self, x, y, z, yaw_deg):
+        return await move_tcp(x=x, y=y, z=z, top_down=True, yaw_deg=yaw_deg)
+
+    async def reachable(self, x, y, z, yaw_deg, seed):
+        if not (MIN_Z <= z <= WS.max_tcp_z and np.hypot(x, y) <= WS.max_radius):
+            return None
+        _, lean = await asyncio.to_thread(_solve_tcp, np.array([x, y, z], float), np.asarray(seed, float), yaw_deg)
+        return None if lean is None else float(lean)
+
+    async def go(self, q, dt, contact):
+        return await _drive({ARM_IDS[i]: float(v) for i, v in enumerate(to_norm(np.asarray(q)))}, STEP, dt,
+                            settle=False, contact=contact)
+
+    async def descend(self, x, y, z_to, yaw_deg, top):
+        return await _descend_guarded(x, y, z_to, yaw_deg, guard_top=top)
+
+    async def grip(self, open_fraction, force):
+        text = await gripper(open_fraction=open_fraction, force=force)
+        touch = next((l for l in text.splitlines() if l.startswith("touch:")), "")
+        return text, ("holding it" in text or "HOLDING" in touch)
+
+    async def holding(self):
+        return (await _probe_hold())[0]
+
+    async def frames(self) -> dict:
+        out = {}
+        for role, prefix in (("wrist", WRIST_CAM), ("overview", OVERVIEW_CAM)):
+            data, _ = await _fresh_frame(prefix)
+            if data:
+                out[role] = data
+        return out
+
+
+RIG = RealRig()
+
+
+async def _content(text: str, images: dict) -> list:
+    out: list = [text]
+    if images.get("wrist"):
+        out += ["wrist camera", Image(data=await _wrist_image(images["wrist"]), format="jpeg")]
+    if images.get("overview"):
+        out += ["overview camera", Image(data=_grid(images["overview"]), format="jpeg")]
+    return out
+
+
+def _learn_doc(fn):
+    fn.__doc__ = LT.TOOL_DOCS[fn.__name__]
+    return fn
+
+
+@server.tool()
+@recorded
+@_learn_doc
+async def episode_begin(params: dict, hypothesis: str) -> list:
+    return await _content(*await LT.episode_begin(LT.store(), RIG, params, hypothesis))
+
+
+@server.tool(annotations={"readOnlyHint": True})
+@recorded
+@_learn_doc
+async def episode_history(last_n: int = 10) -> str:
+    return (await LT.episode_history(LT.store(), last_n))[0]
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+@_learn_doc
+async def twist_cap(x: float, y: float, cap_top_z: float, cap_height: float = 0.02) -> list:
+    return await _content(*await LT.twist_cap(LT.store(), RIG, x, y, cap_top_z, cap_height))
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+@_learn_doc
+async def check_cap() -> list:
+    return await _content(*await LT.check_cap(LT.store(), RIG))
+
+
+@server.tool()
+@recorded
+@_learn_doc
+async def episode_end(outcome: str, lesson: str, next_change: dict | None = None) -> list:
+    return await _content(*await LT.episode_end(LT.store(), RIG, outcome, lesson, next_change))
 
 
 if __name__ == "__main__":
