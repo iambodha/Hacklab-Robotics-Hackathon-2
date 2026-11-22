@@ -303,57 +303,113 @@ def snapshot(name):
 PAGE = rb"""<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
 <title>Arm operator</title>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--fg:#1d2430;--mut:#667085;--ok:#12805c;--bad:#c0362c;--line:#e4e7ec;--acc:#2456d6}
-@media (prefers-color-scheme:dark){:root{--bg:#111418;--card:#1a1f26;--fg:#e6e9ee;--mut:#98a2b3;--ok:#3ccf91;--bad:#ff6b5e;--line:#2a313b;--acc:#7aa2ff}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif;padding:16px}
-h1{font-size:18px;margin:0 0 12px}h2{font-size:13px;margin:0 0 8px;color:var(--mut);font-weight:600}
-.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}.wide{grid-column:1/-1}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto}
-textarea{width:100%;height:190px;font:13px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px}
-select,button{font:inherit;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
-button{cursor:pointer;font-weight:600}#start{background:var(--acc);color:#fff;border-color:var(--acc)}#stop{color:var(--bad);border-color:var(--bad)}
-button:disabled{opacity:.45;cursor:default}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
-img{width:100%;border-radius:8px;background:#000;aspect-ratio:299/224;object-fit:contain}.cams{display:grid;gap:8px;grid-template-columns:1fr 1fr}
-table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:13px}td,th{padding:3px 6px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
-th{color:var(--mut)}.bad{color:var(--bad)}.ok{color:var(--ok)}#state{font-weight:600}pre{white-space:pre-wrap;margin:0;font:13px/1.45 system-ui,sans-serif}
-.mut{color:var(--mut)}</style>
-<h1>Arm operator <span id=state class=mut></span></h1>
-<div class=grid>
-<div class=card><h2>Task</h2><textarea id=task></textarea>
- <div class=row><select id=model><option value=sonnet>Sonnet</option><option value=haiku>Haiku</option><option value=opus>Opus</option><option value=claude-fable-5-2>Fable</option><option value=endpoint>Model endpoint (Gemma, see model_endpoint.env)</option></select>
- <select id=effort><option value=low>effort: low</option><option value="">effort: default</option><option value=medium>effort: medium</option></select>
- <button id=enh>Enhance</button><button id=start>Start</button><button id=resume title="Start a new run that is told what the last run did">Resume task</button><button id=stop>Stop</button></div>
- <div class=row><span class=mut>Arm:</span><button id=open>Open gripper</button><button id=park>Park arm</button><button id=relax title="Torque off: the arm goes limp">Relax arm</button><button id=hold title="Torque on again, holding where it is">Hold arm</button><span id=msg class=mut></span></div><div id=orig class=mut style="margin-top:6px"></div></div>
-<div class=card><h2>Cameras (wrist, overview)</h2><div class=cams><img id=cw alt="wrist camera"><img id=co alt="overview camera"></div></div>
-<div class="card wide"><h2>Result</h2><pre id=result class=mut>No run yet.</pre></div>
-<div class="card wide"><h2>Agent notes</h2><pre id=notes class=mut>-</pre></div>
-<div class="card wide"><h2>Tool calls</h2><table id=acts></table></div></div>
+:root{--bg:#f3f5f8;--card:#fff;--fg:#18202b;--mut:#657082;--ok:#0e8a5f;--okbg:#e3f6ee;--bad:#c5372c;--badbg:#fdeceb;--warn:#a86400;--warnbg:#fdf3df;
+ --line:#e2e6ec;--acc:#2f5bea;--accbg:#e9eeff;--chip:#eef1f5;--shadow:0 1px 2px rgba(16,24,40,.05),0 4px 14px rgba(16,24,40,.05)}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1116;--card:#171c23;--fg:#e7eaf0;--mut:#93a0b4;--ok:#42d39b;--okbg:#12322a;--bad:#ff7468;--badbg:#3a1a18;
+ --warn:#f2b54a;--warnbg:#35280f;--line:#262d38;--acc:#8aa7ff;--accbg:#1c2748;--chip:#222a35;--shadow:none}}
+*{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--fg);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+header{position:sticky;top:0;z-index:5;display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 20px;background:var(--card);border-bottom:1px solid var(--line)}
+header h1{font-size:16px;margin:0;letter-spacing:-.01em;display:flex;gap:9px;align-items:center}
+.logo{width:22px;height:22px;border-radius:6px;background:var(--acc);display:inline-grid;place-items:center;color:#fff;font-size:12px;font-weight:700}
+.pill{display:inline-flex;gap:7px;align-items:center;padding:3px 11px;border-radius:999px;font-weight:600;font-size:13px;background:var(--chip);color:var(--mut)}
+.pill i{width:8px;height:8px;border-radius:50%;background:currentColor}
+.pill.run{background:var(--okbg);color:var(--ok)}.pill.run i{animation:pulse 1.2s infinite}.pill.warn{background:var(--warnbg);color:var(--warn)}.pill.bad{background:var(--badbg);color:var(--bad)}
+@keyframes pulse{50%{opacity:.25}}
+.stats{margin-left:auto;display:flex;gap:18px;color:var(--mut);font-size:13px;font-variant-numeric:tabular-nums}.stats b{color:var(--fg);font-weight:600}
+main{padding:16px 20px 32px;max-width:1500px;margin:0 auto;display:grid;gap:14px;grid-template-columns:minmax(0,5fr) minmax(0,6fr)}
+@media (max-width:980px){main{grid-template-columns:minmax(0,1fr);padding:12px}.stats{margin-left:0;width:100%}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow);min-width:0}
+.wide{grid-column:1/-1}
+h2{font-size:11px;margin:0 0 10px;color:var(--mut);font-weight:700;letter-spacing:.07em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center}
+h2 span{font-weight:500;letter-spacing:0;text-transform:none}
+textarea{width:100%;height:220px;resize:vertical;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea:focus,select:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+select,button{font:inherit;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+button{cursor:pointer;font-weight:600;transition:transform .05s,background .15s}button:hover:not(:disabled){background:var(--chip)}button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.4;cursor:default}
+#start{background:var(--acc);color:#fff;border-color:var(--acc)}#start:hover:not(:disabled){filter:brightness(1.08);background:var(--acc)}
+@media (prefers-color-scheme:dark){#start{color:#0e1116}}
+#resume{border-color:var(--acc);color:var(--acc)}#stop,#relax{color:var(--bad);border-color:var(--bad)}#stop:hover:not(:disabled),#relax:hover:not(:disabled){background:var(--badbg)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}#model{max-width:190px}.grow{flex:1}
+.arm{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}.arm .lab{color:var(--mut);font-size:12px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;margin-right:4px}
+#msg{color:var(--mut);font-size:13px;min-height:20px;margin-top:8px}#orig{color:var(--mut);font-size:12px;margin-top:4px}
+.cams{display:grid;gap:10px;grid-template-columns:1fr 1fr}@media (max-width:560px){.cams{grid-template-columns:1fr}}
+.cam{position:relative;border-radius:10px;overflow:hidden;background:#000}.cam img{display:block;width:100%;aspect-ratio:299/224;object-fit:contain}
+.cam b{position:absolute;left:8px;top:8px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;letter-spacing:.03em}
+.cam em{position:absolute;right:8px;top:8px;font-style:normal;background:rgba(197,55,44,.92);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;letter-spacing:.06em}
+.cam.off em{background:rgba(90,90,90,.9)}
+pre{white-space:pre-wrap;margin:0;font:14px/1.55 ui-sans-serif,system-ui,sans-serif;overflow-wrap:anywhere}
+#resultcard{border-left:4px solid var(--line)}#resultcard.done{border-left-color:var(--ok)}#resultcard.blocked{border-left-color:var(--bad)}#resultcard.running{border-left-color:var(--acc)}
+.meta{display:inline-flex;gap:10px;margin-bottom:8px;font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}.meta span{background:var(--chip);padding:2px 9px;border-radius:999px}
+.note{padding:8px 0;border-bottom:1px solid var(--line);color:var(--fg)}.note:last-child{border:0}.note:first-child{padding-top:0}
+.scroll{max-height:460px;overflow:auto;border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th{position:sticky;top:0;background:var(--card);color:var(--mut);font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700}
+td,th{padding:6px 8px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}td.t,td.s{color:var(--mut);white-space:nowrap}
+td.a{font:12px/1.5 ui-monospace,Menlo,monospace;color:var(--mut);overflow-wrap:anywhere}tr.fail td.r{color:var(--bad)}tr.good td.r{color:var(--ok)}
+.chip{display:inline-block;padding:1px 9px;border-radius:999px;font-weight:600;font-size:12px;background:var(--chip);white-space:nowrap}
+.chip.move{background:var(--accbg);color:var(--acc)}.chip.grip{background:var(--warnbg);color:var(--warn)}.chip.see{background:var(--chip);color:var(--mut)}
+.empty{color:var(--mut)}
+</style>
+<header><h1><span class=logo>A</span>Arm operator</h1><span id=state class=pill><i></i>connecting</span>
+ <div class=stats><span>model <b id=smodel>-</b></span><span>elapsed <b id=selapsed>-</b></span><span>tool calls <b id=scalls>0</b></span><span>failed <b id=sfail>0</b></span></div></header>
+<main>
+<section class=card><h2>Task</h2><textarea id=task spellcheck=false placeholder="Say what the arm should do, in plain words. Enhance rewrites it using the camera images."></textarea>
+ <div class=row><select id=model title="Model that operates the arm"><option value=sonnet>Sonnet</option><option value=haiku>Haiku</option><option value=opus>Opus</option><option value=claude-fable-5-2>Fable</option><option value=endpoint>Model endpoint (Gemma, see model_endpoint.env)</option></select>
+ <select id=effort title="Reasoning effort"><option value=low>effort: low</option><option value="">effort: default</option><option value=medium>effort: medium</option></select>
+ <span class=grow></span><button id=enh title="Rewrite the instruction into a clear task, using the cameras">Enhance</button></div>
+ <div class=row><button id=start>Start</button><button id=resume title="Start a new run that is told what the last run did">Resume task</button><span class=grow></span><button id=stop>Stop</button></div>
+ <div class="row arm"><span class=lab>Arm</span><button id=open>Open gripper</button><button id=park>Park</button><button id=hold title="Torque on again, holding where it is">Hold</button><span class=grow></span><button id=relax title="Torque off: the arm goes limp">Relax</button></div>
+ <div id=msg></div><div id=orig></div></section>
+<section class=card><h2>Cameras <span id=camnote></span></h2><div class=cams>
+ <div class=cam id=cwb><img id=cw alt="wrist camera"><b>Wrist</b><em>LIVE</em></div>
+ <div class=cam id=cob><img id=co alt="overview camera"><b>Overview</b><em>LIVE</em></div></div></section>
+<section class="card wide" id=resultcard><h2>Result</h2><div id=rmeta></div><pre id=result class=empty>No run yet.</pre></section>
+<section class="card wide"><h2>Agent notes <span>latest first</span></h2><div id=notes class=empty>-</div></section>
+<section class="card wide"><h2>Tool calls <span id=actcount></span></h2><div class=scroll><table id=acts></table></div></section>
+</main>
 <script>
 const $=id=>document.getElementById(id), esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-let filled=false;
-async function post(p,b){const r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});const j=await r.json();$('msg').textContent=j.message||'';tick();}
-$('start').onclick=()=>post('/api/start',{task:$('task').value,model:$('model').value,effort:$('effort').value});
+const KIND={move_tcp:'move',move_to:'move',center_over:'move',drop_at:'move',release_here:'move',wipe:'move',stir:'move',touch_table:'move',
+ pick_at:'grip',pick_thin:'grip',grab_tip:'grip',grab_upright:'grip',gripper:'grip',grip_state:'grip',set_torque:'grip'};
+const FAIL=/ABORT|STOPPED|NOT holding|UNREACHABLE|slipped out|refused|failed/, GOOD=/^HOLDING|^RELEASED|^WIPED|already above/;
+let filled=false, rough='';
+function fmt(s){if(s==null)return '-';const m=Math.floor(s/60);return m?m+' min '+String(s%60).padStart(2,'0')+' s':s+' s';}
+async function post(p,b){try{const r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});const j=await r.json();$('msg').textContent=j.message&&j.message!=='ok'?j.message:'';}catch(e){$('msg').textContent='request failed';}tick();}
+const run=()=>({task:$('task').value,model:$('model').value,effort:$('effort').value});
+$('start').onclick=()=>post('/api/start',run());
+$('resume').onclick=()=>post('/api/resume',run());
 $('stop').onclick=()=>post('/api/stop');
-$('resume').onclick=()=>post('/api/resume',{task:$('task').value,model:$('model').value,effort:$('effort').value});
-$('open').onclick=()=>{$('msg').textContent='opening the gripper...';post('/api/open');};
-$('relax').onclick=()=>{if(confirm('Torque off: the arm goes limp and DROPS if it is raised. Hold it or make sure it is near the table. Relax now?')){$('msg').textContent='relaxing...';post('/api/relax');}};
-$('hold').onclick=()=>{$('msg').textContent='torque on...';post('/api/hold');};
-let rough='';
-$('enh').onclick=async()=>{rough=$('task').value;$('enh').disabled=true;$('msg').textContent='enhancing (looks at the cameras, about 15 s)...';
+$('open').onclick=()=>{$('msg').textContent='Opening the gripper...';post('/api/open');};
+$('park').onclick=()=>{$('msg').textContent='Parking...';post('/api/park');};
+$('hold').onclick=()=>{$('msg').textContent='Torque on...';post('/api/hold');};
+$('relax').onclick=()=>{if(confirm('Torque off: the arm goes limp and DROPS if it is raised. Hold it or make sure it is near the table. Relax now?')){$('msg').textContent='Relaxing...';post('/api/relax');}};
+$('enh').onclick=async()=>{rough=$('task').value;$('enh').disabled=true;$('msg').textContent='Enhancing (looks at the cameras, about 15 s)...';
  try{const r=await fetch('/api/enhance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task:rough})});const j=await r.json();
   if(j.task){$('task').value=j.task;$('orig').textContent='Your original instruction: '+rough;}$('msg').textContent=j.message||'';}
- catch(e){$('msg').textContent='enhance failed';}$('enh').disabled=false;};
-$('park').onclick=()=>{$('msg').textContent='parking...';post('/api/park');};
-async function tick(){let s;try{s=await (await fetch('/api/status')).json();}catch(e){$('state').textContent='(page lost contact)';return;}
+ catch(e){$('msg').textContent='Enhance failed';}$('enh').disabled=false;};
+function pill(cls,text){const p=$('state');p.className='pill '+cls;p.innerHTML='<i></i>'+esc(text);}
+async function tick(){let s;try{s=await (await fetch('/api/status')).json();}catch(e){pill('bad','page lost contact');return;}
  if(!filled){$('task').value=s.task||s.default_task;filled=true;}
  const busy=s.running||s.other;
- $('state').innerHTML=s.running?`<span class=ok>running ${s.elapsed}s (${esc(s.model)})</span>`:s.other?'<span class=bad>another run is in progress (started outside this page)</span>':'<span class=mut>idle</span>';
+ if(s.running)pill('run','running');else if(s.other)pill('warn','another run is in progress (started outside this page)');else pill('','idle');
+ $('smodel').textContent=s.model||'-';$('selapsed').textContent=s.running?fmt(s.elapsed):(s.result?fmt(s.result.seconds):'-');
  $('start').disabled=busy;$('stop').disabled=!s.running;for(const b of ['park','resume','open','relax','hold'])$(b).disabled=busy;
- if(s.result)$('result').innerHTML=`<b>${s.result.seconds} s, ${s.result.turns} turns, $${s.result.cost}</b>\n`+esc(s.result.text),$('result').className='';
- else if(s.running)$('result').textContent='Running...';else if(s.stopped)$('result').textContent='Stopped by the operator. The servos hold their last goal.';
- $('notes').textContent=s.notes.length?s.notes.join('\n\n'):'-';
- $('acts').innerHTML='<tr><th>time</th><th>tool</th><th>arguments</th><th>s</th><th>result</th></tr>'+s.actions.slice().reverse().map(a=>`<tr><td>${a.t}</td><td>${a.tool}</td><td>${esc(a.args)}</td><td>${a.s}</td><td class="${a.error||/ABORT|STOPPED|NOT holding/.test(a.result)?'bad':''}">${esc(a.result)}</td></tr>`).join('');}
-function cams(){const t=Date.now();$('cw').src='/cam/wrist?'+t;$('co').src='/cam/overview?'+t;}
+ const rc=$('resultcard'),res=$('result');
+ if(s.result){const t=s.result.text||'';rc.className='card wide '+(/BLOCKED|not finished|could not|couldn\'t/i.test(t.slice(0,400))?'blocked':'done');
+  $('rmeta').innerHTML=`<div class=meta><span>${fmt(s.result.seconds)}</span><span>${s.result.turns} turns</span><span>$${s.result.cost}</span></div>`;res.textContent=t;res.className='';}
+ else{$('rmeta').innerHTML='';rc.className='card wide'+(s.running?' running':'');res.className='empty';
+  res.textContent=s.running?'Running...':s.stopped?'Stopped by the operator. The servos hold their last goal.':'No run yet.';}
+ const n=$('notes');if(s.notes.length){n.className='';n.innerHTML=s.notes.slice().reverse().map(x=>`<div class=note><pre>${esc(x)}</pre></div>`).join('');}else{n.className='empty';n.textContent='-';}
+ const acts=s.actions.slice().reverse(),fails=acts.filter(a=>a.error||FAIL.test(a.result)).length;
+ $('scalls').textContent=acts.length;$('sfail').textContent=fails;$('actcount').textContent=acts.length?'latest first':'';
+ $('acts').innerHTML=acts.length?'<tr><th>time</th><th>tool</th><th>arguments</th><th>s</th><th>result</th></tr>'+acts.map(a=>{
+  const bad=a.error||FAIL.test(a.result),good=!bad&&GOOD.test(a.result);
+  return `<tr class="${bad?'fail':good?'good':''}"><td class=t>${a.t}</td><td><span class="chip ${KIND[a.tool]||'see'}">${esc(a.tool)}</span></td><td class=a>${esc(a.args)}</td><td class=s>${a.s}</td><td class=r>${esc(a.result)}</td></tr>`;}).join('')
+  :'<tr><td class=empty>No tool calls in this run yet.</td></tr>';}
+function cam(img,box,path){const i=new Image();i.onload=()=>{$(img).src=i.src;$(box).classList.remove('off');$(box).querySelector('em').textContent='LIVE';};
+ i.onerror=()=>{$(box).classList.add('off');$(box).querySelector('em').textContent='NO SIGNAL';};i.src=path+'?'+Date.now();}
+function cams(){cam('cw','cwb','/cam/wrist');cam('co','cob','/cam/overview');}
 setInterval(tick,1500);setInterval(cams,700);tick();cams();
 </script>"""
 

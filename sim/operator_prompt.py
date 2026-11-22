@@ -56,6 +56,7 @@ def values(p: dict | None = None) -> dict:
         "MAX_GRIP_CM": round(gr["max_grip_width"] * 100), "JAW_CM": round(gr["jaw_opening"] * 100 + 0.01), "CLOSED": _n(round(gr["closed_norm"] - 0.015, 2)),
         "WIPE_MAX_CM": round(p.get("wipe", {}).get("max_length", 0.25) * 100), "NAPKIN_FORCE": _n(p.get("wipe", {}).get("napkin_force", 0.5)),
         "GRIP_FORCE": _n(gr.get("force_default", 0.35)),
+        "PLACE_Z_FROM": _n(p.get("place", {}).get("z_from", 0.09)),
         "STIR_MAX_R": _n(st["max_radius"]), "STIR_CLEAR": _n(st["default_clearance"] - 0.01),
     }
 
