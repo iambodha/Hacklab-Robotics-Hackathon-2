@@ -209,3 +209,12 @@ def test_one_short_stir_episode_in_the_twin(tmp_path):
     log = [json.loads(l) for l in (tmp_path / "skillcfg/changes.jsonl").read_text().splitlines()]
     assert log[0]["target"] == "twin" and log[0]["changes"]["sim.stir.turns"]["after"] == 1
     assert (tmp_path / "practice/SUMMARY.md").exists() and (tmp_path / "practice/attempt_1/path.json").exists()
+
+
+def test_learning_curve_svg():
+    from learning.stir.report import curve_svg
+    rows = [{"attempt": 1, "outcome": "too_few_loops", "score": 0.07}, {"attempt": 2, "outcome": "stirred", "score": 0.57},
+            {"attempt": 3, "outcome": "scraped_wall", "score": 0.0}, {"attempt": 4, "outcome": "stirred", "score": 0.6}]
+    v = {"runs": 5, "stirred": 4, "mean_score": 0.5, "mean_radius_cm": 0.8, "mean_pace": 0.3}
+    svg = curve_svg(rows, {"baseline": v, "learned": v})
+    assert svg.startswith("<svg") and svg.count("<circle") == 4 and "scraped wall" in svg and "Validation" in svg
