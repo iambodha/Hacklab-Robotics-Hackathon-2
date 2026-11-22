@@ -95,6 +95,28 @@ def test_solve_base_from_wrist_recovers_planted_base(known_f):
         assert abs(r["intr"]["fx"] / synth.TRUE_INTR["fx"] - 1) < 1e-3
 
 
+def test_solve_base_with_priors_fuses_and_tightens():
+    """Foot-like point prior + tape-like extra residuals alongside the wrist pixels."""
+    T_table_base = g.T_from(g.rot_z(math.radians(-88)), [-0.30, 0.05, 0.0])
+    T_base_cam = wrist.T_base_wristcam(POSE)
+    T_table_cam = T_table_base @ T_base_cam
+    fwd = T_table_cam[:3, 2] * np.array([1, 1, 0])
+    fwd /= np.linalg.norm(fwd)
+    side = np.array([-fwd[1], fwd[0], 0])
+    p0 = T_table_cam[:3, 3] * np.array([1, 1, 0])
+    T_tm = {20: g.planar_T(*(p0 + 0.45 * fwd - 0.15 * side)[:2], 0.3)}       # one marker, like the real wrist view
+    uv, _ = g.project(T_table_cam, synth.TRUE_INTR, synth.W, synth.H, g.apply(T_tm[20], marker_object_points(0.1)))
+    obs = {20: uv + np.random.default_rng(1).normal(0, 0.5, uv.shape)}
+    alone = wrist.solve_base_from_wrist(obs, T_tm, T_base_cam, 0.1, synth.W, synth.H, intr=synth.TRUE_INTR)
+    F = g.apply(T_table_base, [[0.0, 0.0566, 0.0]])[0, :2]
+    p_true = T_table_base[:2, 3]
+    fused = wrist.solve_base_from_wrist(obs, T_tm, T_base_cam, 0.1, synth.W, synth.H, intr=synth.TRUE_INTR,
+                                        point_priors=[((0.0, 0.0566), F, 0.003)], sigma_px=1.0,
+                                        extra_residuals=lambda T: (T[:2, 3] - p_true) / 0.002)
+    assert np.linalg.norm(fused["T_table_base"][:2, 3] - p_true) < 0.003
+    assert fused["sigma_mm"] < alone["sigma_mm"] and fused["sigma_mm"] < 3.0
+
+
 def test_solve_base_from_several_hand_placed_poses():
     T_table_base = g.T_from(g.rot_z(math.radians(-92)), [-0.30, 0.04, 0.0])
     T_tm = {20: g.planar_T(0.10, -0.30, 0.3), 21: g.planar_T(0.12, 0.25, -0.2)}

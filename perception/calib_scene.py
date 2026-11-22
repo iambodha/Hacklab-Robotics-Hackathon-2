@@ -213,15 +213,28 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
         foot_pt = None
     tape = {k: v for k, v in (ab.get("tape_mm") or {}).items() if v is not None}
     if src in ("tape", "auto") and len(tape) >= 3 and len(base_ids) == 2:
-        T0 = (wrist_est or {}).get("T_table_base")
-        if T0 is None:
-            mid, perp, _ = _base_axes(fit, base_ids)
-            T0 = T_table_base_from(mid, math.atan2(perp[1], perp[0]), base_z)
+        mid, perp, _ = _base_axes(fit, base_ids)     # start (and pick the marker corners) like tape_guide.jpg did
+        T0 = T_table_base_from(mid, math.atan2(perp[1], perp[0]), base_z)
+        if foot_pt is not None:
+            yaw0 = math.atan2(perp[1], perp[0]) - math.pi / 2
+            T0 = g.T_from(g.rot_z(yaw0), [*arm_base.base_from_foot(foot_pt[0], yaw0), base_z])
+        elif wrist_est is not None:
+            T0 = wrist_est["T_table_base"]
         segs = arm_base.tape_segments(T0, T_tm, size, base_ids)
         t = arm_base.solve_tape(segs, tape, T0, base_z)
         T_table_base = t["T_table_base"]
         base_info = {"source": f"tape ({', '.join(t['used'])}: foot front corners -> marker corners, scene_config.json)",
                      "sigma_mm": t["sigma_mm"], "sigma_yaw_deg": t["sigma_yaw_deg"], "tape_residual_mm": t["residual_mm"]}
+        if w_obs:                 # the 100 mm foot baseline leaves yaw at ~1 deg: let the wrist view tighten it
+            f_tape, _ = arm_base.tape_residuals(segs, tape)
+            est = wrist.solve_base_from_wrist(w_obs, T_tm, w_T, size, W, H, intr=intr_wr or wrist_est["intr"],
+                                              base_z=base_z, sigma_px=max(1.0, wrist_est["rms_px"]),
+                                              extra_residuals=f_tape)
+            T_table_base = est["T_table_base"]
+            base_info.update({"source": base_info["source"] + " + wrist (yaw)", "sigma_mm": est["sigma_mm"],
+                              "sigma_yaw_deg": est["sigma_yaw_deg"], "tape_only": {k: t[k] for k in ("sigma_mm", "sigma_yaw_deg")},
+                              "tape_residual_mm": (f_tape(T_table_base) * arm_base.TAPE_SIGMA_M * 1000).round(2).tolist(),
+                              "wrist_rms_px": est["rms_px"], "wrist_poses": w_src})
     elif src in ("foot", "auto") and foot_pt is not None and w_obs:
         it_w = intr_wr or wrist_est["intr"]
         sigma_px = max(1.0, wrist_est["rms_px"])
@@ -413,6 +426,7 @@ def main():
     ap.add_argument("--config", type=Path, default=CONFIG_PATH)
     ap.add_argument("--out", type=Path, default=SCENE_PATH)
     ap.add_argument("--dry-run", action="store_true", help="don't write the json")
+    ap.add_argument("--force", action="store_true", help="write even if the arm-base source gets weaker")
     a = ap.parse_args()
     cfg = json.loads(a.config.read_text())
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -426,6 +440,12 @@ def main():
     from .scene import Scene
     sc = Scene.from_dict(c)
     print_report(c)
+    good = ("tape", "foot")
+    prev = json.loads(a.out.read_text())["arm"]["base_on_table"]["source"] if a.out.exists() else ""
+    new = c["arm"]["base_on_table"]["source"]
+    if not a.dry_run and not a.force and prev.startswith(good) and not new.startswith(good):
+        raise SystemExit(f"NOT written: the arm base would degrade from '{prev[:40]}...' to '{new[:40]}...'. Is something "
+                         "standing in front of the arm foot, or did the base move? Clear it and rerun, or pass --force.")
     if not a.dry_run:
         a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(c, indent=1))

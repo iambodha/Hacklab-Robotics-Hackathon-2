@@ -129,24 +129,32 @@ def tape_segments(T_table_base: np.ndarray, T_table_marker: dict, size: float, b
     return segs
 
 
-def solve_tape(segs: list[dict], tape_mm: dict, T0: np.ndarray, base_z: float = 0.0) -> dict:
-    """Base (x, y, yaw) on the table from tape distances (mm) keyed by segment label."""
+def tape_residuals(segs: list[dict], tape_mm: dict):
+    """-> (f(T_table_base) -> residuals / TAPE_SIGMA_M, labels used)."""
     used = [s for s in segs if tape_mm.get(s["label"]) is not None]
     if len(used) < 3:
         raise ValueError(f"need >= 3 tape distances, got {[s['label'] for s in used]}")
 
-    def res(x):
-        T = g.planar_T(*x)
+    def f(T):
         return np.array([(np.linalg.norm(g.apply(T, [[*FOOT_CORNERS[s["foot_corner"]], 0]])[0, :2]
                                          - s["marker_corner_xy"]) - tape_mm[s["label"]] / 1000) / TAPE_SIGMA_M
                          for s in used])
+    return f, [s["label"] for s in used]
+
+
+def solve_tape(segs: list[dict], tape_mm: dict, T0: np.ndarray, base_z: float = 0.0) -> dict:
+    """Base (x, y, yaw) on the table from tape distances (mm) keyed by segment label."""
+    f, used = tape_residuals(segs, tape_mm)
+
+    def res(x):
+        return f(g.planar_T(*x))
 
     x0 = np.array([T0[0, 3], T0[1, 3], math.atan2(T0[1, 0], T0[0, 0])])
     x, r, J = g.levmar(res, x0)
     s = np.sqrt(np.maximum(np.diag(g.covariance(J, r, 1.0)), 0))
     return {"T_table_base": g.T_from(g.rot_z(x[2]), [x[0], x[1], base_z]),
             "sigma_mm": float(np.hypot(s[0], s[1]) * 1000), "sigma_yaw_deg": float(math.degrees(s[2])),
-            "residual_mm": (r * TAPE_SIGMA_M * 1000).round(2).tolist(), "used": [s["label"] for s in used]}
+            "residual_mm": (r * TAPE_SIGMA_M * 1000).round(2).tolist(), "used": used}
 
 
 # ---- evidence images -----------------------------------------------------------------------------------
