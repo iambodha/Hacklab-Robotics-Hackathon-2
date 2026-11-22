@@ -266,7 +266,18 @@ def add_bin(world, spec):
                       size=fmt([width/2, half, t/2]), rgba=fmt(spec['rgba']), friction='0.8 0.01 0.001', **STATIC_CONTACT)
 
 
-def build_xml(layout, out_dir):
+def table_texture_file(texture, layout_dir=None):
+    """Path of a layout's table.texture: absolute, else relative to the layout file's folder when it exists there
+    (site folders), else relative to sim/ (e.g. 'assets/home_table_texture.png')."""
+    p = Path(texture)
+    if p.is_absolute():
+        return p
+    if layout_dir is not None and (Path(layout_dir) / p).is_file():
+        return (Path(layout_dir) / p).resolve()
+    return (HERE / p).resolve()
+
+
+def build_xml(layout, out_dir, layout_dir=None):
     root = base_arm(out_dir)
     world = root.find('worldbody')
     for geom in world.iter('geom'):
@@ -280,10 +291,10 @@ def build_xml(layout, out_dir):
     ET.SubElement(tbody, 'geom', name='table_top', type='box', pos=fmt([0, 0, -th/2]), size=fmt([tw/2, td/2, th/2]),
                   rgba=fmt(table['rgba']), friction='0.8 0.01 0.001', **STATIC_CONTACT)
     if table.get('texture'):
-        # Real table top (orthomosaic from the phone video, scripts/realsim/table_texture.py), stretched once over
-        # the top face: image right = +x, image up = +y.
+        # Real table top (sim/fit_appearance.py or the phone-video orthomosaic), stretched once over the top face:
+        # image right = +x, image up = +y.
         asset = root.find('asset')
-        ET.SubElement(asset, 'texture', name='table_tex', type='2d', file=str((HERE / table['texture']).resolve()))
+        ET.SubElement(asset, 'texture', name='table_tex', type='2d', file=str(table_texture_file(table['texture'], layout_dir)))
         ET.SubElement(asset, 'material', name='table_mat', texture='table_tex', texuniform='false', texrepeat='1 1',
                       specular=str(table.get('specular', 0.15)), shininess='0.3', reflectance='0')
         ET.SubElement(tbody, 'geom', name='table_skin', type='plane', size=fmt([tw/2, td/2, 0.05]), pos='0 0 0.0002',
@@ -582,7 +593,7 @@ def render(model, data, out_dir, layout, photo=None):
 def build(layout_path=HERE / 'layout.json', out_dir=HERE / 'generated', photo=None, report=True):
     layout = json.loads(Path(layout_path).read_text())
     out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
-    root = build_xml(layout, out_dir)
+    root = build_xml(layout, out_dir, Path(layout_path).parent)
     rings = {}
     if layout['reach'].get('show_rings') or report:
         model = mujoco.MjModel.from_xml_string(ET.tostring(root, encoding='unicode'))
