@@ -1,0 +1,20 @@
+{
+  "source": "home twin sim/generated/home/workspace.xml camera 'overview_cam' (synced from perception scene_calib.json)",
+  "pos": [
+    0.03581,
+    0.67651,
+    0.3656
+  ],
+  "xmat": [
+    -0.999674,
+    -0.025021,
+    0.005171,
+    0.02161,
+    -0.72008,
+    0.693555,
+    -0.01363,
+    0.69344,
+    0.720386
+  ],
+  "fovy": 75.86
+}

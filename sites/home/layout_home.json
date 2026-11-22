@@ -1,0 +1,208 @@
+{
+  "_notes": [
+    "Home table twin (2026-11-22). Select it with SIM_LAYOUT=home (sim/layout.json stays the venue table).",
+    "Frame = the sim frame (URDF base_link on the table top): +y = arm forward at j1 = 0, +z up. The contract world of scene_calib.json has +x forward: p_sim = T_sim_world @ p_world.",
+    "Every calibrated block carries 'src': 'estimate' (sim/estimate_home.py, from the live cameras) or 'scene_calib' (perception's calibration via sim/sync_from_calib.py). 'fixed' = hand-set.",
+    "Re-sync: python3 sim/sync_from_calib.py ../perception/calibration/scene_calib.json ; re-estimate: python3 sim/estimate_home.py",
+    "Sizes: table/bin sizes are full lengths; 'fixed' and object part sizes are MuJoCo half-sizes."
+  ],
+  "table": {
+    "size": [0.92, 0.6848],
+    "center": [0.0226, 0.3234],
+    "yaw": 178.728,
+    "thickness": 0.025,
+    "height": 0.75,
+    "rgba": [0.8, 0.69, 0.57, 1],
+    "floor_rgba": [0.42, 0.36, 0.3, 1],
+    "src": "estimate",
+    "calib_extent_inside": false,
+    "texture": "assets/home_table_texture.png",
+    "specular": 0.05,
+    "texture_meta": {
+      "size_px": [460, 342],
+      "mm_per_px": 2.0,
+      "seen_fraction": 0.849,
+      "filled_fraction": 0.361,
+      "src": "fit_appearance",
+      "from": "/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/twin/sim/layouts/home_estimate/overview.jpg"
+    }
+  },
+  "lighting": {
+    "headlight": {
+      "ambient": [0.751, 0.751, 0.751],
+      "diffuse": [0, 0, 0],
+      "specular": [0, 0, 0]
+    },
+    "skybox": [[0.75, 0.75, 0.74], [0.45, 0.43, 0.4]],
+    "lights": [
+      {
+        "name": "key",
+        "directional": true,
+        "pos": [0.0, 0.3, 2.0],
+        "dir": [0.1, 0.2, -1.0],
+        "diffuse": [0.25, 0.25, 0.25],
+        "specular": [0.03, 0.03, 0.03],
+        "castshadow": true
+      }
+    ],
+    "src": "fit_appearance",
+    "_about": "gain fitted to the real overview (table colour error 0.16 -> 0.12 rgb)"
+  },
+  "arm_rgba": [0.12, 0.12, 0.13, 1],
+  "arm": {
+    "joint_mapping": {
+      "mode": "range_fraction"
+    },
+    "bus": "5B61033301"
+  },
+  "rest_pose": [-0.066, -1.552, -0.212, 1.723, 0.02, 0.037, 0.005, 0.939],
+  "_rest_pose_about": "the real follower's (limp, folded) pose when the estimate was taken (sim/layouts/home_estimate/joints.json)",
+  "bins": [],
+  "objects": [
+    {
+      "name": "blue_cap",
+      "shape": "cup",
+      "pos": [0.1409, 0.2836, 0.0145],
+      "yaw": 0,
+      "radius": 0.028,
+      "wall": 0.002,
+      "height": 0.029,
+      "segments": 24,
+      "mass": 0.008,
+      "rgba": [0.05, 0.33, 0.55, 1],
+      "randomize": {"x": [0.1109, 0.1709], "y": [0.2536, 0.3136], "yaw": [0, 0]},
+      "src": "measured",
+      "calib": "scene_calib 2026-11-22T01:50:55+01:00 (final 4-marker, 193f00d); re-measured on the same 00:58 frame by r3-taskfix",
+      "world_xy": [0.2836, -0.1409],
+      "sigma_mm": {"centre": 5.5, "diameter": 4.7, "height": 6.5},
+      "_about": "jar lid, measured by tasks/blue_to_bin/measure.py (overview silhouette -> cylinder, 60 x 29 mm; 62 x 26 mm under the 00:40 calibration, centre moved (+22, -11) mm). Modelled OPEN SIDE UP (shallow cup: outer d 60 mm, wall 2 mm) so the rim-pinch grasp exists; on the real table it looked closed side up: check before the real run. Mass 8 g estimated (not weighed); friction = the builder's object default 1.2"
+    },
+    {
+      "name": "bin_tub",
+      "shape": "cup",
+      "pos": [-0.1112, 0.2916, 0.0385],
+      "yaw": 0,
+      "radius": 0.0479,
+      "wall": 0.002,
+      "height": 0.077,
+      "segments": 28,
+      "mass": 0.03,
+      "rgba": [0.62, 0.6, 0.72, 0.45],
+      "src": "measured",
+      "calib": "scene_calib 2026-11-22T01:50:55+01:00 (final 4-marker, 193f00d); same picked rim/base pixels, re-fitted by r3-taskfix",
+      "world_xy": [0.2916, 0.1112],
+      "rim_diameter_m": 0.1087,
+      "base_diameter_m": 0.0857,
+      "sigma_mm": {"centre": 4.6, "rim_diameter": 2.9, "rim_height": 3.3},
+      "_about": "transparent plastic tub, measured by tasks/blue_to_bin/measure.py (rim/base pixels -> tapered cylinder: rim d 109, base d 86, rim height 77 mm; centre moved (+37, -12) mm from the 00:40 calibration). The builder has no tapered shape: a straight cup with the mean diameter (inner 96 mm). Free body (30 g estimated), so a collision can tip it as on the real table"
+    }
+  ],
+  "fixed": [
+    {
+      "name": "cam_stand_pole",
+      "type": "cylinder",
+      "pos": [0.0374, 0.7065, 0.1328],
+      "size": [0.008, 0.2328],
+      "yaw": 0,
+      "rgba": [0.05, 0.05, 0.05, 1],
+      "src": "scene_calib",
+      "_about": "overview camera stand just beyond the near edge, under the camera: the wrist camera sees it rise from the table edge; the overview camera does not see it"
+    }
+  ],
+  "markers": {
+    "dictionary": "DICT_4X4_50",
+    "size_m": 0.1,
+    "items": [
+      {
+        "id": 20,
+        "role": "top",
+        "T": [[-0.99929, -0.03773, 0.0, 0.3637], [0.03773, -0.99929, 0.0, 0.46622], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "src": "scene_calib",
+        "rms_mm": 1.271
+      },
+      {
+        "id": 21,
+        "role": "top",
+        "T": [[-0.99987, -0.01615, 0.0, -0.28685], [0.01615, -0.99987, 0.0, 0.47884], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "src": "scene_calib",
+        "rms_mm": 0.921
+      },
+      {
+        "id": 22,
+        "role": "base",
+        "T": [[-0.99986, -0.01683, 0.0, -0.30741], [0.01683, -0.99986, 0.0, 0.07587], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "src": "scene_calib",
+        "rms_mm": 2.109
+      },
+      {
+        "id": 23,
+        "role": "base",
+        "T": [[-0.9994, -0.03461, 0.0, 0.34433], [0.03461, -0.9994, 0.0, 0.05548], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+        "src": "scene_calib",
+        "rms_mm": 1.246
+      }
+    ],
+    "levels": [0.133, 0.723]
+  },
+  "cameras": [
+    {
+      "name": "overview_cam",
+      "fovy": 75.86,
+      "src": "scene_calib",
+      "T_cv": [[-0.99967, 0.02502, -0.00517, 0.03581], [0.02161, 0.72008, -0.69355, 0.67651], [-0.01363, -0.69344, -0.72039, 0.3656], [0.0, 0.0, 0.0, 1.0]],
+      "queue": "usbvideo/9ea4cacd5be94751e1eea7be90bcf628",
+      "K_normalized": {
+        "fx": 0.479236,
+        "fy": 0.641638,
+        "cx": 0.513426,
+        "cy": 0.526548
+      },
+      "dist": [0.068819, -0.050624, 0.0, 0.0, 0.0],
+      "reproj_px": 0.303
+    },
+    {
+      "name": "top_cam",
+      "pos": [0.0, 0.3, 1.1],
+      "lookat": [0.0, 0.29, 0.0],
+      "fovy": 55
+    },
+    {
+      "name": "side_cam",
+      "pos": [-1.0, 0.3, 0.55],
+      "lookat": [0.0, 0.25, 0.1],
+      "fovy": 45
+    }
+  ],
+  "wrist_camera": {
+    "pose_file": "camera_pose/wrist_camera.json",
+    "fovy": 77.635,
+    "src": "scene_calib",
+    "K_normalized": {
+      "fx": 0.466274,
+      "fy": 0.621489,
+      "cx": 0.506474,
+      "cy": 0.529637
+    },
+    "dist": [0.058589, -0.071567, -0.002509, -0.00398, 0.017699],
+    "queue": "usbvideo/28ff0ca87978e8f993c2ac64a84d188a",
+    "pose_source": "CAD (camera_pose/wrist_camera.json)",
+    "link": "Gripper_Base_v1_1"
+  },
+  "image_size": [299, 224],
+  "reach": {
+    "show_rings": false,
+    "samples": 150000,
+    "top_down_tolerance_deg": 30,
+    "position_tolerance": 0.015,
+    "bin_drop_clearance": 0.05
+  },
+  "T_sim_world": {
+    "value": [[-0.0, -1.0, -0.0, -0.0], [1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+    "src": "scene_calib",
+    "_about": "p_sim = T_sim_world @ p_world (contract world: x forward; sim/URDF: y forward)"
+  },
+  "_synced_from": [
+    "/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/perception/calibration/scene_calib.json",
+    "calibration/scene_calib.json"
+  ]
+}

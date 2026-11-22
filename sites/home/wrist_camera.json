@@ -1,0 +1,111 @@
+{
+  "frame": "Gripper_Base_v1_1 link frame of elrobot_follower.urdf (metres); child of rev_motor_07",
+  "source": {
+    "step": "hardware/elrobot/STEP/elrobot_follower_parts/Gripper.stp",
+    "mount": "CameraMount_square32mm + UVC_Camera (standard follower assembly)",
+    "registration_median_mm": 0.0689,
+    "registration_p95_mm": 1.65
+  },
+  "T_link_camera": [
+    [
+      0.999967,
+      -0.003511,
+      0.007382,
+      0.001517
+    ],
+    [
+      -0.008175,
+      -0.429537,
+      0.903012,
+      0.022752
+    ],
+    [
+      0.0,
+      -0.903043,
+      -0.429551,
+      0.06075
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "T_link_camera_cad": [
+    [
+      0.999967,
+      -0.003511,
+      0.007382,
+      0.001517
+    ],
+    [
+      -0.008175,
+      -0.429537,
+      0.903012,
+      0.022752
+    ],
+    [
+      0.0,
+      -0.903043,
+      -0.429551,
+      0.06075
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "mount_correction": {
+    "pitch_deg": 9.31,
+    "sigma_deg": 0.2,
+    "applied": false,
+    "source": "r2-twinfix sim/compare_real.py --fit-offsets, 22 Nov, one folded pose (wrist jaw outline 14.6 -> 5.0 px)",
+    "about": "T_link_camera = T_link_camera_cad when applied is false, else T_link_camera_cad @ Rx(pitch_deg). Switch with camera_pose/wrist_mount.py apply|revert, then rerun perception.calib_scene and sim/sync_from_calib.py.",
+    "why_not_applied": "22 Nov multi-pose check (camera_pose/fit_wrist_chain.py on frames/calib-20261122-022246, 5 hand poses + calibration/wrist_pose_0122; camera_pose/wrist_chain_fit_20261122.json): with the base free the data want pitch -2.6 +- 1.4 deg, not +9.3; no mount/offset model beats the CAD chain in leave-one-pose-out (CAD 30.8 px, pitch only 35.3, mount3 32.0, twinfix pitch+offsets 29.5, full 13-param 35.8 while fitting 6.4). Earlier single-pose check: the mount alone moved the wrist-FK base from 57 to 347 mm off the foot.",
+    "multi_pose_fit": {
+      "pitch_deg": -2.61,
+      "sigma_deg": 1.36,
+      "loo_rms_px": 35.32,
+      "cad_loo_rms_px": 30.77,
+      "source": "camera_pose/wrist_chain_fit_20261122.json model 'B pitch'"
+    }
+  },
+  "camera_convention": "OpenCV: x right, y down, z = optical axis",
+  "optical_centre_m": [
+    0.00152,
+    0.02275,
+    0.06075
+  ],
+  "optical_axis": [
+    0.00738,
+    0.90301,
+    -0.42955
+  ],
+  "tilt_below_gripper_axis_deg": 25.44,
+  "tcp_m": [
+    0.00168,
+    0.09355,
+    0.0005
+  ],
+  "tcp_note": "midpoint between fingertip pads, 10 mm behind the tips; gripper points along +y",
+  "jaw_travel": "each jaw moves inward by 0.0255*(1 - j8_norm) m along -/+x (j8 norm 1 = open)",
+  "intrinsics": {
+    "fx_n": 0.46627408561215083,
+    "fy_n": 0.6214887325954297,
+    "cx_n": 0.5064735511931084,
+    "cy_n": 0.5296365534439758,
+    "dist": [
+      0.058588887398209846,
+      -0.07156655204334568,
+      -0.002509185096635855,
+      -0.0039804706090478545,
+      0.017699344876849217
+    ],
+    "rms_px": 0.395,
+    "source": "perception/calib_intrinsics.py 2026-11-22T00:48:52+01:00"
+  },
+  "intrinsics_note": "ChArUco calibration; normalised by image width/height"
+}
