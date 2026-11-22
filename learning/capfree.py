@@ -12,7 +12,7 @@ Pure standard library: the real-arm server, the learning rule and the replay tes
 """
 from __future__ import annotations
 
-KEYS = ("twist.free_load_ratio", "twist.free_ref_strokes", "twist.free_confirm_strokes", "twist.free_min_rotation_deg")
+KEYS = ("twist.free_load_ratio", "twist.free_ref_strokes", "twist.free_confirm_strokes", "twist.free_min_rotation_deg", "twist.free_min_achieved_fraction")
 
 
 def free_signal(strokes: list[dict], cfg: dict) -> dict:
@@ -22,8 +22,8 @@ def free_signal(strokes: list[dict], cfg: dict) -> dict:
     (a stall also lowers the load)."""
     ratio, n_ref = float(cfg["twist.free_load_ratio"]), int(cfg["twist.free_ref_strokes"])
     n_conf, min_rot = int(cfg["twist.free_confirm_strokes"]), float(cfg["twist.free_min_rotation_deg"])
-    good = [s for s in strokes if not s.get("fatal") and s.get("mean_j7_load") is not None
-            and float(s.get("achieved_deg") or 0) >= 0.5 * float(s.get("commanded_deg") or 0) > 0]
+    good = [s for s in strokes if not s.get("fatal") and not s.get("abort_reason") and not s.get("slip") and s.get("mean_j7_load") is not None
+            and float(s.get("achieved_deg") or 0) >= cfg["twist.free_min_achieved_fraction"] * float(s.get("commanded_deg") or 0) > 0]
     out = {"free": False, "ref_load": None, "threshold": None, "below": [], "began_at": None, "confirmed_at": None,
            "rotation_deg": round(sum(max(0.0, float(s.get("achieved_deg") or 0)) for s in strokes), 1)}
     if len(good) <= n_ref:
@@ -35,6 +35,7 @@ def free_signal(strokes: list[dict], cfg: dict) -> dict:
     for s in strokes:
         rot += max(0.0, float(s.get("achieved_deg") or 0))
         if s not in good[n_ref:]:
+            run = []
             continue
         if rot >= min_rot and float(s["mean_j7_load"]) <= thr:
             out["below"].append(s["stroke"])

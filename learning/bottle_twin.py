@@ -48,3 +48,22 @@ def make_layout(path: Path, bottle: dict | None = None, screw: dict | None = Non
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(lay, indent=1))
     return path
+
+
+def learned_layout(path: Path) -> Path:
+    """The demo bottle from the same versioned profile used by episode_begin.
+
+    The historical BOTTLE/REAL_BOTTLE fixtures remain for r3 regression tests.
+    Dimensions are measured evidence, not a tunable safety envelope.
+    """
+    from . import skillcfg
+    profile = next(p for p in skillcfg.profiles() if p.get("profile") == "bottle_cap")
+    obj = profile["object"]
+    height = obj["cap_height_m"]
+    base = obj["cap_top_z_m"] - height
+    b = {**REAL_BOTTLE, "xy": obj["cap_xy_m"], "cap_h": height,
+         "cap_r": obj["cap_diameter_m"] / 2, "cap_base": base,
+         "neck_top": base - 0.0005, "body_h": base - 0.01}
+    # 0.5 mm neck gap is the scene's contact clearance; 10 mm shoulder clearance
+    # preserves the old model's narrow neck. Thread angle comes from real attempts.
+    return make_layout(path, b, {"turns_to_free": obj["thread_free_deg"] / 360})

@@ -1,0 +1,355 @@
+{
+  "_about": "Named strategy defaults audited in r5. Bounds are envelopes, not learned safety limits. Existing robot profile remains authoritative for physical geometry and safety.",
+  "entries": {
+    "executor.stir.verify_m": {
+      "value": 0.008,
+      "lo": 0.001,
+      "hi": 0.03,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Stir endpoint tolerance"
+    },
+    "executor.stir.recover_clear_m": {
+      "value": 0.005,
+      "lo": 0.001,
+      "hi": 0.02,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Stir recovery clearance"
+    },
+    "executor.pick.hint_height_m": {
+      "value": 0.02,
+      "lo": 0.001,
+      "hi": 0.1,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Unspecified perception object height"
+    },
+    "executor.pick.same_object_min_mm": {
+      "value": 20.0,
+      "lo": 1.0,
+      "hi": 100.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Relocalization association minimum tolerance"
+    },
+    "executor.pick.same_object_sigma": {
+      "value": 3.0,
+      "lo": 1.0,
+      "hi": 6.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Uncertainty multiplier for association"
+    },
+    "executor.pick.max_uncertainty_mm": {
+      "value": 25.0,
+      "lo": 1.0,
+      "hi": 100.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Pick localization acceptance"
+    },
+    "executor.pick.elongation": {
+      "value": 1.3,
+      "lo": 1.0,
+      "hi": 4.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Aspect ratio for short-axis grasp"
+    },
+    "executor.drop.rim_m": {
+      "value": 0.08,
+      "lo": 0.01,
+      "hi": 0.3,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Unspecified bin rim"
+    },
+    "executor.drop.clearance_m": {
+      "value": 0.06,
+      "lo": 0.02,
+      "hi": 0.15,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Release above bin rim"
+    },
+    "executor.drop.width_m": {
+      "value": 0.2,
+      "lo": 0.02,
+      "hi": 0.4,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Unspecified bin width"
+    },
+    "executor.drop.depth_m": {
+      "value": 0.15,
+      "lo": 0.02,
+      "hi": 0.4,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Unspecified bin depth"
+    },
+    "executor.drop.wall_m": {
+      "value": 0.004,
+      "lo": 0.001,
+      "hi": 0.02,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Assumed bin wall thickness"
+    },
+    "executor.wipe.replan_m": {
+      "value": 0.003,
+      "lo": 0.001,
+      "hi": 0.01,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Replan at measured surface when it differs"
+    },
+    "executor.wipe.budget": {
+      "value": 6,
+      "lo": 1,
+      "hi": 30,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Default coverage stroke budget"
+    },
+    "wipe.adapt.alpha": {
+      "value": 0.6,
+      "lo": 0.01,
+      "hi": 1.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Observed cleaning-width exponential update weight"
+    },
+    "wipe.plan.overshoot_m": {
+      "value": 0.01,
+      "lo": 0.0,
+      "hi": 0.05,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Legacy direct coverage planner overshoot"
+    },
+    "wipe.proposal.ttl_s": {
+      "value": 30.0,
+      "lo": 1.0,
+      "hi": 120.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Wipe proposal expiration"
+    },
+    "twist.open_full": {
+      "value": 0.96,
+      "lo": 0.85,
+      "hi": 1.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Open target short of end stop"
+    },
+    "twist.open_enough": {
+      "value": 0.85,
+      "lo": 0.7,
+      "hi": 0.98,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Nothing held above this opening"
+    },
+    "twist.retreat_extra_open": {
+      "value": 0.2,
+      "lo": 0.05,
+      "hi": 0.4,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Additional opening to clear cap on retreat"
+    },
+    "twist.turn_back_min_dt_s": {
+      "value": 0.1,
+      "lo": 0.08,
+      "hi": 1.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Open-jaw turn-back timing"
+    },
+    "twist.side_step_dt_s": {
+      "value": 0.15,
+      "lo": 0.08,
+      "hi": 1.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Side approach step timing"
+    },
+    "twist.side_settle_s": {
+      "value": 0.1,
+      "lo": 0.0,
+      "hi": 1.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Side approach settle"
+    },
+    "twist.stroke_settle_s": {
+      "value": 0.2,
+      "lo": 0.0,
+      "hi": 1.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Stroke measurement settle"
+    },
+    "lift.settle_s": {
+      "value": 0.3,
+      "lo": 0.0,
+      "hi": 1.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Lift measurement settle"
+    },
+    "twist.note_lean_deg": {
+      "value": 25.0,
+      "lo": 0.0,
+      "hi": 80.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Operator lean note threshold"
+    },
+    "rig.move_step": {
+      "value": 0.01,
+      "lo": 0.001,
+      "hi": 0.05,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Twin bottle approach joint step"
+    },
+    "rig.descent_step_m": {
+      "value": 0.003,
+      "lo": 0.001,
+      "hi": 0.01,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Twin guarded descent step"
+    },
+    "rig.descent_dt_s": {
+      "value": 0.15,
+      "lo": 0.08,
+      "hi": 0.5,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Twin guarded descent timing"
+    },
+    "rig.contact_lag_m": {
+      "value": 0.004,
+      "lo": 0.001,
+      "hi": 0.01,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Twin contact tracking lag"
+    },
+    "rig.contact_backoff_m": {
+      "value": 0.002,
+      "lo": 0.001,
+      "hi": 0.01,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Twin contact backoff"
+    },
+    "rig.settle_s": {
+      "value": 0.3,
+      "lo": 0.0,
+      "hi": 1.0,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Twin descent settle"
+    },
+    "rig.grip_default_force": {
+      "value": 0.35,
+      "lo": 0.1,
+      "hi": 0.6,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Twin unspecified grip force"
+    },
+    "rig.closed_norm": {
+      "value": 0.05,
+      "lo": 0.01,
+      "hi": 0.2,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Twin held-object jaw minimum"
+    },
+    "rig.hold_lag_norm": {
+      "value": 0.05,
+      "lo": 0.01,
+      "hi": 0.2,
+      "origin": "r4 implementation baseline; moved without changing behavior on 2026-11-22",
+      "about": "Twin held-object goal lag"
+    },
+    "bottle.cap_height_m": {
+      "value": 0.02,
+      "lo": 0.01,
+      "hi": 0.06,
+      "origin": "r3 bottle tool default; measured bottle overrides this in bottle_cap profile",
+      "about": "Default cap height when omitted by caller"
+    },
+    "twist.free_min_achieved_fraction": {
+      "value": 0.5,
+      "lo": 0.1,
+      "hi": 1.0,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "Minimum achieved/commanded rotation to count a stroke as free evidence"
+    },
+    "executor.freshness.default_s": {
+      "value": 2.0,
+      "lo": 0.1,
+      "hi": 60.0,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "Observation maximum age"
+    },
+    "executor.freshness.gripper_s": {
+      "value": 5.0,
+      "lo": 0.1,
+      "hi": 60.0,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "Gripper observation age"
+    },
+    "executor.freshness.pick_s": {
+      "value": 1.5,
+      "lo": 0.1,
+      "hi": 60.0,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "Pick observation age"
+    },
+    "executor.freshness.pick_at_s": {
+      "value": 20.0,
+      "lo": 0.1,
+      "hi": 60.0,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "PickAt observation age"
+    },
+    "executor.freshness.wipe_s": {
+      "value": 30.0,
+      "lo": 0.1,
+      "hi": 120.0,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "Wipe observation age"
+    },
+    "executor.freshness.inspect_s": {
+      "value": 30.0,
+      "lo": 0.1,
+      "hi": 120.0,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "Inspect observation age"
+    },
+    "executor.pick.relocalise_after_s": {
+      "value": 1.5,
+      "lo": 0.1,
+      "hi": 30.0,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "Refresh old object estimate"
+    },
+    "executor.wipe.recover_points": {
+      "value": 4,
+      "lo": 2,
+      "hi": 20,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "Vertical recovery sampling"
+    },
+    "sim.stir.rim_m": {
+      "value": 0.09,
+      "lo": 0.01,
+      "hi": 0.2,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "Default cup rim"
+    },
+    "sim.stir.inner_radius_m": {
+      "value": 0.03,
+      "lo": 0.01,
+      "hi": 0.1,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "Default cup inner radius"
+    },
+    "sim.stir.spoon_m": {
+      "value": 0.145,
+      "lo": 0.05,
+      "hi": 0.3,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "Default spoon length"
+    },
+    "sim.stir.turns": {
+      "value": 3,
+      "lo": 1,
+      "hi": 10,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "Default stir turns"
+    },
+    "sim.stir.radius_m": {
+      "value": 0.009,
+      "lo": 0.003,
+      "hi": 0.02,
+      "origin": "r4 strategy baseline, named in r5 without behavior change",
+      "about": "Default stir radius"
+    }
+  }
+}

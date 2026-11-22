@@ -35,7 +35,7 @@ approach_z_offset_mm -20..10, twist_deg_per_stroke 5..180, strokes 1..48, lift_p
 `workspace.min_tcp_z/max_tcp_z/max_radius`, `motion.load_abort`. Changing them still means a code/profile edit by a
 human.
 
-With no config file every value is the code default, so behaviour is exactly as before.
+With no runtime config file, selected learned profiles supply defaults. The bottle profile records the 22 November attempts with provenance. Set `SKILL_PROFILES=none` to reproduce the unchanged code baselines. See [the profile guide](../docs/learning/PROFILES.md) for selection, inheritance and rollback.
 
 ## Storage and versions
 
@@ -90,7 +90,7 @@ python -m learning.skillcfg proposal <id>
 python -m learning.skillcfg check <id> [--twin]           # re-run the checks (--twin: the twin run, synchronously)
 python -m learning.skillcfg approve <id> --by <name> [--force]
 python -m learning.skillcfg reject <id> --by <name> [--why "..."]
-python -m learning.skillcfg revert <real|twin> <version> --by <name> [--reason "..."]   # 0 = the code defaults
+python -m learning.skillcfg revert <real|twin> <version> --by <name> [--reason "..."]   # 0 = selected profile defaults (SKILL_PROFILES=none: code baselines)
 python -m learning.skillcfg propose KEY=JSON ... --target real|twin --reason "..." --evidence "..." [--no-check]
 python -m learning.skillcfg log [--target real]
 ```

@@ -1428,6 +1428,11 @@ class RealRig:
     # verified on hardware (see the module docstring): set BOTTLE_TWIST_SIGN=-1 if the cap turns the wrong way.
     twist_sign = env("BOTTLE_TWIST_SIGN", 1, int)
 
+    async def halt(self):
+        """Stop outstanding arm goals at measured position on deadline/cancellation."""
+        st = await am._read()
+        await _stop_here(st, ARM_IDS)
+
     async def state(self) -> dict:
         st = await am._read()
         return {NAME[m]: st[m] for m in ALL_IDS}
@@ -1508,7 +1513,7 @@ async def episode_history(last_n: int = 10) -> str:
 @server.tool(annotations={"destructiveHint": True})
 @recorded
 @_learn_doc
-async def twist_cap(x: float, y: float, cap_top_z: float, cap_height: float = 0.02) -> list:
+async def twist_cap(x: float, y: float, cap_top_z: float, cap_height: float | None = None) -> list:
     return await _content(*await LT.twist_cap(LT.store(), RIG, x, y, cap_top_z, cap_height))
 
 
@@ -1518,6 +1523,12 @@ async def twist_cap(x: float, y: float, cap_top_z: float, cap_height: float = 0.
 async def check_cap() -> list:
     return await _content(*await LT.check_cap(LT.store(), RIG))
 
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+@_learn_doc
+async def extract_cap() -> list:
+    return await _content(*await LT.extract_cap(LT.store(), RIG))
 
 @server.tool()
 @recorded

@@ -112,7 +112,7 @@ def attempt_strokes(st: E.EpisodeStore, n: int) -> list[dict]:
             for x in (p.get("measurements") or {}).get("strokes", [])]
 
 
-async def twist_cap(st: E.EpisodeStore, rig, x: float, y: float, cap_top_z: float, cap_height: float = 0.02):
+async def twist_cap(st: E.EpisodeStore, rig, x: float, y: float, cap_top_z: float, cap_height: float | None = None):
     n, params = _open(st)
     if n is None:
         return "REFUSED: no attempt is open. Call episode_begin first.", {}
@@ -120,9 +120,11 @@ async def twist_cap(st: E.EpisodeStore, rig, x: float, y: float, cap_top_z: floa
     def log(phase, status, meas, note):
         st.phase(n, phase, status, meas, note)
     prior = attempt_strokes(st, n)
-    tw = Twister(rig, params, log, prior_strokes=prior)
+    phases = [p for p in st.attempts()[n]["phases"] if p["phase"] == "twist"]
+    resume_safe = not (phases and phases[-1].get("measurements", {}).get("deadline_interrupted"))
+    tw = Twister(rig, params, log, prior_strokes=prior, resume_safe=resume_safe)
     try:
-        res = await tw.twist_cap(float(x), float(y), float(cap_top_z), float(cap_height))
+        res = await tw.twist_cap(float(x), float(y), float(cap_top_z), None if cap_height is None else float(cap_height))
     finally:
         path = st.attempt_dir(n) / "twist_trace.json"
         old = json.loads(path.read_text()) if prior and path.exists() else {"rows": [], "strokes": []}

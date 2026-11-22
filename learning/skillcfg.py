@@ -28,6 +28,7 @@ import argparse
 import contextlib
 import functools
 import json
+import math
 import os
 import sys
 import time
@@ -193,7 +194,7 @@ def _skill_keys(E) -> dict:
                                             origin="0.8 x the ~350 deg a closed cap needed (attempts 10, 12)"),
         "twist.time_budget_s": _key("float", T["twist.time_budget_s"], "a twist_cap call ends (cap still gripped, "
                                     "resumable) before this many seconds; 0 = no budget", tw, lo=0.0,
-                                    hi=MCP_CLIENT_TIMEOUT_S, origin="r5 (new; 0 = r4 behaviour)"),
+                                    hi=MCP_CLIENT_TIMEOUT_S - LEARN_DEFAULTS["learn.reply_margin_s"], origin="r5 (new; 0 = r4 behaviour)"),
         "twist.cycle_s.slow": _key("float", T["twist.cycle_s.slow"], "expected seconds per stroke cycle at slow, before "
                                    "one is measured (budget prior)", tw, lo=1.0, hi=60.0,
                                    origin="attempt 10: 23 slow 32 deg cycles in 233 s"),
@@ -301,8 +302,8 @@ def profile_label() -> str:
 
 
 @functools.lru_cache(maxsize=4)
-def _registry(profile_key: str, profiles_key: tuple = ()) -> dict:
-    reg = _base_registry(profile_key)
+def _registry(profile_key: str, profiles_key: tuple = (), strategy_stamp: int = 0) -> dict:
+    reg = _base_registry(profile_key, strategy_stamp)
     reg = {k: dict(v) for k, v in reg.items()}
     for prof in (json.loads(p) for p in _read_profiles(profiles_key)):
         label = f"{prof.get('profile')} v{prof.get('version')}"
@@ -319,7 +320,7 @@ def _registry(profile_key: str, profiles_key: tuple = ()) -> dict:
 
 
 @functools.lru_cache(maxsize=4)
-def _base_registry(profile_key: str) -> dict:
+def _base_registry(profile_key: str, strategy_stamp: int = 0) -> dict:
     from . import episodes as E
     T = TWIST_DEFAULTS
     ik = _profile_ik()
@@ -354,6 +355,10 @@ def _base_registry(profile_key: str) -> dict:
                                    "between strokes", "learning/twist.py", lo=0.05, hi=0.6),
     }
     reg.update(_skill_keys(E))
+    for k, entry in json.loads((REPO / "skills/strategy_defaults.json").read_text())["entries"].items():
+        reg[k] = _key("int" if isinstance(entry["value"], int) else "float", entry["value"],
+                      entry["about"], "executor/skills.py, skills/, learning/twist.py, sim/sim_arm_mcp.py",
+                      lo=entry["lo"], hi=entry["hi"], origin=entry["origin"])
     for name, spec in E.PARAMS.items():
         kind, lo, hi = spec[:3]
         if kind == "enum":
@@ -384,7 +389,8 @@ def _profile_raw() -> dict:
 
 
 def registry() -> dict:
-    return _registry(os.environ.get("ROBOT_PROFILE") or "elrobot", _profiles_key())
+    return _registry(os.environ.get("ROBOT_PROFILE") or "elrobot", _profiles_key(),
+                     (REPO / "skills/strategy_defaults.json").stat().st_mtime_ns)
 
 
 def defaults() -> dict:
@@ -400,7 +406,7 @@ def baseline() -> dict:
 def _check_value(spec: dict, v):
     """(normalised value, error or None)."""
     def num(kind, v, lo, hi):
-        if isinstance(v, bool) or not isinstance(v, (int, float)):
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
             return None, f"{v!r} must be a number"
         if kind == "int" and float(v) != int(v):
             return None, f"{v} must be a whole number"
@@ -503,6 +509,11 @@ def active(t: str | None = None) -> dict:
                 continue
         ignored.append(k)
     d = defaults()
+    _, cross_errors = validate({}, vals)
+    if cross_errors:
+        # A new learned default can invalidate an old runtime bound; fail closed to the profile.
+        ignored.extend(k for k, _ in stored if k not in ignored)
+        vals = d
     return {"target": t, "version": version, "values": vals,
             "overrides": {k: v for k, v in vals.items() if v != d[k]}, "ignored": ignored}
 
@@ -516,9 +527,9 @@ def version(t: str | None = None) -> int:
 
 
 def stamp(t: str | None = None) -> dict:
-    """What an attempt record carries: which config it ran with (version, its overrides, the learned profiles)."""
+    """Stable r4 runtime stamp; EpisodeStore adds profile and default snapshots alongside it."""
     a = active(t)
-    return {"target": a["target"], "version": a["version"], "overrides": a["overrides"], "profile": profile_label()}
+    return {"target": a["target"], "version": a["version"], "overrides": a["overrides"]}
 
 
 @contextlib.contextmanager
@@ -829,7 +840,7 @@ def main(argv=None) -> int:
             s.add_argument("--force", action="store_true", help="apply although a check failed")
         else:
             s.add_argument("--why", default="")
-    s = sub.add_parser("revert", help="new version restoring the values of an earlier version (0 = code defaults)")
+    s = sub.add_parser("revert", help="new version restoring the values of an earlier version (0 = selected profile defaults)")
     s.add_argument("target", choices=TARGETS)
     s.add_argument("version", type=int)
     s.add_argument("--by", required=True)

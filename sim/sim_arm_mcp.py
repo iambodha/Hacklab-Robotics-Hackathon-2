@@ -624,9 +624,9 @@ async def gripper(open_fraction: float) -> str:
     return await _move({GRIPPER: open_fraction}, 0.05, 0.1, 4096)
 
 
-async def stir_spoon(cup_x: float, cup_y: float, handle_azimuth_deg: float | None = None, rim_height: float = 0.09,
-                     inner_radius: float = 0.03, spoon_length: float = 0.145, turns: int = 3,
-                     radius: float = 0.009) -> list:
+async def stir_spoon(cup_x: float, cup_y: float, handle_azimuth_deg: float | None = None, rim_height: float | None = None,
+                     inner_radius: float | None = None, spoon_length: float | None = None, turns: int | None = None,
+                     radius: float | None = None) -> list:
     """SKILL: stir a drink with the spoon that stands in a cup. Give the cup centre (x, y) in the base frame, e.g.
     pixel_to_table on the middle of the cup opening at the rim height, and the direction the spoon handle sticks
     out of the cup as an azimuth in the base frame (degrees: 0 = +x, 90 = +y; omit it when the handle points
@@ -635,6 +635,12 @@ async def stir_spoon(cup_x: float, cup_y: float, handle_azimuth_deg: float | Non
     in `turns` horizontal circles of `radius` around the cup axis, then lets go (the spoon stays in the cup) and
     lifts the gripper away. rim_height / inner_radius: cup geometry (m); spoon_length: bowl centre to handle end.
     Returns what it did step by step plus fresh camera images."""
+    from learning.skillcfg import get as strategy
+    rim_height = strategy("sim.stir.rim_m") if rim_height is None else rim_height
+    inner_radius = strategy("sim.stir.inner_radius_m") if inner_radius is None else inner_radius
+    spoon_length = strategy("sim.stir.spoon_m") if spoon_length is None else spoon_length
+    turns = strategy("sim.stir.turns") if turns is None else turns
+    radius = strategy("sim.stir.radius_m") if radius is None else radius
     import stir_skill
     status, log = await stir_skill.StirSkill(arm, move_tcp, gripper).run(
         cup_x, cup_y, handle_azimuth_deg, rim_height, inner_radius, spoon_length, int(min(max(turns, 1), 10)),
@@ -659,6 +665,11 @@ class SimRig:
     twist_sign = 1
     CLOSED = 0.05        # j8 norm above this after a close = the jaws stalled on something
 
+    async def halt(self):
+        """Stop outstanding arm goals at measured position on deadline/cancellation."""
+        with arm.lock:
+            arm.data.ctrl[:7] = arm.data.qpos[arm.qids][:7]
+
     async def state(self):
         return arm.state()
 
@@ -672,7 +683,7 @@ class SimRig:
         return arm.ik.solve_rot(np.asarray(xyz, float), np.asarray(R, float), np.asarray(seed, float))
 
     async def move_down(self, x, y, z, yaw_deg):
-        return await move_tcp(x, y, z, True, yaw_deg, step=0.01)     # slower than the default: big swings lag
+        return await move_tcp(x, y, z, True, yaw_deg, step=LT.SC.get("rig.move_step"))     # slower than the default: big swings lag
 
     async def reachable(self, x, y, z, yaw_deg, seed):
         _, lean = await asyncio.to_thread(arm.ik.solve_least_lean, np.array([x, y, z], float), np.asarray(seed, float),
@@ -703,25 +714,25 @@ class SimRig:
                 break
         z = max(top, z_to)
         while z > z_to + 1e-6:
-            z = max(z_to, z - 0.003)
+            z = max(z_to, z - LT.SC.get("rig.descent_step_m"))
             sol, _ = arm.ik.solve_least_lean(np.array([x, y, z]), arm.measured_q(), yaw_deg)
             if sol is None:
                 return f'stopped at z = {z:.3f}: no joint solution lower down', None
-            r = await self.go(sol, 0.15, True)
+            r = await self.go(sol, LT.SC.get("rig.descent_dt_s"), True)
             meas = float(arm.ik.fk(arm.measured_q())[0][2])
             if r.startswith('ABORTED'):
                 return r, None
-            if meas > z + 0.004:                 # held up by something
-                up, _ = arm.ik.solve_least_lean(np.array([x, y, meas + 0.002]), arm.measured_q(), yaw_deg)
+            if meas > z + LT.SC.get("rig.contact_lag_m"):                 # held up by something
+                up, _ = arm.ik.solve_least_lean(np.array([x, y, meas + LT.SC.get("rig.contact_backoff_m")]), arm.measured_q(), yaw_deg)
                 if up is not None:
                     await self.go(up, 0.15, False)
                 return f'TOUCHED at gripper height z = {meas:.3f}', meas
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(LT.SC.get("rig.settle_s"))
         return f'reached z = {float(arm.ik.fk(arm.measured_q())[0][2]):.3f} without touching anything', None
 
     async def grip(self, open_fraction, force):
         closing = open_fraction < arm.state()[GRIPPER]['norm']
-        f = min(1.0, max(0.1, 0.35 if force is None else float(force))) if closing else 1.0
+        f = min(1.0, max(0.1, LT.SC.get("rig.grip_default_force") if force is None else float(force))) if closing else 1.0
         with arm.lock:
             arm.model.actuator_forcerange[7] = [-arm.fmax[7] * f, arm.fmax[7] * f]
             start = float(arm.data.ctrl[7])
@@ -745,7 +756,7 @@ class SimRig:
         g = arm.state()[GRIPPER]
         with arm.lock:
             behind = arm.data.ctrl[7] - arm.data.qpos[arm.qids[7]]      # j8 rad: larger = more closed
-        return bool(g['norm'] > self.CLOSED and behind > 0.05)
+        return bool(g['norm'] > LT.SC.get('rig.closed_norm') and behind > LT.SC.get('rig.hold_lag_norm'))
 
     def truth(self):
         """Ground truth of the screw cap: check_cap logs it as a judge record with source "twin" (only the twin has it)."""
@@ -797,7 +808,7 @@ async def episode_history(last_n: int = 10) -> str:
 @server.tool(annotations={'destructiveHint': True})
 @recorded
 @_learn_doc
-async def twist_cap(x: float, y: float, cap_top_z: float, cap_height: float = 0.02) -> list:
+async def twist_cap(x: float, y: float, cap_top_z: float, cap_height: float | None = None) -> list:
     return _content(*await LT.twist_cap(_store(), RIG, x, y, cap_top_z, cap_height))
 
 
@@ -807,6 +818,12 @@ async def twist_cap(x: float, y: float, cap_top_z: float, cap_height: float = 0.
 async def check_cap() -> list:
     return _content(*await LT.check_cap(_store(), RIG))
 
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+@_learn_doc
+async def extract_cap() -> list:
+    return _content(*await LT.extract_cap(_store(), RIG))
 
 @server.tool()
 @recorded

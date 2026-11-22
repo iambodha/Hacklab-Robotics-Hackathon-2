@@ -11,6 +11,7 @@ phase; when it is down or busy the attempt still runs and the record says so.
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 import urllib.error
@@ -86,7 +87,7 @@ def config_changes_since(begin: dict | None, values: dict | None = None) -> dict
     if not begin or not begin.get("skillcfg"):
         return {}
     now = defaults(values)
-    then = defaults({**skillcfg.defaults(), **(begin["skillcfg"].get("overrides") or {})})
+    then = begin.get("skill_defaults") or defaults({**skillcfg.defaults(), **(begin["skillcfg"].get("overrides") or {})})
     if begin["skillcfg"].get("version") == skillcfg.version() and then == now:
         return {}
     return {k: {"before": then[k], "after": now[k]} for k in PARAMS if then[k] != now[k]}
@@ -116,7 +117,7 @@ def validate(params: dict, base: dict | None = None) -> tuple[dict, list[str], l
                 errors.append(f"{k}={v!r} must be one of {list(lo)}")
                 continue
         else:
-            if isinstance(v, bool) or not isinstance(v, (int, float)):
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
                 errors.append(f"{k}={v!r} must be a number")
                 continue
             if kind == "int" and float(v) != int(v):
@@ -287,7 +288,7 @@ class EpisodeStore:
         self.save_images(n, "before", images or {})
         self._append({"type": "episode_begin", "attempt": n, "params": full, "hypothesis": hypothesis.strip(),
                       "based_on": list(based_on), "recording_id": rec_id, "changed": changed,
-                      "skillcfg": cfg,
+                      "skillcfg": cfg, "skill_profile": skillcfg.profile_label(), "skill_defaults": defaults(),
                       **({"from_config": from_cfg} if from_cfg else {}),
                       **({"recording_note": note} if note else {})})
         self.write_report(n)
@@ -391,8 +392,8 @@ class EpisodeStore:
                f"**Hypothesis:** {b['hypothesis']}", "",
                f"Based on attempts: {', '.join(map(str, b.get('based_on') or [])) or 'none'}. "
                f"Changed: {', '.join(b.get('changed') or []) or 'nothing'}.", "",
-               f"Skill config: {cfg_label(b)}" + (f"; learned profile {b['skillcfg']['profile']}"
-                                                  if (b.get("skillcfg") or {}).get("profile") else "") + ".", "",
+               f"Skill config: {cfg_label(b)}" + (f"; learned profile {b['skill_profile']}"
+                                                  if b.get("skill_profile") else "") + ".", "",
                "| parameter | value |", "|---|---|"]
         out += [f"| {k}{' *' if k in (b.get('changed') or []) else ''} | {_fmt(v)} |" for k, v in b["params"].items()]
         out += ["", "## Phases", "", "| t (s) | phase | status | measurements | note |", "|---|---|---|---|---|"]

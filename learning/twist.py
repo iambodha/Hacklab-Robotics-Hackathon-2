@@ -59,18 +59,22 @@ RELEASE_OPEN = _T["twist.release_open"]
 RETREAT_UP = _T["twist.retreat_up_m"]
 CHECK_LIFT = _L["check.lift_m"]
 TILTS_DEG = tuple(_T["twist.ik_tilts_deg"])
-# --- physical facts, safety stops and settle times (not strategy) ---
-FINGERTIP_BELOW = 0.010      # gripper geometry: the fingertips reach this far below the TCP (table contact at TCP z ~0.01)
-CHECK_LOAD_STOP = 400        # SAFETY stop of every lift: the two largest arm loads rose this much (0..1000 units each)
-OPEN_FULL = 0.96             # "open" target (norm): just short of the end stop, so the motor does not press on it
-OPEN_ENOUGH = 0.85           # jaws at or above this norm are open: nothing to release, nothing held
-RETREAT_EXTRA_OPEN = 0.2     # an abort opens the jaws this much more than a release, to clear the cap for sure
-MAX_JOINT_JUMP_RAD = 0.5     # IK continuity: a waypoint whose arm joints jump more than this is another arm branch
-TURN_BACK_MIN_DT = 0.1       # s per step at least while turning back with open jaws (they drag nothing)
-SIDE_STEP_DT, SIDE_SETTLE_S = 0.15, 0.1   # side approach: s per guarded step, settle before measuring it
-STROKE_SETTLE_S = 0.2        # settle before the end-of-stroke sample (the servos still move)
-LIFT_SETTLE_S = 0.3          # settle before the end-of-lift reading
-NOTE_LEAN_DEG = 25.0         # leaning more than this at the cap is worth a note to the operator (several joints twist)
+# Physical geometry and immutable safety/continuity stops.
+FINGERTIP_BELOW = 0.010      # fingertips extend 10 mm below TCP (table contact geometry)
+CHECK_LOAD_STOP = 400        # maximum increase of the two largest arm loads during a lift
+MAX_JOINT_JUMP_RAD = 0.5     # reject IK solutions on another arm branch
+
+# Compatibility aliases for earlier callers; all strategy baselines have one source.
+_B = SC.baseline()
+OPEN_FULL = _B["twist.open_full"]
+OPEN_ENOUGH = _B["twist.open_enough"]
+RETREAT_EXTRA_OPEN = _B["twist.retreat_extra_open"]
+TURN_BACK_MIN_DT = _B["twist.turn_back_min_dt_s"]
+SIDE_STEP_DT = _B["twist.side_step_dt_s"]
+SIDE_SETTLE_S = _B["twist.side_settle_s"]
+STROKE_SETTLE_S = _B["twist.stroke_settle_s"]
+LIFT_SETTLE_S = _B["lift.settle_s"]
+NOTE_LEAN_DEG = _B["twist.note_lean_deg"]
 
 
 def rz(deg: float) -> np.ndarray:
@@ -97,7 +101,7 @@ class Twister:
     stroke count, the free signal and its reference load are per attempt)."""
 
     def __init__(self, rig, params: dict, log, j7: str = "j7", j8: str = "j8", arm_joints=None, clock=time.monotonic,
-                 prior_strokes=None):
+                 prior_strokes=None, resume_safe=True):
         self.rig, self.p, self.log = rig, dict(params), log
         self.j7, self.j8 = j7, j8
         self.arm_joints = arm_joints or [f"j{i}" for i in range(1, 8)]
@@ -106,6 +110,7 @@ class Twister:
         self.t0 = clock()                       # the call's start: the time budget counts from here
         self.strokes: list[dict] = []
         self.prior = list(prior_strokes or [])
+        self.resume_safe = resume_safe
         self.cap = None
         self.cfg = SC.active()                 # the skill-config version this call runs with (one snapshot)
         self.c = self.cfg["values"]
@@ -171,11 +176,16 @@ class Twister:
         out = []
         try:
             st = await self.rig.state()
-            if st[self.j8]["norm"] < OPEN_ENOUGH:
-                wide = min(OPEN_FULL, st[self.j8]["norm"] + self.c["twist.release_open"] + RETREAT_EXTRA_OPEN)
-                out.append("open: " + (await self.rig.grip(wide, None))[0].splitlines()[0])
+            if st[self.j8]["norm"] < self.c["twist.open_enough"]:
+                wide = min(self.c["twist.open_full"], st[self.j8]["norm"] + self.c["twist.release_open"] + self.c["twist.retreat_extra_open"])
+                opened = (await self.rig.grip(wide, None))[0]
+                if opened.startswith(("ABORTED", "FAULT")) or await self.rig.holding():
+                    raise RuntimeError("jaw release not confirmed: " + opened.splitlines()[0])
+                out.append("open: " + opened.splitlines()[0])
         except Exception as e:  # noqa: BLE001  (keep going: lifting away matters more)
-            out.append(f"open failed: {e}")
+            out.append(f"open failed: {e}; refusing to lift a possibly attached cap")
+            self.log("retreat", "abort", {}, f"{why} -> " + "; ".join(out))
+            return "; ".join(out)
         try:
             _, pos, R = await self._pose()
             out.append("up: " + (await self.rig.move_down(float(pos[0]), float(pos[1]), float(pos[2]) + self.c["twist.retreat_up_m"],
@@ -194,10 +204,10 @@ class Twister:
     async def _holding_at(self, x: float, y: float, z_grasp: float, cap_top_z: float) -> bool:
         """Resume test: earlier strokes in this attempt, the jaws closed on something, the TCP at the cap (within
         twist.resume_tol_m sideways, between the grasp height and the cap top)."""
-        if not self.prior:
+        if not self.prior or not self.resume_safe:
             return False
         st = await self.rig.state()
-        if st[self.j8]["norm"] >= OPEN_ENOUGH:
+        if st[self.j8]["norm"] >= self.c["twist.open_enough"]:
             return False
         _, pos, _ = await self._pose()
         tol = self.c["twist.resume_tol_m"]
@@ -205,7 +215,43 @@ class Twister:
         return near and bool(await self.rig.holding())
 
     # --- twist_cap -------------------------------------------------------------------------------------------
-    async def twist_cap(self, x: float, y: float, cap_top_z: float, cap_height: float = 0.02) -> dict:
+    async def _halt(self):
+        if hasattr(self.rig, "halt"):
+            # Bounded stop acknowledgement consumes at most 2 s of the profile's 10 s reply reserve.
+            await asyncio.wait_for(self.rig.halt(), timeout=2.0)
+
+    async def twist_cap(self, x: float, y: float, cap_top_z: float, cap_height: float | None = None) -> dict:
+        budget = self.c["twist.time_budget_s"]
+        try:
+            async with asyncio.timeout(budget if budget > 0 else None):
+                return await self._twist_cap(x, y, cap_top_z, cap_height)
+        except TimeoutError:
+            await self._halt()
+            sig = capfree.free_signal(self.prior + self.strokes, self.c)
+            holding = await self.rig.holding()
+            done = len(self.prior) + len(self.strokes)
+            note = "motion deadline reached; arm held at measured position; inspect grip before resuming"
+            self.log("twist", "ok", {"stopped_by": "time budget", "deadline_interrupted": True, "elapsed_s": self.clock() - self.t0,
+                                     "strokes_total": done, "holding": holding}, note)
+            return dict(ok=True, strokes=self.strokes, abort_reason=None, notes=[note], resumed=bool(self.prior),
+                        strokes_before=len(self.prior), strokes_commanded=int(self.p["strokes"]),
+                        rotation_achieved_deg=sum(max(0, s["achieved_deg"]) for s in self.strokes),
+                        rotation_attempt_deg=sig["rotation_deg"], z_change_mm=0, holding=holding,
+                        stopped_by="time budget", strokes_total=done, strokes_needed=None, free_signal=sig,
+                        elapsed_s=round(self.clock() - self.t0, 1), budget_s=budget, why_stopped=note)
+        except asyncio.CancelledError:
+            await self._halt()
+            raise
+        except Exception as error:
+            await self._halt()
+            why = f"{type(error).__name__}: {error}"
+            await self._retreat(why)
+            return dict(ok=False, strokes=self.strokes, abort_reason=why, notes=[], resumed=bool(self.prior))
+
+    async def _twist_cap(self, x: float, y: float, cap_top_z: float, cap_height: float | None = None) -> dict:
+        cap_height = self.c["bottle.cap_height_m"] if cap_height is None else cap_height
+        if not all(math.isfinite(v) for v in (x, y, cap_top_z, cap_height)) or cap_height <= 0:
+            return {"ok": False, "strokes": [], "abort_reason": "cap geometry must be finite with positive height", "notes": []}
         p = self.p
         total = int(p["strokes"])
         res = {"ok": False, "strokes": self.strokes, "abort_reason": None, "notes": [], "resumed": False,
@@ -244,8 +290,8 @@ class Twister:
                 self.log("approach", "fail", {"z_grasp": round(z_grasp, 4)}, res["abort_reason"])
                 return res
             st = await self.rig.state()
-            if st[self.j8]["norm"] < OPEN_ENOUGH:
-                await self.rig.grip(OPEN_FULL, None)
+            if st[self.j8]["norm"] < self.c["twist.open_enough"]:
+                await self.rig.grip(self.c["twist.open_full"], None)
             approach = self.c["twist.approach"]
             side = approach == "side" or (approach == "auto" and abs(g_lean) > self.c["twist.side_lean_deg"])
             ok = await (self._approach_side(x, y, z_grasp, yaw_start, g_lean, res) if side else
@@ -253,7 +299,7 @@ class Twister:
             if not ok:
                 return res
             _, pos, R = await self._pose()
-            if lean_of(R) > NOTE_LEAN_DEG:
+            if lean_of(R) > self.c["twist.note_lean_deg"]:
                 res["notes"].append(f"the gripper leans {lean_of(R):.0f} deg from vertical at the cap ({'side' if side else 'top'} "
                                     f"approach): the twist is about the vertical cap axis, so several wrist joints move")
             if not await self._grasp("grasp", close_to, force, res):
@@ -261,12 +307,25 @@ class Twister:
 
         _, pos0, R0 = await self._pose()
         yaw0 = yaw_of(R0)
+        if res["resumed"] and not capfree.free_signal(self.prior, self.c)["free"]:
+            if not await self._release_backoff_regrasp(self.prior[-1], step, dt, yaw0, close_to, force, res):
+                return res
         budget = float(self.c["twist.time_budget_s"])
         starts, stopped_by, sig = [], "strokes", capfree.free_signal(self.prior, self.c)
         for s in range(len(self.prior) + 1, total + 1):
+            if sig["free"] and self.c["twist.stop_on_free"] == "on":
+                stopped_by = "free"
+                break
+            cycle = self.c[f"twist.cycle_s.{p['twist_speed']}"]
+            if budget > 0 and self.clock() - self.t0 + cycle > budget:
+                stopped_by = "time budget"
+                break
             starts.append(self.clock())
             stroke = await self._stroke(s, step, dt, yaw0)
             self.strokes.append(stroke)
+            if stroke.get("budget_stop"):
+                stopped_by = "time budget"
+                break
             if stroke.get("fatal"):
                 res["abort_reason"] = stroke["abort_reason"]
                 await self._retreat(stroke["abort_reason"])
@@ -283,32 +342,11 @@ class Twister:
                 if self.clock() - self.t0 + cycle > budget:
                     stopped_by = "time budget"
                     break                                  # the next cycle would end past the budget: resumable
-            # release, turn back with open jaws, regrasp
-            st = await self.rig.state()
-            text, _ = await self.rig.grip(min(OPEN_FULL, st[self.j8]["norm"] + self.c["twist.release_open"]), None)
-            self.log("release", "ok", {"j8_norm": st[self.j8]["norm"]}, text.splitlines()[0])
-            back = float(p["regrasp_backoff_deg"]) or max(stroke["achieved_deg"], 0.0)
-            if back > 0:
-                q, pos, R = await self._pose()
-                path = await self._plan(R, pos, q, 0.0, -back, SAFETY["max_step_deg"], 0.0)
-                stop = ""
-                for _, sol in path:
-                    r = await self.rig.go(sol, max(dt, TURN_BACK_MIN_DT), True)
-                    if r.startswith("ABORTED"):
-                        stop = r.splitlines()[0]
-                        break
-                row = await self._sample("turn_back", s, -back, yaw0)
-                if stop:
-                    res["abort_reason"] = "turning back: " + stop
-                    self.log("release", "abort", {"turned_back_deg": row["yaw_deg"]}, res["abort_reason"])
-                    await self._retreat(res["abort_reason"])
-                    return res
-                if len(path) * SAFETY["max_step_deg"] < back - 1:
-                    res["notes"].append(f"stroke {s}: could only turn back {len(path) * SAFETY['max_step_deg']:.0f} of {back:.0f} deg")
-            if not await self._grasp("regrasp", close_to, force, res):
+            if not await self._release_backoff_regrasp(stroke, step, dt, yaw0, close_to, force, res):
                 return res
         _, pos, _ = await self._pose()
         done = len(self.prior) + len(self.strokes)
+        sig = capfree.free_signal(self.prior + self.strokes, self.c)
         res.update(ok=True, rotation_achieved_deg=round(sum(max(0.0, s["achieved_deg"]) for s in self.strokes), 1),
                    rotation_attempt_deg=sig["rotation_deg"], z_change_mm=round((float(pos[2]) - float(pos0[2])) * 1000, 1),
                    holding=await self.rig.holding(), stopped_by=stopped_by, strokes_total=done,
@@ -324,6 +362,37 @@ class Twister:
                                  "resumed": res["resumed"]}, why)
         res["why_stopped"] = why
         return res
+
+    async def _release_backoff_regrasp(self, stroke, step, dt, yaw0, close_to, force, res):
+        s = stroke["stroke"]
+        st = await self.rig.state()
+        text, held = await self.rig.grip(min(self.c["twist.open_full"], st[self.j8]["norm"] + self.c["twist.release_open"]), None)
+        if held or text.startswith(("ABORTED", "FAULT")):
+            res["abort_reason"] = "release not confirmed before backoff: " + text.splitlines()[0]
+            await self._retreat(res["abort_reason"])
+            return False
+        self.log("release", "ok", {"j8_norm": st[self.j8]["norm"]}, text.splitlines()[0])
+        back = float(self.p["regrasp_backoff_deg"]) or max(stroke["achieved_deg"], 0.0)
+        if back > 0:
+            q, pos, R = await self._pose()
+            path = await self._plan(R, pos, q, 0.0, -back, SAFETY["max_step_deg"], 0.0)
+            stop = ""
+            for _, sol in path:
+                r = await self.rig.go(sol, max(dt, self.c["twist.turn_back_min_dt_s"]), True)
+                if r.startswith("ABORTED"):
+                    stop = r.splitlines()[0]
+                    break
+            row = await self._sample("turn_back", s, -back, yaw0)
+            if stop:
+                res["abort_reason"] = "turning back: " + stop
+                self.log("release", "abort", {"turned_back_deg": row["yaw_deg"]}, res["abort_reason"])
+                await self._retreat(res["abort_reason"])
+                return False
+            if len(path) * SAFETY["max_step_deg"] < back - 1:
+                res["notes"].append(f"stroke {s}: could only turn back {len(path) * SAFETY['max_step_deg']:.0f} of {back:.0f} deg")
+        if not await self._grasp("regrasp", close_to, force, res):
+            return False
+        return True
 
     async def _approach_down(self, x, y, z_grasp, cap_top_z, yaw_start, q, res) -> bool:
         """Jaws (nearly) down: hover at the highest reachable height above the cap, guarded descent to z_grasp."""
@@ -400,8 +469,8 @@ class Twister:
                 self.log("approach", "abort", meas, why)
                 await self._retreat(why)
                 return False
-            r_go = await self.rig.go(sol, SIDE_STEP_DT, True)
-            await asyncio.sleep(SIDE_SETTLE_S)
+            r_go = await self.rig.go(sol, self.c["twist.side_step_dt_s"], True)
+            await asyncio.sleep(self.c["twist.side_settle_s"])
             q, now, _ = await self._pose()
             lag = float((want - now) @ a)
             if r_go.startswith("ABORTED") or lag > self.c["twist.side_contact_m"]:
@@ -441,7 +510,13 @@ class Twister:
         reason, fatal, rows, cmd = None, False, [start], 0.0
         if reachable < float(p["twist_deg_per_stroke"]) - 0.5:
             reason = f"IK: only {reachable:.0f} of {p['twist_deg_per_stroke']:.0f} deg reachable from here"
+        budget_stop = False
         for d, sol in path:
+            budget = self.c["twist.time_budget_s"]
+            if budget > 0 and self.clock() - self.t0 + dt + self.c["twist.stroke_settle_s"] >= budget:
+                budget_stop = True
+                reason = "time budget reached during stroke"
+                break
             cmd = d
             r = await self.rig.go(sol, dt, False)
             row = await self._sample("twist", s, d, yaw0)
@@ -468,7 +543,7 @@ class Twister:
                 reason = f"stall: the gripper is {d - achieved:.0f} deg behind the command"
                 break
         if rows[1:]:
-            await asyncio.sleep(STROKE_SETTLE_S)
+            await asyncio.sleep(self.c["twist.stroke_settle_s"])
             rows.append(await self._sample("twist_end", s, cmd, yaw0))
         end = rows[-1]
         twist_rows = rows[1:] or rows
@@ -477,7 +552,8 @@ class Twister:
              "peak_j7_load": max(loads), "mean_j7_load": round(sum(loads) / len(loads), 1),
              "j8_change_ticks": end["j8_raw"] - start["j8_raw"],
              "z_change_mm": round((end["tcp_z"] - start["tcp_z"]) * 1000, 2),
-             "slip": bool(reason and reason.startswith("slip")), "abort_reason": reason, "fatal": fatal}
+             "slip": bool(reason and reason.startswith("slip")), "abort_reason": reason, "fatal": fatal,
+             "budget_stop": budget_stop}
         self.log("twist", "abort" if fatal else ("ok" if not reason else "fail"), {**m, "strokes": [m]},
                  reason or f"stroke {s}: {m['achieved_deg']:.0f} of {m['commanded_deg']:.0f} deg")
         return m
@@ -514,7 +590,7 @@ class Twister:
                 pts, sd = [], seed
                 for k in range(1, n + 1):
                     sol = self._solve(pos0 + np.array([0, 0, lift_m * k / n]), R, sd)
-                    if sol is None:
+                    if sol is None or np.max(np.abs(np.asarray(sol)[:7] - np.asarray(sd)[:7])) > MAX_JOINT_JUMP_RAD:
                         break
                     pts.append(sol)
                     sd = sol
@@ -527,6 +603,9 @@ class Twister:
                 out["lift_steps"] += 1
                 out["load_rise"] = row["arm_load_sum"] - base["arm_load_sum"]
                 cmd, rose_now = lift_m * k / n, row["tcp_z"] - base["tcp_z"]
+                if any(row["status"]) or row["j7_load"] > SAFETY["j7_load_hard"] or row["arm_load_max"] > SAFETY["arm_load_hard"]:
+                    out["stopped"] = "motor status or immutable hard load limit during lift"
+                    break
                 if r.startswith("ABORTED") or out["load_rise"] > CHECK_LOAD_STOP:
                     out["stopped"] = r.splitlines()[0] if r.startswith("ABORTED") else \
                         f"arm loads rose by {out['load_rise']} (stop at {CHECK_LOAD_STOP})"
@@ -535,7 +614,7 @@ class Twister:
                     out["stopped"] = (f"held back: the gripper rose {rose_now * 1000:.0f} of {cmd * 1000:.0f} mm "
                                       f"commanded (the thread holds the cap): stopped, not pulling further")
                     break
-            await asyncio.sleep(LIFT_SETTLE_S)
+            await asyncio.sleep(self.c["lift.settle_s"])
         _, pos1, _ = await self._pose()
         out["holding_after"] = bool(await self.rig.holding())
         rose = round((float(pos1[2]) - float(pos0[2])) * 1000, 1)
