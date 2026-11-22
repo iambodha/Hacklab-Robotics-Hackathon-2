@@ -235,8 +235,9 @@ _RETRY = re.compile(r"retry in ([\d.]+)s|'retryDelay': '(\d+)s'")
 
 
 def retry_delay_s(message: str) -> float | None:
-    """Seconds to wait before retrying a 429 RESOURCE_EXHAUSTED error, or None if it is not one."""
-    if "429" not in message or "RESOURCE_EXHAUSTED" not in message:
+    """Seconds to wait before retrying a 429 RESOURCE_EXHAUSTED error, or None if it is not one or it is the
+    free tier's daily cap (20 requests/day/model; waiting means hours)."""
+    if "429" not in message or "RESOURCE_EXHAUSTED" not in message or "per day" in message.lower():
         return None
     m = _RETRY.search(message)
     return (float(m.group(1) or m.group(2)) if m else 30.0) + 1.0

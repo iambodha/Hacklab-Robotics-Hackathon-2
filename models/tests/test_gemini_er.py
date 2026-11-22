@@ -158,3 +158,6 @@ def test_retry_delay_parsed_from_429():
            "'details': [{'retryDelay': '21s'}]}}")
     assert retry_delay_s(msg) == pytest.approx(22.116, abs=1e-3)
     assert retry_delay_s("ClientError: 404 NOT_FOUND") is None
+    day = ("ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'message': 'limit: 20, description: Generate content "
+           "requests per day limit exceeded on Free Tier.\\nPlease retry in 7h26m56.08s.'}}")
+    assert retry_delay_s(day) is None
