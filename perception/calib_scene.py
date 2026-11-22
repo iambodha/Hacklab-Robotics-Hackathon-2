@@ -359,7 +359,9 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
                       "intrinsics_source": (intr_w_out or {}).get("source", "charuco" if intr_wr else None),
                       "sigma_f_rel": None if intr_wr or not wrist_est else wrist_est.get("sigma_f_rel"),
                       "T_link_cam": _m(np.array(wcam_cfg["T_link_camera"])), "link": "Gripper_Base_v1_1",
-                      "source": "CAD (camera_pose/wrist_camera.json)"},
+                      "source": ("CAD @ Rx(%+.2f deg) mount correction" % wcam_cfg["mount_correction"]["pitch_deg"]
+                                 if (wcam_cfg.get("mount_correction") or {}).get("applied") else "CAD")
+                                + " (camera_pose/wrist_camera.json)"},
         },
         "arm": {"bus": "5B61033301", "urdf": "norma-core/hardware/elrobot/simulation/elrobot_follower.urdf",
                 "joint_mapping": f"{wrist.arm_mapping()} (robot profile sim/robots/elrobot.json, as the executor and "
