@@ -48,6 +48,7 @@ class Spec:
     max_attempts: int = 3
     moved_tol: float = 0.015             # re-plan the approach if the object moved more than this
     sigma_max_mm: float = 20.0           # do not act on a location worse than this
+    tcp_offset: tuple = (0.0, 0.0, 0.0)  # world xyz added to every commanded TCP point near the objects (dry run / touch_table)
     source: dict = field(default_factory=dict)
 
     @classmethod
@@ -73,6 +74,15 @@ class Spec:
     @property
     def cap_r(self) -> float:
         return self.cap_diameter / 2
+
+    @property
+    def offset_xy(self) -> np.ndarray:
+        return np.asarray(self.tcp_offset, float)[:2]
+
+    @property
+    def offset_z(self) -> float:
+        o = tuple(self.tcp_offset)
+        return float(o[2]) if len(o) > 2 else 0.0
 
     def grasp_mode(self) -> str:
         """across = jaws straddle the whole object (needs it narrower than the jaws can grip);
@@ -101,12 +111,13 @@ def plan_grasp(spec: Spec, cap_xy) -> Grasp:
     c = np.asarray(cap_xy, float)[:2]
     u = c / max(np.linalg.norm(c), 1e-6)             # from the arm base towards the object
     yaw = math.degrees(math.atan2(u[1], u[0]))       # jaws close radially: one pad inside the near wall
-    z_grasp = spec.cap_height / 2 + spec.grasp_above_mid
-    z_hover = spec.cap_height + spec.hover_above
+    off, dz = spec.offset_xy, spec.offset_z
+    z_grasp = spec.cap_height / 2 + spec.grasp_above_mid + dz
+    z_hover = spec.cap_height + spec.hover_above + dz
     if spec.grasp_mode() == "across":
-        return Grasp("across", c, yaw, z_grasp, z_hover, np.zeros(2))
+        return Grasp("across", c + off, yaw, z_grasp, z_hover, np.zeros(2))
     tcp = c - (spec.cap_r - spec.cap_wall / 2) * u   # the wall nearest the arm, in the middle of the jaw gap
-    return Grasp("rim", tcp, yaw, z_grasp, z_hover, c - tcp)
+    return Grasp("rim", tcp + off, yaw, z_grasp, z_hover, c - tcp)
 
 
 JAW_REACH = 0.031    # TCP -> outer face of a pad along the closing axis, jaws open (24.5 mm half gap + 6 mm pad)
@@ -115,18 +126,19 @@ JAW_REACH = 0.031    # TCP -> outer face of a pad along the closing axis, jaws o
 def release_point(spec: Spec, g: Grasp) -> np.ndarray:
     """TCP over the bin, object bottom clearing the rim + margin. The TCP sits `release_shift` of the grasp offset
     off the bin centre: the object hangs (tilted) between centred and offset, and both open pads stay inside the rim."""
-    xy = np.asarray(spec.bin_xy, float) - spec.release_shift * g.offset_xy
-    return np.r_[xy, spec.bin_rim_height + spec.rim_margin + g.z_grasp]
+    xy = np.asarray(spec.bin_xy, float) - spec.release_shift * g.offset_xy + spec.offset_xy
+    return np.r_[xy, spec.bin_rim_height + spec.rim_margin + g.z_grasp]      # z_grasp already carries the z offset
 
 
 def lowered_release(spec: Spec, g: Grasp) -> tuple[np.ndarray, dict]:
     """TCP point inside the rim (pads `release_depth` below it) where the jaws open, and the check that the open jaws
     fit inside the rim there. Opening above the rim leaves a pinched lid hanging on a pad (seen in the twin)."""
     above = release_point(spec, g)
-    p = np.r_[above[:2], spec.bin_rim_height + spec.release_depth]
+    p = np.r_[above[:2], spec.bin_rim_height + spec.release_depth + spec.offset_z]
     u = np.array([math.cos(math.radians(g.yaw_deg)), math.sin(math.radians(g.yaw_deg))])
     c = np.asarray(spec.bin_xy, float)
-    reach = max(np.linalg.norm(p[:2] + s * JAW_REACH * u - c) for s in (-1, 1))
+    actual = p[:2] - spec.offset_xy                              # where the TCP really is once the offset is applied
+    reach = max(np.linalg.norm(actual + s * JAW_REACH * u - c) for s in (-1, 1))
     inner = spec.bin_rim_diameter / 2 - 0.002
     return p, {"jaw_reach_from_bin_centre_mm": round(reach * 1000, 1), "rim_inner_radius_mm": round(inner * 1000, 1),
                "fits": bool(reach <= inner - 0.004)}

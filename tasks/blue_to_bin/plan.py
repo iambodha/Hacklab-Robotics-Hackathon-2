@@ -43,9 +43,19 @@ class TaskFailed(Exception):
     pass
 
 
+MODES = ("dry", "pick", "full")
+
+
 class Runner:
+    """mode: dry  = never closes: above the lid, down until the pads straddle its near wall 5 mm above the rim (look),
+                     up; then above the bin and down inside the rim with open jaws (look), up, park.
+             pick = full pick with the test lift and lift, then puts the lid back where it was, opens, up, park.
+             full = the task."""
+
     def __init__(self, ex, spec: Spec | None = None, source: str = "script:blue_to_bin", ttl_s: float = 20.0,
-                 on_step=None, wait_s: float = 120.0):
+                 on_step=None, wait_s: float = 120.0, mode: str = "full", look_s: float = 3.0):
+        assert mode in MODES, mode
+        self.mode, self.look_s = mode, look_s
         self.ex, self.spec = ex, spec or Spec.load()
         self.source, self.ttl_s, self.wait_s = source, ttl_s, wait_s
         self.on_step = on_step or (lambda s: None)
@@ -97,7 +107,17 @@ class Runner:
         self.log(step, skill, params, pre, r.status.value, r.termination, t0, eid, obs.obs_id,
                  residuals=r.residuals, achieved=r.achieved,
                  rejected=(r.validation.reasons if r.status == Status.REJECTED and r.validation else None))
+        if r.status == Status.FAULT:
+            raise TaskFailed(f"{step}: FAULT {r.termination}")
+        if "contact abort" in (r.termination or "") and skill != "descend_guarded":
+            raise TaskFailed(f"{step}: unexpected contact ({r.termination}); holding")
         return r
+
+    @staticmethod
+    def arrived(r, tol_mm: float = 10.0) -> bool:
+        """SUCCEEDED, or PARTIAL that stopped a few mm short without contact."""
+        return r.status == Status.SUCCEEDED or (r.status == Status.PARTIAL and "contact" not in (r.termination or "")
+                                                 and (r.residuals or {}).get("tcp_mm", 1e9) <= tol_mm)
 
     def gripper_state(self):
         st = self.ex.motion.read()[self.ex.kin.grip_id]
@@ -150,7 +170,7 @@ class Runner:
             r = self.propose("approach above", "move_tcp", {"xyz_world": [*g.tcp_xy, g.z_hover], "yaw_deg": g.yaw_deg},
                              {"blue located": True, "sigma_mm<=max": (est.uncertainty_mm or 99) <= S.sigma_max_mm,
                               "jaws open": self.gripper_state()["norm"] >= self.G.open_enough, "grasp": g.describe()})
-            if r.status not in (Status.SUCCEEDED, Status.PARTIAL):
+            if not self.arrived(r):
                 return False, g, f"approach {r.status.value}: {r.termination}"
             again = self.blue(self.observe("re-observe above"))
             if again is None or again.xyz_world[2] > S.cap_height:     # hidden under the gripper: keep the estimate
@@ -182,13 +202,13 @@ class Runner:
                          {"jaws closed": self.gripper_state()["norm"] < self.G.open_enough,
                           "touch": "holding" if touch else "nothing felt (thin wall?): the camera decides"})
         lifted = self.lifted_seen(est, "verify hold (test lift)", touch, min_rise=0.6 * S.test_lift)
-        if r.status not in (Status.SUCCEEDED, Status.PARTIAL) or not (lifted or (touch and lifted is None)):
+        if not self.arrived(r) or not (lifted or (touch and lifted is None)):
             self.back_up(g, "missed")
             return False, g, f"hold not confirmed: touch {touch}, overview sees it lifted: {lifted}"
         r = self.propose("lift", "move_tcp", {"xyz_world": [*g.tcp_xy, S.carry_z], "yaw_deg": g.yaw_deg},
                          {"hold confirmed": True})
         lifted = self.lifted_seen(est, "verify lifted", touch, min_rise=0.04)
-        if r.status not in (Status.SUCCEEDED, Status.PARTIAL) or lifted is False:
+        if not self.arrived(r) or lifted is False:
             self.back_up(g, "slipped")
             return False, g, f"lift {r.status.value}: overview sees it lifted: {lifted}"
         return True, g, "holding"
@@ -207,24 +227,36 @@ class Runner:
     def place(self, g: Grasp) -> str | None:
         S = self.spec
         rel = release_point(S, g)
-        r = self.propose("move above bin", "move_tcp", {"xyz_world": rel.tolist(), "yaw_deg": g.yaw_deg},
+        r = self.propose("carry above bin", "move_tcp", {"xyz_world": [*rel[:2], S.carry_z], "yaw_deg": g.yaw_deg},
                          {"hold confirmed after the lift": True, "jaws closed": self.gripper_state()["norm"] < self.G.open_enough,
+                          "at carry height": bool(self.tcp()[2] >= S.carry_z - 0.01)})
+        if not self.arrived(r):
+            return f"carry {r.status.value}: {r.termination}"
+        r = self.propose("move above bin", "move_tcp", {"xyz_world": rel.tolist(), "yaw_deg": g.yaw_deg},
+                         {"over the bin": bool(np.hypot(*(self.tcp()[:2] - rel[:2])) <= 0.015),
                           "release clears rim + margin": bool(rel[2] - g.z_grasp >= S.bin_rim_height + S.rim_margin - 1e-6)})
-        if r.status not in (Status.SUCCEEDED, Status.PARTIAL) or (r.residuals or {}).get("tcp_mm", 0) > 10:
+        if not self.arrived(r):
             return f"above bin {r.status.value}: {r.termination}"
         low, fit = lowered_release(S, g)
         r = self.propose("lower into bin (guarded)", "descend_guarded", {"xy_world": low[:2].tolist(), "z_world": float(low[2]),
                                                                           "yaw_deg": g.yaw_deg},
                          {"open jaws fit inside the rim": fit["fits"], "jaw fit": fit,
                           "above the release point": bool(np.hypot(*(self.tcp()[:2] - low[:2])) <= 0.015)})
-        if r.status not in (Status.SUCCEEDED, Status.PARTIAL):
+        if not self.arrived(r):
             return f"lower into bin {r.status.value}: {r.termination}"
         self.propose("release", "gripper", {"open_fraction": 1.0}, {"TCP inside the rim": bool(self.tcp()[2] < S.bin_rim_height + 0.02)})
-        p = self.tcp()
+        self.retreat(g)
+        return None
+
+    def retreat(self, g: Grasp):
+        """Straight up out of the bin, across at retreat height to above the park spot, then down to park."""
+        S, p = self.spec, self.tcp()
         self.propose("retreat (straight up)", "move_tcp", {"xyz_world": [p[0], p[1], max(S.retreat_z, p[2])], "yaw_deg": g.yaw_deg},
                      {"jaws open": self.gripper_state()["norm"] >= self.G.open_enough})
-        self.propose("park", "park", {}, {"above the rim": bool(self.tcp()[2] > S.bin_rim_height + 0.05)})
-        return None
+        park = self.ex.kin.to_world(self.ex.kin.P.poses.park)
+        self.propose("retreat (above park)", "move_tcp", {"xyz_world": [park[0], park[1], S.retreat_z]},
+                     {"above the rim": bool(self.tcp()[2] > S.bin_rim_height + 0.05)})
+        self.propose("park", "park", {}, {"above the park spot": bool(np.hypot(*(self.tcp()[:2] - park[:2])) < 0.02)})
 
     def verify(self, held_after_lift: bool) -> dict:
         obs = self.observe("verify: observe")
@@ -236,11 +268,54 @@ class Runner:
                  str(v["overview"]), time.monotonic(), obs=obs.obs_id, verdict=v)
         return v
 
+    def dry(self) -> tuple[bool, str]:
+        """Rehearsal without closing the jaws: every point the task uses, with the jaws open and nothing touched."""
+        S = self.spec
+        est = self.locate()
+        if est is None:
+            return False, "blue object not found"
+        g = plan_grasp(S, est.xyz_world)
+        r = self.propose("dry: approach above", "move_tcp", {"xyz_world": [*g.tcp_xy, g.z_hover], "yaw_deg": g.yaw_deg},
+                         {"jaws open": self.gripper_state()["norm"] >= self.G.open_enough, "grasp": g.describe()})
+        if r.status != Status.SUCCEEDED:
+            return False, f"dry approach {r.status.value}: {r.termination}"
+        straddle = S.cap_height + 0.005 + 0.016 + S.offset_z    # pad bottoms (TCP - 16 mm) 5 mm above the lid's rim
+        r = self.propose("dry: straddle height (look: pads either side of the near wall?)", "descend_guarded",
+                         {"xy_world": list(g.tcp_xy), "z_world": straddle, "yaw_deg": g.yaw_deg}, {"jaws open": True})
+        self.ex.backend.sleep(self.look_s)
+        self.propose("dry: up", "move_tcp", {"xyz_world": [*g.tcp_xy, S.carry_z], "yaw_deg": g.yaw_deg}, {"jaws open": True})
+        if not self.arrived(r):
+            return False, f"dry straddle {r.status.value}: {r.termination}"
+        rel = release_point(S, g)
+        self.propose("dry: carry above bin", "move_tcp", {"xyz_world": [*rel[:2], S.carry_z], "yaw_deg": g.yaw_deg}, {"jaws open": True})
+        self.propose("dry: above bin", "move_tcp", {"xyz_world": rel.tolist(), "yaw_deg": g.yaw_deg}, {"jaws open": True})
+        low, fit = lowered_release(S, g)
+        r = self.propose("dry: lower into bin (look: open pads inside the rim?)", "descend_guarded",
+                         {"xy_world": low[:2].tolist(), "z_world": float(low[2]), "yaw_deg": g.yaw_deg},
+                         {"open jaws fit inside the rim": fit["fits"], "jaw fit": fit})
+        self.ex.backend.sleep(self.look_s)
+        self.retreat(g)
+        return r.status == Status.SUCCEEDED, f"dry run done; lower into bin {r.status.value}: {r.termination}"
+
+    def put_back(self, g: Grasp) -> str:
+        S = self.spec
+        r = self.propose("put back: down", "descend_guarded", {"xy_world": list(g.tcp_xy), "z_world": g.z_grasp + 0.003,
+                                                                 "yaw_deg": g.yaw_deg}, {"holding": True})
+        self.propose("put back: open", "gripper", {"open_fraction": 1.0}, {"low over the table": bool(self.tcp()[2] < g.z_grasp + 0.02)})
+        self.propose("put back: up", "move_tcp", {"xyz_world": [*g.tcp_xy, g.z_hover], "yaw_deg": g.yaw_deg},
+                     {"jaws open": self.gripper_state()["norm"] >= self.G.open_enough})
+        self.propose("park", "park", {}, {"above the lid": True})
+        return f"picked, lifted and put back ({r.status.value})"
+
     def run(self) -> dict:
         S = self.spec
         verdict, why = None, ""
         try:
             self.prepare()
+            if self.mode == "dry":
+                self.attempt = 1
+                ok, why = self.dry()
+                return self.report(None, why, ok)
             for self.attempt in range(1, S.max_attempts + 1):
                 est = self.locate()
                 if est is None:
@@ -253,6 +328,8 @@ class Runner:
                 ok, g, why = self.pick(est)
                 if not ok:
                     continue
+                if self.mode == "pick":
+                    return self.report(None, self.put_back(g), True)
                 err = self.place(g)
                 if err:
                     why = err
@@ -264,6 +341,10 @@ class Runner:
                 why = f"verify: {verdict['overview'].get('why') or verdict['overview']}"
         except TaskFailed as e:
             why = str(e)
-        return {"goal": GOAL, "success": bool(verdict and verdict["success"]), "verdict": verdict, "why": why,
-                "attempts": self.attempt, "seconds": round(time.monotonic() - self.t0, 1), "grasp_mode": S.grasp_mode(),
-                "proposals": sum(1 for s in self.steps if s.skill), "steps": [vars(s) for s in self.steps]}
+        return self.report(verdict, why)
+
+    def report(self, verdict, why, stage_ok=None) -> dict:
+        return {"goal": GOAL, "mode": self.mode, "success": bool(verdict and verdict["success"]), "stage_ok": stage_ok,
+                "verdict": verdict, "why": why, "attempts": self.attempt, "seconds": round(time.monotonic() - self.t0, 1),
+                "grasp_mode": self.spec.grasp_mode(), "proposals": sum(1 for s in self.steps if s.skill),
+                "steps": [vars(s) for s in self.steps]}
