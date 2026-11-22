@@ -1,0 +1,99 @@
+{
+ "created": "2026-11-22T01:23:51+0100",
+ "frame": "world (scene-contract), metres",
+ "source": "median of Station's 10 newest stored overview entries (usbvideo/9ea4cacd..., ids up to 150339 = last frame before Station's 00:58 restart; video not streaming since). Re-run with --live 10 when video is back.",
+ "scene_calib": "2026-11-22T00:40:02+01:00",
+ "blue_cap": {
+  "ok": true,
+  "method": "colour blue inside the table extent silhouette -> upright cylinder fit to its extreme pixels",
+  "centre_xy": [
+   0.2619,
+   -0.1298
+  ],
+  "diameter_m": 0.062,
+  "height_m": 0.0264,
+  "sigma_mm": {
+   "centre_pixel": 5.0,
+   "calibration": 7.6,
+   "centre": 9.0,
+   "diameter": 4.6,
+   "height": 6.8
+  },
+  "silhouette_px": 246,
+  "silhouette_bbox_px": [
+   114.5,
+   132.5,
+   99.5,
+   116.5
+  ],
+  "centre_px": [
+   123.53252032520325,
+   107.67479674796748
+  ],
+  "fit_rms_px": 0.0,
+  "model_iou": 0.856
+ },
+ "bin": {
+  "ok": true,
+  "method": "tapered upright cylinder fitted to picked rim/base pixels (transparent tub, no colour)",
+  "centre_xy": [
+   0.2545,
+   0.1234
+  ],
+  "rim_diameter_m": 0.1094,
+  "rim_height_m": 0.0779,
+  "base_diameter_m": 0.0875,
+  "sigma_mm": {
+   "centre_pixel": 4.1,
+   "calibration": 7.6,
+   "centre": 8.6,
+   "rim_diameter": 2.9,
+   "rim_height": 3.5,
+   "base_diameter": 3.7
+  },
+  "fit_rms_px": 1.04,
+  "pixels": {
+   "rim_left": [
+    179.0,
+    97.0
+   ],
+   "rim_right": [
+    214.0,
+    97.0
+   ],
+   "rim_far": [
+    195.0,
+    84.5
+   ],
+   "rim_near": [
+    199.0,
+    103.5
+   ],
+   "base_left": [
+    182.0,
+    115.0
+   ],
+   "base_right": [
+    205.5,
+    115.0
+   ],
+   "base_near": [
+    196.0,
+    119.5
+   ]
+  }
+ },
+ "notes": [
+  "read only: no command was sent",
+  "calibration sigma = perception's held-out marker error (median)"
+ ],
+ "twin_check": {
+  "compare": "tasks/blue_to_bin/twin_compare.jpg (sim/compare_real.py --layout home on the same frame)",
+  "blue_silhouette_iou_real_vs_twin": 0.923,
+  "blue_centroid_px_diff": [
+   0.15,
+   0.32
+  ],
+  "marker_corner_px_error": 3.09
+ }
+}
