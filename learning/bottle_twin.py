@@ -20,6 +20,10 @@ HOME = REPO / "sim" / "layouts" / "home.json"
 
 BOTTLE = {"xy": [0.0, 0.20], "body_r": 0.035, "body_h": 0.09, "neck_r": 0.015, "neck_top": 0.0995,
           "cap_r": 0.02, "cap_h": 0.02, "cap_base": 0.10}
+# The bottle on the real table: ~25 cm tall, cap ~4.4 cm, its base ~0.28-0.30 m in front of the arm base (overview
+# camera calibration, 22 Nov 02:40; the contract's "10 cm" is the gap to the base's front edge).
+REAL_BOTTLE = {"xy": [0.0, 0.28], "body_r": 0.036, "body_h": 0.215, "neck_r": 0.016, "neck_top": 0.2245,
+               "cap_r": 0.022, "cap_h": 0.025, "cap_base": 0.225}
 SCREW = {"pitch_mm": 3.0, "turns_to_free": 1.25, "friction_torque": 0.30, "mass": 0.02}
 
 

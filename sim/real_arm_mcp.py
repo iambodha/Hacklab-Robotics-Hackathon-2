@@ -1431,6 +1431,12 @@ class RealRig:
     async def move_down(self, x, y, z, yaw_deg):
         return await move_tcp(x=x, y=y, z=z, top_down=True, yaw_deg=yaw_deg)
 
+    async def reachable(self, x, y, z, yaw_deg, seed):
+        if not (MIN_Z <= z <= WS.max_tcp_z and np.hypot(x, y) <= WS.max_radius):
+            return None
+        _, lean = await asyncio.to_thread(_solve_tcp, np.array([x, y, z], float), np.asarray(seed, float), yaw_deg)
+        return None if lean is None else float(lean)
+
     async def go(self, q, dt, contact):
         return await _drive({ARM_IDS[i]: float(v) for i, v in enumerate(to_norm(np.asarray(q)))}, STEP, dt,
                             settle=False, contact=contact)

@@ -28,6 +28,14 @@ POLICY = [
      "The cap turns with 0.45. 2 x 45 deg is not enough thread: 6 x 90 deg should free it."),
 ]
 
+# The real table's geometry: the gripper leans ~60 deg at the cap and only ~15 deg per stroke are reachable.
+POLICY_REAL = [
+    ({"grip_torque_limit": 0.12, "twist_deg_per_stroke": 15, "strokes": 3, "twist_speed": "medium"},
+     "Small 15 deg strokes fit the reach; a gentle grip (0.12) keeps the pinch risk low."),
+    ({"grip_torque_limit": 0.45}, "Attempt 1 slipped: a firmer grip (0.45) should transmit the torque."),
+    ({"strokes": 8}, "The cap turns with 0.45: more strokes per attempt give more total rotation."),
+]
+
 
 def classify(att: dict, cap_turned_deg: float) -> tuple[str, str]:
     """Outcome + lesson from the records, the way an honest operator would read them; cap_turned_deg = how far the cap
@@ -52,14 +60,14 @@ def classify(att: dict, cap_turned_deg: float) -> tuple[str, str]:
     return "no_progress", f"only {cap_turned_deg:.0f} deg of cap rotation."
 
 
-async def main(attempts: int) -> list[dict]:
+async def main(attempts: int, policy=POLICY) -> list[dict]:
     import sim_arm_mcp as S
     b = S.arm.layout["screw_cap"]
     x, y = b["pos"][0], b["pos"][1]
     top = b["pos"][2] + 2 * b["half_height"]
     out, turned = [], S.arm.screw_state()["turned_deg"]
     for i in range(attempts):
-        change, hyp = POLICY[min(i, len(POLICY) - 1)]
+        change, hyp = policy[min(i, len(policy) - 1)]
         await S.episode_history(10)
         r = await S.episode_begin(change, hyp)
         if not r[0].startswith("attempt"):
@@ -71,7 +79,7 @@ async def main(attempts: int) -> list[dict]:
         now = S.arm.screw_state()["turned_deg"]
         outcome, lesson = classify(st.attempts()[n], now - turned)
         turned = now
-        nxt = POLICY[i + 1][0] if i + 1 < len(POLICY) else {}
+        nxt = policy[i + 1][0] if i + 1 < len(policy) else {}
         await S.episode_end(outcome, lesson, nxt)
         e = S._store().attempts()[n]["end"]
         out.append({"attempt": n, "outcome": outcome, "rotation_achieved_deg": e["rotation_achieved_deg"],
@@ -88,11 +96,15 @@ if __name__ == "__main__":
     ap.add_argument("--attempts", type=int, default=3)
     ap.add_argument("--learn-dir", default=None)
     ap.add_argument("--recorder-url", default=None)
-    ap.add_argument("--layout", default=str(REPO / "sim" / "generated" / "bottle_twin.json"))
+    ap.add_argument("--layout", default=None)
+    ap.add_argument("--real-geometry", action="store_true",
+                    help="the 25 cm bottle 10 cm in front of the base, as on the real table (the gripper leans ~70 deg)")
     a = ap.parse_args()
     sys.path.insert(0, str(REPO))
     from learning import bottle_twin
-    lay = bottle_twin.make_layout(Path(a.layout))
+    name = "bottle_twin_real" if a.real_geometry else "bottle_twin"
+    lay = bottle_twin.make_layout(Path(a.layout or REPO / "sim" / "generated" / f"{name}.json"),
+                                  bottle_twin.REAL_BOTTLE if a.real_geometry else None)
     os.environ["SIM_LAYOUT"] = os.environ["ROBOT_SIM_LAYOUT"] = str(lay)
     os.environ.setdefault("ROBOT_SIM_RECORD", "0")
     os.environ.setdefault("BOTTLE_GEMINI_JUDGE", "0")
@@ -102,7 +114,7 @@ if __name__ == "__main__":
         os.environ["BOTTLE_SIM_RECORDER_URL"] = a.recorder_url
     import recorder  # noqa: F401  (pin the recorder package before sim/ (with its own recorder.py) joins sys.path)
     sys.path.append(str(REPO / "sim"))
-    res = asyncio.run(main(a.attempts))
+    res = asyncio.run(main(a.attempts, POLICY_REAL if a.real_geometry else POLICY))
     print(json.dumps({"summary": res}), flush=True)
     import sim_arm_mcp
     sim_arm_mcp.arm.running = False

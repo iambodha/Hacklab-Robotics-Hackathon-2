@@ -670,7 +670,12 @@ class SimRig:
         return arm.ik.solve_rot(np.asarray(xyz, float), np.asarray(R, float), np.asarray(seed, float))
 
     async def move_down(self, x, y, z, yaw_deg):
-        return await move_tcp(x, y, z, True, yaw_deg)
+        return await move_tcp(x, y, z, True, yaw_deg, step=0.01)     # slower than the default: big swings lag
+
+    async def reachable(self, x, y, z, yaw_deg, seed):
+        _, lean = await asyncio.to_thread(arm.ik.solve_least_lean, np.array([x, y, z], float), np.asarray(seed, float),
+                                          yaw_deg)
+        return None if lean is None else float(lean)
 
     async def go(self, q, dt, contact):
         with arm.lock:

@@ -28,7 +28,7 @@ rising lift_per_turn_mm per turn, watching the wrist-roll load (stops at j7_load
 turn back; regrasp]. The last grip is kept for check_cap. (x, y): cap centre from pixel_to_table on a CLOSE wrist view
 at height cap_top_z; cap_height: the cap's height in m. On any abort it opens the jaws and lifts straight up.
 Returns per stroke: commanded vs achieved rotation, peak/mean j7 load, j8 change (slip), z change, why it stopped.""",
-    "check_cap": """Did the cap come free? With the cap gripped, lifts 15 mm straight up: a cap still on the thread
+    "check_cap": """Did the cap come free? Only with the cap gripped (after twist_cap) it lifts 15 mm straight up: a cap still on the thread
 holds the gripper back (arm loads rise) or slips out of the jaws; a free cap comes up in the jaws. Saves check
 images and logs a judgement (signals + images, plus Gemini ER when a key is available). If the cap is free it stays
 in the jaws; otherwise the jaws open and the gripper lifts away.""",
@@ -108,7 +108,7 @@ async def check_cap(st: E.EpisodeStore, rig):
         verdict = (f"cap probably free: the gripper rose {r['cap_lift_mm']:.0f} mm still holding it, unhindered (the jaws "
                    f"could also have slid up the cap: confirm a gap between cap and bottle in the images)")
     elif not r["holding_before"]:
-        verdict = "cannot tell from the signals: the jaws were not holding the cap"
+        verdict = "nothing lifted: the jaws are not holding the cap (judge from the images only)"
     elif r["resisted"]:
         verdict = (f"cap still attached: the lift was held back (gripper rose {r['gripper_rose_mm']:.0f} of "
                    f"{r.get('lift_planned_mm', 0):.0f} mm{'; ' + r['stopped'] if r.get('stopped') else ''})")
@@ -129,7 +129,7 @@ async def check_cap(st: E.EpisodeStore, rig):
             lines.append(f"Gemini ER: {g['verdict']}")
     st.phase(n, "check", "ok", {"cap_free": r["cap_free"], "cap_lift_mm": r["cap_lift_mm"], "resisted": r["resisted"],
                                 "holding_after": r["holding_after"]}, verdict)
-    if not r["cap_free"]:
+    if r["holding_before"] and not r["cap_free"]:
         lines.append("retreat: " + await tw._retreat("check done, cap not free"))
     st.write_report(n)
     return "\n".join(lines), images

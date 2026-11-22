@@ -40,6 +40,24 @@ def loop_run(tmp_path_factory):
     return learn, summary, svc
 
 
+def test_real_table_geometry_side_approach(tmp_path):
+    """The 25 cm bottle ~0.28 m out (as on the real table): the gripper leans ~60 deg, approaches along its jaws and
+    still turns the cap about its vertical axis."""
+    pytest.importorskip("mujoco")
+    pytest.importorskip("cv2")
+    env = {**os.environ, "MUJOCO_GL": os.environ.get("MUJOCO_GL", "cgl"), "BOTTLE_GEMINI_JUDGE": "0", "ROBOT_SIM_RECORD": "0"}
+    p = subprocess.run([sys.executable, "-m", "learning.sim_loop", "--attempts", "2", "--real-geometry", "--learn-dir",
+                        str(tmp_path / "learn"), "--layout", str(tmp_path / "bottle_twin_real.json")],
+                       cwd=ROOT, env=env, capture_output=True, text=True, timeout=600)
+    assert p.returncode == 0, p.stderr[-3000:]
+    summary = json.loads([l for l in p.stdout.splitlines() if l.startswith('{"summary"')][-1])["summary"]
+    assert [a["outcome"] for a in summary] == ["slip", "loosened"]
+    assert summary[1]["truth"]["turned_deg"] >= 25
+    recs = [json.loads(l) for l in (tmp_path / "learn/episodes.jsonl").read_text().splitlines()]
+    app = [r for r in recs if r["type"] == "phase" and r["phase"] == "approach"]
+    assert all(r["status"] == "ok" and r["measurements"]["mode"] == "side" and r["measurements"]["lean_deg"] > 45 for r in app)
+
+
 def test_three_attempts_learn_to_open_the_cap(loop_run):
     learn, summary, _ = loop_run
     assert [a["outcome"] for a in summary] == ["slip", "loosened", "opened"]

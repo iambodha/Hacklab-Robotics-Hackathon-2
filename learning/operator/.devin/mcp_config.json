@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "elrobot-real": {
+      "command": "bash",
+      "args": ["/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/r3-bottle/learning/operator/real_server.sh"],
+      "transport": "stdio"
+    }
+  }
+}

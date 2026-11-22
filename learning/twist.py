@@ -7,6 +7,7 @@ A Rig is what each MCP server provides (sim/real_arm_mcp.RealRig, sim/sim_arm_mc
     fk(q) -> (tcp xyz, tcp rotation; column 0 = jaw closing axis, column 1 = approach axis)
     solve(xyz, R, seed) -> q or None         position + orientation IK (synchronous; run in a thread)
     async move_down(x, y, z, yaw_deg) -> text    move_tcp with jaws down (rises first for long moves)
+    async reachable(x, y, z, yaw_deg, seed) -> signed lean_deg or None (> 0: tilted away from the base; no motion)
     async go(q, dt, contact) -> text         drive the arm joints to q (one short step, gripper goal kept);
                                              text starts with "ABORTED" on a tracking error, fault or contact
     async descend(x, y, z_to, yaw_deg, top) -> (text, contact_z or None)    guarded descent from `top`
@@ -33,8 +34,13 @@ from .episodes import SAFETY
 
 STEP_DEG = {"slow": 3.0, "medium": 6.0}
 STEP_DT = {"slow": 0.15, "medium": 0.10}
-HOVER_ABOVE = 0.05           # m above the cap top before the descent
-GUARD_ABOVE = 0.025          # the descent feels for contact from this height above the cap top (fingertips ~1 cm below TCP)
+HOVERS = (0.05, 0.035, 0.025)   # m above the cap top before the descent: the highest one the arm can reach there
+MAX_LEAN = 75.0              # deg from vertical: steeper poses are not used for the cap
+SIDE_LEAN = 45.0             # a grasp pose leaning more than this is approached from the side, not from above
+SIDE_BACK = 0.04             # side approach: start this far back along the jaws' approach axis
+SIDE_STEP = 0.005            # advance in steps of this
+SIDE_CONTACT = 0.006         # a step that ends this far short = contact
+GUARD_ABOVE = 0.02           # the descent feels for contact from this height above the cap top (fingertips ~1 cm below TCP)
 CONTACT_OK = 0.004           # a touch this close to the grasp height is accepted as arrival
 GRASP_BELOW_TOP = 0.010      # nominal TCP height below the cap top (approach_z_offset_mm is added)
 FINGERTIP_BELOW = 0.010      # the fingertips reach this far below the TCP (table contact at TCP z ~ 0.01)
@@ -138,7 +144,8 @@ class Twister:
         out = []
         try:
             st = await self.rig.state()
-            out.append("open: " + (await self.rig.grip(min(0.96, st[self.j8]["norm"] + RELEASE_OPEN + 0.2), None))[0].splitlines()[0])
+            if st[self.j8]["norm"] < 0.85:
+                out.append("open: " + (await self.rig.grip(min(0.96, st[self.j8]["norm"] + RELEASE_OPEN + 0.2), None))[0].splitlines()[0])
         except Exception as e:  # noqa: BLE001  (keep going: lifting away matters more)
             out.append(f"open failed: {e}")
         try:
@@ -170,36 +177,27 @@ class Twister:
         dt = max(STEP_DT[p["twist_speed"]], SAFETY["min_step_dt"])
         yaw_start = float(p["yaw_start_deg"])
 
-        # approach: jaws open, hover above the cap, guarded descent to the grasp height
+        # reachability first, without moving. Lean > 0: the approach axis tilts away from the base.
+        q, _, _ = await self._pose()
+        g_lean = await self.rig.reachable(x, y, z_grasp, yaw_start, q)
+        if g_lean is None or abs(g_lean) > MAX_LEAN:
+            res["abort_reason"] = (f"the grasp pose [{x:.3f}, {y:.3f}, {z_grasp:.3f}] is out of reach "
+                                   f"({'no joint solution' if g_lean is None else f'the gripper would lean {abs(g_lean):.0f} deg'}). "
+                                   f"Nothing moved.")
+            self.log("approach", "fail", {"z_grasp": round(z_grasp, 4)}, res["abort_reason"])
+            return res
         st = await self.rig.state()
         if st[self.j8]["norm"] < 0.85:
             await self.rig.grip(0.96, None)
-        out = await self.rig.move_down(x, y, cap_top_z + HOVER_ABOVE, yaw_start)
-        _, pos, R = await self._pose()
-        lean = lean_of(R)
-        hover = {"tcp": [round(float(v), 4) for v in pos], "lean_deg": round(lean, 1), "yaw_deg": round(yaw_of(R), 1)}
-        if out.startswith(("ABORTED", "UNREACHABLE")) or "do not grasp" in out:
-            res["abort_reason"] = "approach: " + out.splitlines()[0]
-            self.log("approach", "abort", hover, res["abort_reason"])
-            await self._retreat(res["abort_reason"])
+        side = abs(g_lean) > SIDE_LEAN
+        ok = await (self._approach_side(x, y, z_grasp, yaw_start, g_lean, res) if side else
+                    self._approach_down(x, y, z_grasp, cap_top_z, yaw_start, q, res))
+        if not ok:
             return res
-        if lean > 25:
-            res["notes"].append(f"the gripper leans {lean:.0f} deg from vertical here: the twist is about the vertical "
-                                f"cap axis, so the other wrist joints move too")
-        text, hit = await self.rig.descend(x, y, z_grasp, yaw_of(R), cap_top_z + GUARD_ABOVE)
         _, pos, R = await self._pose()
-        meas = {"tcp_z": round(float(pos[2]), 4), "z_grasp": round(z_grasp, 4), "lean_deg": round(lean_of(R), 1)}
-        if hit is not None and hit - z_grasp <= CONTACT_OK:
-            meas["contact_z"], hit = round(hit, 4), None          # touched right at the grasp height: close there
-        if text.startswith("ABORTED") or hit is not None:
-            why = ("unexpected contact at z = %.3f, %.0f mm above the grasp height: the jaws landed on the cap or the "
-                   "bottle (misaligned)" % (hit, (hit - z_grasp) * 1000)) if hit is not None else "descent: " + text.splitlines()[0]
-            res["abort_reason"] = why
-            res["misaligned"] = hit is not None
-            self.log("approach", "abort", meas, why)
-            await self._retreat(why)
-            return res
-        self.log("approach", "ok", meas, text.splitlines()[0])
+        if lean_of(R) > 25:
+            res["notes"].append(f"the gripper leans {lean_of(R):.0f} deg from vertical at the cap ({'side' if side else 'top'} "
+                                f"approach): the twist is about the vertical cap axis, so several wrist joints move")
 
         # grasp
         if not await self._grasp("grasp", close_to, force, res):
@@ -244,6 +242,96 @@ class Twister:
         res.update(ok=True, rotation_achieved_deg=round(sum(max(0.0, s["achieved_deg"]) for s in self.strokes), 1),
                    z_change_mm=round((float(pos[2]) - float(pos0[2])) * 1000, 1), holding=await self.rig.holding())
         return res
+
+    async def _approach_down(self, x, y, z_grasp, cap_top_z, yaw_start, q, res) -> bool:
+        """Jaws (nearly) down: hover at the highest reachable height above the cap, guarded descent to z_grasp."""
+        hover_z = None
+        for h in HOVERS:
+            lean_h = await self.rig.reachable(x, y, cap_top_z + h, yaw_start, q)
+            if lean_h is not None and abs(lean_h) <= MAX_LEAN:
+                hover_z = cap_top_z + h
+                break
+        if hover_z is None:
+            res["abort_reason"] = (f"no reachable hover above the cap (tried {', '.join(f'+{h * 100:.1f}' for h in HOVERS)} cm "
+                                   f"above z = {cap_top_z:.3f}). Nothing moved.")
+            self.log("approach", "fail", {}, res["abort_reason"])
+            return False
+        out = await self.rig.move_down(x, y, hover_z, yaw_start)
+        _, pos, R = await self._pose()
+        hover = {"tcp": [round(float(v), 4) for v in pos], "lean_deg": round(lean_of(R), 1), "yaw_deg": round(yaw_of(R), 1)}
+        if out.startswith(("ABORTED", "UNREACHABLE")) or "do not grasp" in out:
+            res["abort_reason"] = "approach: " + out.splitlines()[0]
+            self.log("approach", "abort", hover, res["abort_reason"])
+            await self._retreat(res["abort_reason"])
+            return False
+        text, hit = await self.rig.descend(x, y, z_grasp, yaw_of(R), cap_top_z + GUARD_ABOVE)
+        _, pos, R = await self._pose()
+        meas = {"mode": "top", "tcp_z": round(float(pos[2]), 4), "z_grasp": round(z_grasp, 4), "lean_deg": round(lean_of(R), 1)}
+        if hit is not None and hit - z_grasp <= CONTACT_OK:
+            meas["contact_z"], hit = round(hit, 4), None          # touched right at the grasp height: close there
+        if text.startswith("ABORTED") or hit is not None:
+            why = ("unexpected contact at z = %.3f, %.0f mm above the grasp height: the jaws landed on the cap or the "
+                   "bottle (misaligned)" % (hit, (hit - z_grasp) * 1000)) if hit is not None else "descent: " + text.splitlines()[0]
+            res["abort_reason"], res["misaligned"] = why, hit is not None
+            self.log("approach", "abort", meas, why)
+            await self._retreat(why)
+            return False
+        self.log("approach", "ok", meas, text.splitlines()[0])
+        return True
+
+    async def _approach_side(self, x, y, z_grasp, yaw_start, g_lean, res) -> bool:
+        """Steeply leaning gripper (the cap is high for this arm): start SIDE_BACK back along the jaws' approach axis
+        from the grasp point, then advance along that axis in small guarded steps, so the cap slides between the open
+        jaws (moving level instead would push the palm into the cap's top edge). A step that falls short = contact."""
+        r = np.array([x, y], float) / max(float(np.hypot(x, y)), 1e-6)
+        t = math.radians(g_lean)
+        a = np.array([math.sin(t) * r[0], math.sin(t) * r[1], -math.cos(t)])      # approach axis (as move_tcp's IK)
+        goal = np.array([x, y, z_grasp])
+        pre = goal - SIDE_BACK * a
+        q, _, _ = await self._pose()
+        lp = await self.rig.reachable(float(pre[0]), float(pre[1]), float(pre[2]), yaw_start, q)
+        if lp is None or abs(lp) > MAX_LEAN:
+            res["abort_reason"] = f"the pre-grasp point {np.round(pre, 3).tolist()} is out of reach. Nothing moved."
+            self.log("approach", "fail", {}, res["abort_reason"])
+            return False
+        out = await self.rig.move_down(float(pre[0]), float(pre[1]), float(pre[2]), yaw_start)
+        q, pos, R = await self._pose()
+        meas = {"mode": "side", "pre": [round(float(v), 4) for v in pos], "lean_deg": round(lean_of(R), 1)}
+        if out.startswith(("ABORTED", "UNREACHABLE")) or "do not grasp" in out:
+            res["abort_reason"] = "approach (to the pre-grasp point): " + out.splitlines()[0]
+            self.log("approach", "abort", meas, res["abort_reason"])
+            await self._retreat(res["abort_reason"])
+            return False
+        a = np.asarray(R, float)[:, 1]                       # the pose's real approach axis
+        start = pos.copy()
+        goal = start + SIDE_BACK * a
+        n = max(1, int(math.ceil(SIDE_BACK / SIDE_STEP)))
+        now = pos
+        for k in range(1, n + 1):
+            want = start + (goal - start) * k / n
+            sol = await asyncio.to_thread(self._solve, want, R, q)
+            if sol is None:
+                why = f"approach: no joint solution {np.linalg.norm(goal - want) * 1000:.0f} mm before the cap"
+                res["abort_reason"] = why
+                self.log("approach", "abort", meas, why)
+                await self._retreat(why)
+                return False
+            r_go = await self.rig.go(sol, 0.15, True)
+            await asyncio.sleep(0.1)
+            q, now, _ = await self._pose()
+            lag = float((want - now) @ a)
+            if r_go.startswith("ABORTED") or lag > SIDE_CONTACT:
+                left = float((goal - now) @ a) * 1000
+                why = ("unexpected contact %.0f mm before the grasp point (the jaws met the cap or the bottle: misaligned)"
+                       % left) if not r_go.startswith("ABORTED") else "approach: " + r_go.splitlines()[0]
+                meas.update(contact_mm_before=round(left, 1))
+                res["abort_reason"], res["misaligned"] = why, True
+                self.log("approach", "abort", meas, why)
+                await self._retreat(why)
+                return False
+        meas.update(tcp=[round(float(v), 4) for v in now], z_grasp=round(z_grasp, 4))
+        self.log("approach", "ok", meas, f"side approach: advanced {SIDE_BACK * 1000:.0f} mm along the jaws onto the cap")
+        return True
 
     async def _grasp(self, phase: str, close_to: float, force: float, res: dict) -> bool:
         text, held = await self.rig.grip(close_to, force)
@@ -314,11 +402,7 @@ class Twister:
     async def check_cap(self) -> dict:
         """Lift the closed gripper CHECK_LIFT straight up and judge from the loads and the jaws whether the cap came
         free. Returns {"cap_free", "cap_lift_mm", "resisted", "holding_after", ...}."""
-        p = self.p
-        force = min(float(p["grip_torque_limit"]), SAFETY["max_grip_force"])
-        held = bool(await self.rig.holding())
-        if not held:
-            text, held = await self.rig.grip(1.0 - float(p["grip_close"]), force)
+        held = bool(await self.rig.holding())        # never closes the jaws itself: they may not be at the cap
         q, pos0, R = await self._pose()
         base = await self._sample("check", 0, 0.0, yaw_of(R))
         out = {"holding_before": held, "resisted": False, "lift_steps": 0}
