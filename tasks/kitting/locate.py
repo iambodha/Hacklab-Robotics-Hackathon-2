@@ -105,6 +105,8 @@ def locate_sheet(img: np.ndarray, spec: Spec, cam: CameraModel) -> dict:
     """img: RGB (H, W, 3). -> {"ok", "pose" (Pose2D, table frame), "markers": ids used, "residual_mm" (rms),
     "sigma_mm" (expected position error from corner noise), "cells"/"spots" (table xy), "why"}."""
     from perception.geometry import pixel_footprint_jacobian, pixel_to_plane
+    if img.shape[:2] != (cam.H, cam.W):
+        return {"ok": False, "why": f"image must match calibrated resolution {cam.W}x{cam.H}", "markers": []}
     found = detect_sheet_markers(img, spec)
     if len(found) < MIN_MARKERS:
         return {"ok": False, "why": f"no sheet marker ({sorted(spec.markers())}) found in the image", "markers": []}

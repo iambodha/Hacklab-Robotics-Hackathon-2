@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass
 from .spec import Pose2D, axis_wrap_deg
 
 # Motion constants of the plan (not learned): where they come from.
-TRAVEL_Z = 0.08          # profile workspace.travel_height: sideways moves at this TCP height (pads 64 mm up)
+TRAVEL_Z = 0.08          # profile workspace.travel_height: sideways moves at this TCP height (pads 70 mm up)
 HOVER_ABOVE = 0.05       # profile pick.hover_above: hover this far above the grasp height before the descent
 HOVER_MIN = 0.07         # profile pick.hover_min
 PAD_REACH = 0.010        # the fingertips reach 10 mm below the TCP: profile touch.nominal_table_tcp_z (real arm, 21 Nov);
@@ -42,7 +42,7 @@ def plan_pick_place(target: dict, params: dict, round_obj: bool = False) -> Obje
     s, g = target["start"], target["goal"]
     yaw = axis_wrap_deg(s.yaw_deg + (0.0 if round_obj else params["yaw_deg"]))
     grasp_z = params["grasp_z_mm"] / 1000
-    return ObjectPlan(target["name"], target["class"], (s.x, s.y), yaw, grasp_z, max(grasp_z + HOVER_ABOVE, HOVER_MIN),
+    return ObjectPlan(target["name"], target["class"], (s.x, s.y), yaw, grasp_z, max(grasp_z + params.get("hover_above_mm", HOVER_ABOVE * 1000) / 1000, HOVER_MIN),
                       (g.x, g.y), axis_wrap_deg(yaw + g.yaw_deg - s.yaw_deg), params["place_z_mm"] / 1000,
                       params["grip_force"], params["release_open"])
 

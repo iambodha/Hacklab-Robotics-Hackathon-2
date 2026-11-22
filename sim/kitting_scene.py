@@ -133,7 +133,7 @@ def build(layout: dict, out_dir: Path, spec: Spec | None = None) -> Path:
 def ensure_scene(spec: Spec | None = None, out_dir: Path | None = None, base: str = 'home') -> tuple[Path, dict]:
     """(workspace.xml, layout) of the nominal kitting twin, rebuilt when the spec, this file or build_scene changed."""
     spec = spec or Spec.load()
-    out_dir = Path(out_dir or HERE / 'generated' / 'kit_home')
+    out_dir = Path(out_dir or Path(os.environ.get('DATA_ROOT', '/Volumes/Dell HDD/Robotics-Hackathon')) / 'r5-kitsim' / 'scene')
     scene = out_dir / 'workspace.xml'
     srcs = [spec.path, Path(__file__), HERE / 'build_scene.py', REPO / 'tasks' / 'kitting' / 'sheet.py',
             build_scene.layout_path(base)]
@@ -147,7 +147,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--spec', default=None)
     ap.add_argument('--base', default='home')
-    ap.add_argument('--out', type=Path, default=HERE / 'generated' / 'kit_home')
+    ap.add_argument('--out', type=Path, default=Path(os.environ.get('DATA_ROOT', '/Volumes/Dell HDD/Robotics-Hackathon')) / 'r5-kitsim' / 'scene')
     ap.add_argument('--layout-out', type=Path, default=KIT_LAYOUT)
     a = ap.parse_args()
     spec = Spec.load(a.spec)

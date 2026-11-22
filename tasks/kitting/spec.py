@@ -171,6 +171,23 @@ class Spec:
     # --- validation --------------------------------------------------------------------------------------------
     def problems(self) -> list[str]:
         out = []
+        for label, rows, field in (("marker", self.raw["markers"]["items"], "id"),
+                                   ("cell", self.raw["cells"], "id"),
+                                   ("spot", self.raw["start_spots"], "id"),
+                                   ("object", self.objects(), "name")):
+            ids = [row[field] for row in rows]
+            if len(set(ids)) != len(ids):
+                out.append(f"duplicate {label} identifier")
+        if self.dictionary != "DICT_4X4_50":
+            out.append("sheet dictionary must be DICT_4X4_50")
+        if self.marker_size_mm <= 0:
+            out.append("marker size must be positive")
+        for mid in self.markers():
+            if not 0 <= mid < 50:
+                out.append(f"marker id {mid} outside DICT_4X4_50")
+        for cid, cell in self.cells().items():
+            if np.any(cell["size"] <= 0):
+                out.append(f"cell {cid} must have positive size")
         W, H = self.paper_mm
         margin = 4.0                      # printers cannot print the outer ~4 mm of a page
         inside = lambda pts: bool(np.all(np.abs(pts[:, 0]) <= W / 2 - margin) and np.all(np.abs(pts[:, 1]) <= H / 2 - margin))

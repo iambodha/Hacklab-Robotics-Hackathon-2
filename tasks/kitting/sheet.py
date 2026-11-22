@@ -53,19 +53,21 @@ class Canvas:
             self.draw.line(p, fill=0, width=w, joint="curve")
             return
         on, off = (d * self.ppm for d in DASH_MM)
-        phase = 0.0                       # distance along the outline, carried across its segments
+        distance = 0.0
+        period = on + off
         for a, b in zip(p[:-1], p[1:]):
-            L = math.dist(a, b)
-            t = 0.0
-            while t < L:
-                k = phase % (on + off)
-                step = min(L - t, (on - k) if k < on else (on + off - k))
-                if k < on:
-                    self.draw.line([(a[0] + (b[0] - a[0]) * t / L, a[1] + (b[1] - a[1]) * t / L),
-                                    (a[0] + (b[0] - a[0]) * (t + step) / L, a[1] + (b[1] - a[1]) * (t + step) / L)],
-                                   fill=0, width=w)
-                t += step
-                phase += step
+            length = math.dist(a, b)
+            if length == 0:
+                continue
+            # Integer dash indices avoid a floating-point zero-step loop at dash boundaries.
+            for j in range(math.floor(distance / period), math.ceil((distance + length) / period)):
+                lo = max(distance, j * period)
+                hi = min(distance + length, j * period + on)
+                if hi > lo:
+                    t0, t1 = (lo-distance)/length, (hi-distance)/length
+                    self.draw.line([(a[0]+(b[0]-a[0])*t0, a[1]+(b[1]-a[1])*t0),
+                                    (a[0]+(b[0]-a[0])*t1, a[1]+(b[1]-a[1])*t1)], fill=0, width=w)
+            distance += length
 
 
 def footprint_mm(spec: Spec, cls: str, pose: Pose2D) -> np.ndarray:
@@ -87,9 +89,9 @@ def draw(spec: Spec, ppm: float) -> Image.Image:
     for mid, pose in spec.markers().items():
         n = int(round(s * ppm))
         m = cv2.aruco.generateImageMarker(d, mid, n)
-        m = Image.fromarray(m).rotate(pose.yaw_deg, expand=False, fillcolor=255) if pose.yaw_deg else Image.fromarray(m)
-        tl = cv.px([[pose.x - s / 2, pose.y + s / 2]])[0]
-        cv.img.paste(m, (int(round(tl[0])), int(round(tl[1]))))
+        m = Image.fromarray(m).rotate(pose.yaw_deg, expand=True, fillcolor=255) if pose.yaw_deg else Image.fromarray(m)
+        centre = cv.px([[pose.x, pose.y]])[0]
+        cv.img.paste(m, (int(round(centre[0] - m.width / 2)), int(round(centre[1] - m.height / 2))))
         cv.text([pose.x, pose.y - s / 2 - 1.0], f"id {mid}", 2.5, anchor="mt")
     who = {o["cell"]: o for o in spec.objects()}
     for cid, c in spec.cells().items():
@@ -126,8 +128,15 @@ def write_print(spec: Spec, out_dir: Path) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     png, pdf = out_dir / f"{spec.name}.png", out_dir / f"{spec.name}.pdf"
     img.save(png, dpi=(dpi, dpi))
-    img.convert("RGB").save(pdf, resolution=dpi)
-    w_mm, h_mm = (v / dpi * MM_PER_IN for v in img.size)
+    # Exact A4 media box and lossless bitmap embedding preserve marker edges.
+    from reportlab.pdfgen import canvas as pdfcanvas
+    from reportlab.lib.utils import ImageReader
+    w_mm, h_mm = spec.paper_mm
+    points = [v / MM_PER_IN * 72 for v in (w_mm, h_mm)]
+    page = pdfcanvas.Canvas(str(pdf), pagesize=points)
+    page.drawImage(ImageReader(img), 0, 0, width=points[0], height=points[1])
+    page.showPage()
+    page.save()
     return {"png": str(png), "pdf": str(pdf), "pixels": list(img.size), "page_mm": [round(w_mm, 2), round(h_mm, 2)], "dpi": dpi}
 
 

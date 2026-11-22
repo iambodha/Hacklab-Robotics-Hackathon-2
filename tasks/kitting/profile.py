@@ -25,6 +25,7 @@ READERS = "tasks/kitting/plan.plan_pick_place (sim: tasks/kitting/sim_env.py, re
 # name: (lo, hi, generic default, meaning). Envelopes: the physical / safety range; the generic default is ONE setting
 # for every class, the place the learning starts from (the values an engineer would type before any trial).
 PARAMS: dict[str, tuple[float, float, float, str]] = {
+    "hover_above_mm": (35.0, 80.0, 50.0, "Approach clearance above grasp height; default profile pick.hover_above 50 mm"),
     "grasp_z_mm": (10.0, 40.0, 18.0,
                    "TCP height above the table when the jaws close; the fingertips reach 10 mm below the TCP. Lower "
                    "bound 10 mm = fingertips on the table (profile touch.nominal_table_tcp_z; only a guarded descent "
@@ -62,7 +63,7 @@ def register() -> list[str]:
             k = key(cls, name)
             keys.append(k)
             if k not in reg:
-                reg[k] = SC._key("float", float(dflt), f"{cls}: {about}", READERS, lo=float(lo), hi=float(hi))
+                reg[k] = {"kind": "float", "default": float(dflt), "about": f"{cls}: {about}", "readers": READERS, "class": "strategy", "lo": float(lo), "hi": float(hi), "choices": None, "item": None, "length": None}
     return keys
 
 

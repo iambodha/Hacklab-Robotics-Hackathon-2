@@ -38,6 +38,7 @@ EVAL_SEED0, CHECK_SEED0, TEST_SEED0 = 10_000, 50_000, 90_000
 
 # symptom -> [(parameter, direction, first step, minimum step)], tried in order. Direction +1 = increase.
 RULES: dict[str, list[tuple[str, int, float, float]]] = {
+    "unreachable": [("hover_above_mm", -1, 5.0, 1.25)],
     "grasp_too_high": [("grasp_z_mm", -1, 3.0, 0.5)],            # the pads closed above most of the object
     "closed_empty": [("grasp_z_mm", -1, 2.0, 0.5), ("yaw_deg", +1, 45.0, 11.25)],
     "descent_blocked": [("grasp_z_mm", +1, 2.0, 0.5)],           # touched the table above the grasp height
@@ -49,6 +50,7 @@ RULES: dict[str, list[tuple[str, int, float, float]]] = {
     "knocked_neighbour": [("release_open", -1, 0.2, 0.05)],      # the opening jaws hit a placed neighbour
 }
 WHY = {
+    "unreachable": "an approach or carry could not be completed; reduce approach clearance within the envelope",
     "grasp_too_high": "the fingertips closed above most of the object, so the jaws shut on nothing",
     "closed_empty": "the jaws closed empty with the fingertips low enough: the object squeezed out",
     "descent_blocked": "the descent touched down before the grasp height",
@@ -64,11 +66,13 @@ WHY = {
 # --- metrics -----------------------------------------------------------------------------------------------------
 def metrics(eps: list[dict], classes) -> dict:
     objs = [o for e in eps for o in e["objects"]]
-    out = {"episodes": len(eps), "objects": len(objs), "kits_complete": sum(1 for e in eps if e["objects"] and
+    # Aborted location attempts still count as six attempted assignments, never disappear from success rate.
+    attempted = sum(e.get("expected_objects", len(e["objects"])) for e in eps)
+    out = {"episodes": len(eps), "objects": attempted, "executed_objects": len(objs), "kits_complete": sum(1 for e in eps if e["objects"] and
                                                                                all(o.outcome == "placed" for o in e["objects"])),
            "aborted": sum(1 for e in eps if e.get("aborted"))}
     placed = [o for o in objs if o.outcome == "placed"]
-    out["success_rate"] = round(len(placed) / max(1, len(objs)), 3)
+    out["success_rate"] = round(len(placed) / max(1, attempted), 3)
     out["mean_error_mm"] = round(float(np.mean([o.truth["error_mm"] for o in placed])), 2) if placed else None
     rel = [o for o in objs if o.outcome in ("placed", "off_cell")]
     out["mean_error_released_mm"] = round(float(np.mean([o.truth["error_mm"] for o in rel])), 2) if rel else None
@@ -137,37 +141,83 @@ def ab_check(sim, cls: str, before: dict, after: dict, seeds: list[int], dr, tag
     names = [o["name"] for o in sim.spec.objects() if o["class"] == cls]
     res = {}
     for label, params in (("before", before), ("after", after)):
-        objs = []
+        objs, aborted = [], 0
         for s in seeds:
-            objs += run_episode(sim, params, np.random.default_rng(s), dr, only=names)["objects"]
+            ep = run_episode(sim, params, np.random.default_rng(s), dr, only=names)
+            aborted += bool(ep.get("aborted"))
+            if getattr(sim, "episode_store", None) is not None:
+                from .kit_episodes import record_episode
+                from . import profile as P
+                record_episode(sim.episode_store, ep, P.flat(params),
+                               f"Paired {label} trial: {cls}, diagnosis {tag}", stage="ab_check", seed=s,
+                               parameter_source=label, hypothetical=(label == "after"))
+            objs += ep["objects"]
         placed = [o for o in objs if o.outcome == "placed"]
-        res[label] = {"placed": len(placed), "of": len(objs), "symptom": sum(1 for o in objs if tag in o.diagnosis),
-                      "mean_error_mm": round(float(np.mean([o.truth["error_mm"] for o in placed])), 2) if placed else None}
+        res[label] = {"placed": len(placed), "of": len(names) * len(seeds), "executed": len(objs), "aborted": aborted, "symptom": sum(1 for o in objs if tag in o.diagnosis),
+                      "mean_error_mm": round(float(np.mean([o.truth["error_mm"] for o in placed])), 2) if placed else None,
+                      "mean_drop_mm": float(np.mean([p["measurements"]["truth_drop_mm"] for o in objs for p in o.phases
+                          if "truth_drop_mm" in p["measurements"]])) if any("truth_drop_mm" in p["measurements"] for o in objs for p in o.phases) else None}
     b, a = res["before"], res["after"]
     better_err = a["mean_error_mm"] is not None and (b["mean_error_mm"] is None or a["mean_error_mm"] <= b["mean_error_mm"] - 0.5)
-    ok = a["placed"] > b["placed"] or (a["placed"] == b["placed"] and (a["symptom"] < b["symptom"] or better_err)
+    less_drop = (tag == "bounced_on_release" and a["mean_drop_mm"] is not None and b["mean_drop_mm"] is not None
+                 and a["mean_drop_mm"] < b["mean_drop_mm"] - 2 and a["placed"] > 0)
+    ok = a["placed"] > b["placed"] or (a["placed"] == b["placed"] and (a["symptom"] < b["symptom"] or better_err or less_drop)
                                        and (a["mean_error_mm"] or 0) <= (b["mean_error_mm"] or 1e9) + 1.0)
+    ok = ok and not a["aborted"] and not b["aborted"]
     res["result"] = "pass" if ok else "fail"
     res["summary"] = (f"placed {b['placed']}/{b['of']} -> {a['placed']}/{a['of']}, '{tag}' {b['symptom']} -> {a['symptom']}, "
-                      f"mean error {b['mean_error_mm']} -> {a['mean_error_mm']} mm (seeds {seeds[0]}..{seeds[-1]})")
+                      f"mean error {b['mean_error_mm']} -> {a['mean_error_mm']} mm, drop {b['mean_drop_mm']} -> {a['mean_drop_mm']} mm (seeds {seeds[0]}..{seeds[-1]})")
     return res
 
 
+def select_best(curve, P, SC, log=print):
+    """Select on fixed evaluation seeds, before reading the held-out learned score."""
+    best = max(curve, key=lambda r: (r["success_rate"], -(r["mean_error_mm"] if r["mean_error_mm"] is not None else float("inf"))))
+    changed = P.current()[0] != best["params"]
+    if changed:
+        result = SC.revert("twin", best["version"], "evaluation-model-selection",
+                           "Highest fixed-evaluation success; tie-break lower placed error; no held-out selection")
+        if not result["ok"]:
+            raise RuntimeError(f"selection revert failed: {result}")
+        log(f"SELECT evaluation iteration {best['iteration']} (v{best['version']}) -> active v{P.current()[1]}")
+    return {"selected_iteration": best["iteration"], "selected_version": best["version"],
+            "active_version": P.current()[1], "criterion": "highest evaluation success, tie lower placed error"}, changed
+
+
 # --- the loop ----------------------------------------------------------------------------------------------------
-def run(iterations: int, episodes: int, check_seeds: int, out: Path, test_episodes: int, log=print) -> dict:
+def run(iterations: int, episodes: int, check_seeds: int, out: Path, test_episodes: int, log=print, resume: bool = False) -> dict:
     from . import profile as P
     from .kit_episodes import KitEpisodeStore, record_episode
     from .sim_env import DR, KitSim, run_episode
     out.mkdir(parents=True, exist_ok=True)
+    if not resume and ((out / "results.json").exists() or (out / "curve.jsonl").exists()):
+        raise ValueError("Choose a fresh output directory; implicit resume would mix evaluation histories")
     P.use_dir(out / "skillcfg", "twin")
     SC = P.skillcfg()
     store = KitEpisodeStore(out / "episodes")
     sim = KitSim()
+    sim.episode_store = store
     dr = DR()
     rule = Rule()
     curve, pending_note, t0 = [], "generic profile: one setting for every class (tasks/kitting/profile.py PARAMS)", time.time()
+    if resume:
+        curve = [json.loads(line) for line in (out / "curve.jsonl").read_text().splitlines() if line.strip()]
+        if not curve or [r["iteration"] for r in curve] != list(range(len(curve))):
+            raise ValueError("Resume requires consecutive completed iterations starting at zero")
+        for proposal in SC.proposals(t="twin"):
+            evidence = " ".join(proposal.get("evidence", []))
+            import re
+            match = re.search(r"iteration (\d+)", evidence)
+            if proposal["status"] == "rejected" and match and int(match[1]) < len(curve):
+                for k, delta in proposal["changes"].items():
+                    _, cls, name = k.split(".")
+                    diff = delta["after"] - delta["before"]
+                    rule.rejected(cls, name, 1 if diff > 0 else -1, abs(diff))
+        t0 -= curve[-1]["minutes"] * 60
+        pending_note = "Resumed after audit; current version is authoritative; see JOURNAL for rollback history"
+        log(f"RESUME at iteration {len(curve)}, active v{P.current()[1]}")
     eval_seeds = [EVAL_SEED0 + k for k in range(episodes)]
-    for it in range(iterations + 1):
+    for it in range(len(curve), iterations + 1):
         params, version = P.current()
         eps, ids = [], []
         for k, s in enumerate(eval_seeds):
@@ -203,6 +253,8 @@ def run(iterations: int, episodes: int, check_seeds: int, out: Path, test_episod
                     sign = 1 if new > before[cls][name] else -1
                     if chk["result"] == "pass":
                         a = SC.apply(pid, by="kitting-loop (twin: auto-apply after a passed check)")
+                        if not a.get("ok"):
+                            raise RuntimeError(f"apply failed: {a}")
                         applied.append(f"{cls}.{name} {before[cls][name]:g}->{new:g}")
                         log(f"  APPLIED v{a.get('version')}: {cls}.{name} {before[cls][name]:g} -> {new:g} ({chk['summary']})")
                     else:
@@ -219,9 +271,29 @@ def run(iterations: int, episodes: int, check_seeds: int, out: Path, test_episod
         if it < iterations and not applied and not any(rule.candidates(c, m["per_class"][c], params[c]) for c in P.CLASSES):
             log("  no symptom left with an untried change: stopping")
             break
+    selection, restored = select_best(curve, P, SC, log)
+    (out / "selection.json").write_text(json.dumps(selection, indent=2) + "\n")
+    if restored:
+        params, version = P.current()
+        eps, ids = [], []
+        for k, seed in enumerate(eval_seeds):
+            ep = run_episode(sim, params, np.random.default_rng(seed), dr)
+            eps.append(ep)
+            ids.append(record_episode(store, ep, P.flat(params), "Best evaluated profile restored before held-out testing",
+                                      iteration=len(curve), seed=seed))
+            if k == 0:
+                save_views(sim, out / "views" / f"iter{len(curve):02d}_seed{seed}")
+        row = dict(iteration=len(curve), version=version, params=params, episode_ids=ids,
+                   **metrics(eps, P.CLASSES), minutes=round((time.time()-t0)/60, 1), applied=[], rejected=[],
+                   selected_from=selection["selected_iteration"])
+        curve.append(row)
+        with (out / "curve.jsonl").open("a") as f:
+            f.write(json.dumps(row, default=str)+"\n")
+        store.write_summary(curve)
     test = held_out(sim, P, dr, test_episodes, log) if test_episodes else None
+    store.write_summary(curve)
     res = {"curve": curve, "test": test, "final_params": P.current()[0], "final_version": P.current()[1],
-           "minutes": round((time.time() - t0) / 60, 1), "out": str(out), "dr": vars(dr)}
+           "minutes": round((time.time() - t0) / 60, 1), "out": str(out), "dr": vars(dr), "renderer": sim.render_backend, "selection": selection}
     (out / "results.json").write_text(json.dumps(res, indent=1, default=str))
     sim.close()
     return res
@@ -236,6 +308,12 @@ def held_out(sim, P, dr, n: int, log) -> dict:
     for label, params in (("generic", P.generic()), ("learned", learned)):
         for dlabel, d in (("randomized", dr), ("nominal", DR.none())):
             eps = [run_episode(sim, params, np.random.default_rng(s), d) for s in (seeds if dlabel == "randomized" else seeds[:2])]
+            if getattr(sim, "episode_store", None) is not None:
+                from .kit_episodes import record_episode
+                for seed, ep in zip(seeds if dlabel == "randomized" else seeds[:2], eps):
+                    record_episode(sim.episode_store, ep, P.flat(params),
+                                   f"Held-out {label} profile, {dlabel}: compare without fitting these seeds",
+                                   stage="held_out", seed=seed, parameter_source=label, condition=dlabel)
             m = metrics(eps, P.CLASSES)
             out[f"{label}_{dlabel}"] = m
             log(f"test {label} {dlabel}: placed {m['success_rate']:.0%}, kits {m['kits_complete']}/{m['episodes']}, "
@@ -248,7 +326,7 @@ def save_views(sim, prefix: Path):
     from PIL import Image
     prefix.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(sim.render("overview_cam")).save(str(prefix) + "_overview.jpg", quality=88)
-    Image.fromarray(sim.snapshot("top_cam", 480, 360)).save(str(prefix) + "_top.jpg", quality=88)
+    Image.fromarray(sim.render("top_cam")).save(str(prefix) + "_top.jpg", quality=88)
 
 
 def main():
@@ -258,8 +336,11 @@ def main():
     ap.add_argument("--check-seeds", type=int, default=4, help="paired kits per A/B check")
     ap.add_argument("--test-episodes", type=int, default=10)
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--resume", action="store_true", help="explicitly continue completed curve rows using the current task config")
     ap.add_argument("--export", action="store_true", help="write tasks/kitting/profiles/kit_learned.json")
     a = ap.parse_args()
+    if min(a.episodes, a.check_seeds) < 1 or min(a.iterations, a.test_episodes) < 0:
+        ap.error("episodes/check-seeds must be positive, iterations/test-episodes nonnegative")
     out = a.out or DATA_ROOT / "runs" / time.strftime("%Y%m%d-%H%M%S")
     logf = (out.mkdir(parents=True, exist_ok=True) or out / "log.txt").open("a")
 
@@ -267,11 +348,11 @@ def main():
         print(s, flush=True)
         logf.write(s + "\n")
         logf.flush()
-    res = run(a.iterations, a.episodes, a.check_seeds, out, a.test_episodes, log)
+    res = run(a.iterations, a.episodes, a.check_seeds, out, a.test_episodes, log, resume=a.resume)
     if a.export:
         from . import profile as P
         c0, c1 = res["curve"][0], res["curve"][-1]
-        prov = {"run": str(out), "iterations": len(res["curve"]) - 1, "twin_version": res["final_version"],
+        prov = {"run": str(out), "selection": res.get("selection"), "renderer": res["renderer"], "iterations": len(res["curve"]) - 1, "twin_version": res["final_version"],
                 "eval_episodes_per_iteration": a.episodes,
                 "first": {k: c0[k] for k in ("success_rate", "mean_error_mm", "kits_complete", "episodes")},
                 "last": {k: c1[k] for k in ("success_rate", "mean_error_mm", "kits_complete", "episodes")},

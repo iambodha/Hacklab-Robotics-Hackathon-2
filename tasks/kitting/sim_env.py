@@ -4,7 +4,7 @@ scripted pick-and-place policy (plan.py) on top, domain randomization, and a jud
 Same arm model, servos, pads and IK (sim/build_scene.ArmIK least-lean search, reading the shared skill config) as the
 real-time twin server sim/sim_arm_mcp.py; what differs is only the clock (no real-time pacing) and that the motion
 primitives are written here (servo goal ramps, guarded descent, torque-limited close) after sim_arm_mcp.SimRig and
-executor/motion.py. One pick-and-place is ~10 s of simulated time and ~1 s of CPU.
+executor/motion.py. Timing depends on IK restarts, contact and host load; no real-time pacing is imposed.
 
 What the policy may use: the spec, the sheet pose located in the rendered overview image (locate.py), joint readings,
 jaw opening and servo loads. What only the judge uses: object poses from the simulator.
@@ -97,6 +97,10 @@ class ObjRun:
         self.phases.append({"phase": phase, "status": status, "note": note, "measurements": m})
 
 
+class SimulationUnstable(RuntimeError):
+    pass
+
+
 class KitSim:
     def __init__(self, spec: Spec | None = None, scene: Path | None = None):
         self.spec = spec or Spec.load()
@@ -122,6 +126,7 @@ class KitSim:
         self.cam_id, self.cam_pos0, self.cam_quat0 = cid, m.cam_pos[cid].copy(), m.cam_quat[cid].copy()
         self.cam = L.camera_model(self.layout, twin=True)       # what the policy believes (nominal calibration)
         self.renderer = None
+        self.render_backend = os.environ.get("KIT_RENDERER", "gl")
         self.bias = Pose2D(0, 0, 0)
         self.empty_norm = None
         self.reset(np.random.default_rng(0), DR.none())
@@ -177,6 +182,9 @@ class KitSim:
                 "ambient": round(float(m.vis.headlight.ambient[0]), 3)}
 
     def render(self, cam: str = "overview_cam") -> np.ndarray:
+        if self.render_backend == "cpu":
+            from .cpu_render import render
+            return render(self, cam)
         W, H = self.layout["image_size"]
         if self.renderer is None:
             self.renderer = mujoco.Renderer(self.m, H, W)
@@ -202,9 +210,15 @@ class KitSim:
         return {n: self.d.body(n).xpos[:2].copy() for n in self.obj}
 
     # --- low level ----------------------------------------------------------------------------------------------
+    def step(self, n=1):
+        mujoco.mj_step(self.m, self.d, nstep=n)
+        bad = (mujoco.mjtWarning.mjWARN_BADQPOS, mujoco.mjtWarning.mjWARN_BADQVEL,
+               mujoco.mjtWarning.mjWARN_BADQACC, mujoco.mjtWarning.mjWARN_INERTIA)
+        if any(self.d.warning[int(w)].number for w in bad):
+            raise SimulationUnstable("MuJoCo numerical warning: episode invalid, counted as aborted")
+
     def step_s(self, seconds: float):
-        for _ in range(int(round(seconds / self.m.opt.timestep))):
-            mujoco.mj_step(self.m, self.d)
+        self.step(max(1, int(round(seconds / self.m.opt.timestep))))
 
     def q(self) -> np.ndarray:
         return self.d.qpos[self.qids].copy()
@@ -233,8 +247,7 @@ class KitSim:
         peak = 0.0
         for i in range(1, k + 1):
             d.ctrl[:7] = start + (q_goal - start) * i / k
-            for _ in range(n):
-                mujoco.mj_step(self.m, d)
+            self.step(n)
             peak = max(peak, float(self.loads()[:7].max()))
             if contact_abort and peak > LOAD_ABORT:
                 d.ctrl[:7] = d.qpos[self.qids[:7]]
@@ -333,12 +346,10 @@ class KitSim:
         k = int(GRIP_RAMP_S / CTRL_DT)
         for i in range(1, k + 1):
             d.ctrl[7] = start + (goal - start) * i / k
-            for _ in range(n):
-                mujoco.mj_step(m, d)
+            self.step(n)
         t = 0.0
         while t < GRIP_MAX_S - GRIP_RAMP_S:
-            for _ in range(n):
-                mujoco.mj_step(m, d)
+            self.step(n)
             t += CTRL_DT
             if abs(d.qvel[self.dofs[7]]) < 0.03:
                 break
@@ -397,9 +408,8 @@ def pick_place(sim: KitSim, pl: ObjectPlan, cell: str, sheet_true: Pose2D) -> Ob
     run.phase("lift", "ok" if (r["ok"] and still) else "fail", "" if still else "jaws closed further: lost it",
               jaw_norm=round(sim.jaw_norm(), 4), truth_lift_mm=round(float(lifted["xyz"][2] - before["xyz"][2]) * 1000, 1),
               truth_yaw_change_deg=round(abs(axis_wrap_deg(held_yaw - yaw_before_close)), 1))
-    if not still:
-        sim.grip(1.0)
-        run.outcome = "dropped"
+    if not r["ok"] or not still:
+        run.outcome = "blocked" if not r["ok"] else "dropped"
         return _judge(sim, run, others0, before, dims, grasp_tcp_z=dsc["z"], moved_on_descent=moved_on_descent)
     hover_place = max(pl.place_z + 0.03, pl.travel_z)
     r = sim.move_tcp([*pl.place_xy, hover_place], pl.yaw_place)
@@ -410,6 +420,10 @@ def pick_place(sim: KitSim, pl: ObjectPlan, cell: str, sheet_true: Pose2D) -> Ob
         run.outcome = "dropped" if not still else "blocked"
         return _judge(sim, run, others0, before, dims, grasp_tcp_z=dsc["z"], moved_on_descent=moved_on_descent)
     dpl = sim.descend(pl.place_xy, pl.place_z, pl.yaw_place, r["lean"])
+    if not dpl["ok"]:
+        run.phase("place", "abort", dpl["why"])
+        run.outcome = "blocked"
+        return _judge(sim, run, others0, before, dims)
     at_release = sim.obj_pose(pl.name)
     tcp_err = sim.bias.apply(np.asarray(pl.place_xy))[0] - sim.tcp()[:2]      # vs where the arm meant to be
     run.phase("place", "ok" if dpl["ok"] else "abort", dpl["why"], tcp_z=round(dpl["z"], 4), contact_z=dpl["contact_z"],
@@ -498,7 +512,7 @@ def diagnose(run: ObjRun, dims: dict, grasp_tcp_z, moved_on_descent) -> list[str
     return tags
 
 
-def run_episode(sim: KitSim, params: dict, rng: np.random.Generator, dr: DR, only: list[str] | None = None,
+def _run_episode(sim: KitSim, params: dict, rng: np.random.Generator, dr: DR, only: list[str] | None = None,
                 use_perception: bool = True) -> dict:
     """One kit: reset with randomization, locate the sheet in the rendered overview (or take the truth), pick and
     place every object (or only those named). -> {"truth", "locate", "objects": [ObjRun], ...}."""
@@ -511,7 +525,7 @@ def run_episode(sim: KitSim, params: dict, rng: np.random.Generator, dr: DR, onl
         loc = L.locate_sheet(img, S, sim.cam)
         if not loc["ok"]:
             return {"truth": truth, "locate": {k: v for k, v in loc.items() if k != "corners_px"}, "objects": [],
-                    "sheet_error_mm": None, "aborted": f"sheet not located: {loc.get('why')}"}
+                    "sheet_error_mm": None, "expected_objects": len(only or S.objects()), "aborted": f"sheet not located: {loc.get('why')}"}
     est = loc["pose"]
     sheet_err = float(np.hypot(est.x - sheet_true.x, est.y - sheet_true.y) * 1000)
     runs = []
@@ -520,7 +534,22 @@ def run_episode(sim: KitSim, params: dict, rng: np.random.Generator, dr: DR, onl
             continue
         pl = plan_pick_place(t, params[t["class"]], S.class_dims(t["class"])["round"])
         runs.append(pick_place(sim, pl, t["cell"], sheet_true))
+    for run in runs:
+        if run.outcome in ("placed", "off_cell"):
+            pose = sim.obj_pose(run.name)
+            ok, err, det = in_cell(S, sheet_true, run.cell, pose, run.cls)
+            run.outcome = "placed" if ok else "off_cell"
+            run.truth.update(error_mm=round(err, 1), in_cell=ok, **det)
     return {"truth": truth, "locate": {"pose": est.as_list(), "markers": loc.get("markers"), "residual_mm": loc.get("residual_mm"),
                                        "sigma_mm": loc.get("sigma_mm")},
             "sheet_error_mm": round(sheet_err, 2), "sheet_yaw_error_deg": round(wrap_deg(est.yaw_deg - sheet_true.yaw_deg), 3),
-            "objects": runs, "aborted": None}
+            "objects": runs, "expected_objects": len(only or S.objects()), "aborted": None}
+
+
+def run_episode(sim: KitSim, params: dict, rng: np.random.Generator, dr: DR, only=None, use_perception=True):
+    """Numerical failures invalidate the entire kit, including any earlier apparent successes."""
+    try:
+        return _run_episode(sim, params, rng, dr, only, use_perception)
+    except SimulationUnstable as e:
+        return {"truth": {}, "locate": {}, "objects": [], "expected_objects": len(only or sim.spec.objects()),
+                "sheet_error_mm": None, "aborted": str(e)}
