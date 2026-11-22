@@ -1,6 +1,6 @@
 """Grab the latest frame from every Station camera queue -> frames/<queue>.jpg|png
 usage: python3 scripts/camera.py [queue_hash ...]   (default: all queues seen in station.log)"""
-import asyncio, logging, re, struct, sys, zlib
+import asyncio, logging, os, re, struct, sys, zlib
 from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent
 ROOT = BASE / "norma-core"
@@ -43,7 +43,7 @@ async def grab(client, q, out):
 
 async def main(qs):
     logging.basicConfig(level=logging.ERROR)
-    client = await new_station_client("localhost", logging.getLogger("camera"))
+    client = await new_station_client(os.environ.get("STATION_HOST", "localhost"), logging.getLogger("camera"))
     await asyncio.gather(*(grab(client, q, BASE / "frames") for q in qs))
 
 asyncio.run(main(sys.argv[1:] or queues()))
