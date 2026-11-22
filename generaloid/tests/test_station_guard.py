@@ -19,19 +19,27 @@ def test_refuses_under_pytest(monkeypatch):
         asyncio.run(S.Station("localhost").connect())
 
 
-def test_live_opt_in_uses_station_host(monkeypatch):
+def test_non_pytest_client_uses_station_host(monkeypatch):
     calls = []
 
     async def fake_client(host, log):
         calls.append(host)
         return "client"
-    monkeypatch.setenv("ROBOT_LIVE_TESTS", "1")
+    monkeypatch.setattr(S, "under_pytest", lambda: False)
     monkeypatch.setenv("STATION_HOST", "station-under-test.invalid")
     monkeypatch.setattr(S, "_station_py", lambda: types.SimpleNamespace(new_station_client=fake_client))
     assert asyncio.run(S.connect()) == "client"
     assert asyncio.run(S.Station().connect()) == "client"
     assert asyncio.run(S.Station("other.invalid").connect()) == "client"
     assert calls == ["station-under-test.invalid", "station-under-test.invalid", "other.invalid"]
+
+
+def test_opt_in_policy_without_changing_process_environment(monkeypatch):
+    # A private mapping tests the policy without ever enabling live tests in this process or its children.
+    monkeypatch.setattr(S, "os", types.SimpleNamespace(environ={S.LIVE_TESTS_ENV: "1"}))
+    assert S.live_allowed()
+    S.os.environ[S.LIVE_TESTS_ENV] = "true"
+    assert not S.live_allowed()
 
 
 def test_station_host_default(monkeypatch):

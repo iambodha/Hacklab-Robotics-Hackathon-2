@@ -115,14 +115,16 @@ def _arm_builders(B):
 
 
 def build(out_dir: Path, layout_path: Path) -> Path:
-    """Write <out_dir>/workspace.xml for the layout and return it (rebuilt only when a source is newer)."""
+    """Write <out_dir>/workspace.xml, reusing it only for the same unchanged sources."""
     ensure_sim_on_path()
     import build_scene as B
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     scene = out_dir / 'workspace.xml'
-    sources = [Path(layout_path), Path(__file__), HERE / 'wrist_camera.json', Path(B.__file__)]
-    if scene.exists() and scene.stat().st_mtime >= max(p.stat().st_mtime for p in sources):
+    sources = [Path(layout_path), Path(__file__), HERE / 'wrist_camera.json', Path(B.__file__), find_urdf()]
+    signature = {str(p.resolve()): [p.stat().st_mtime_ns, p.stat().st_size] for p in sources}
+    manifest = out_dir / 'sources.json'
+    if scene.exists() and manifest.exists() and json.loads(manifest.read_text()) == signature:
         return scene
     layout = json.loads(Path(layout_path).read_text())
     with _arm_builders(B):
@@ -130,4 +132,5 @@ def build(out_dir: Path, layout_path: Path) -> Path:
     B.add_rest_keyframe(root, layout)
     ET.indent(root)
     scene.write_text(ET.tostring(root, encoding='unicode'))
+    manifest.write_text(json.dumps(signature, sort_keys=True))
     return scene

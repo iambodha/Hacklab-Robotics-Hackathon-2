@@ -71,7 +71,16 @@ class GenericTwin:
         self.vis_option = mujoco.MjvOption()
         self.reset(randomize=os.environ.get('ROBOT_SIM_RANDOMIZE') == '1')
         self.running = True
-        threading.Thread(target=self._physics, daemon=True).start()
+        self.thread = threading.Thread(target=self._physics, daemon=True)
+        self.thread.start()
+
+    def close(self):
+        """Stop physics before releasing the camera renderer; safe to call again."""
+        self.running = False
+        self.thread.join(timeout=2)
+        if self.renderer is not None:
+            self.renderer.close()
+            self.renderer = None
 
     # --- real-time physics -------------------------------------------------------------------------------
     def _physics(self):
@@ -85,8 +94,10 @@ class GenericTwin:
                 while d.time < target and steps < 50:
                     mujoco.mj_step(m, d)
                     steps += 1
-                    if steps % 10 == 0:
-                        self._servo_protection(10 * m.opt.timestep)
+                if steps:
+                    # Normal real-time iterations often step only once; a per-loop
+                    # modulo-10 gate would never accumulate overload duration.
+                    self._servo_protection(steps * m.opt.timestep)
                 if target - d.time > 0.5:                   # fell behind: accept a slower-than-real-time clock
                     wall0, sim0 = time.monotonic(), d.time
             time.sleep(0.001)
@@ -395,11 +406,14 @@ def make_server(twin: GenericTwin, connector, name: str | None = None) -> FastMC
                 now = twin.norm(twin.measured_q())
                 if max(abs(goal[arm] - now[arm])) < ARRIVE_TOL:
                     break
-                chunk = {names[i]: float(now[i] + np.clip(goal[i] - now[i], -CHUNK, CHUNK)) for i in arm}
+                limit = min(CHUNK, safety.max_joint_delta)
+                chunk = {names[i]: float(now[i] + np.clip(goal[i] - now[i], -limit, limit)) for i in arm}
                 out = await _move(chunk, step, dt, safety.track_tol_ticks)
                 if out.startswith('ABORTED'):
                     pos, _ = twin.ik.fk(twin.measured_q())
                     return f'ABORTED on the way to {np.round(wp, 3).tolist()}; tcp now {pos.round(3).tolist()}.\n' + out
+            else:
+                return f'ABORTED: did not converge to {np.round(wp, 3).tolist()} within 12 chunks.\n' + twin.table()
             log.append(np.round(wp, 3).tolist())
         pos, _ = twin.ik.fk(twin.measured_q())
         note = ('\nNOTE: ' + '; '.join(notes)) if notes else ''

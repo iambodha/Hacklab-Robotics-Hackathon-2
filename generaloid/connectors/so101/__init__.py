@@ -10,7 +10,6 @@ This package is the worked example of docs/generaloid/WRITING_A_CONNECTOR.md.
 """
 from __future__ import annotations
 
-import importlib
 import json
 import os
 from functools import cached_property
@@ -53,6 +52,9 @@ class So101Connector(ProfileConnector):
         return ("Base frame, metres: origin = the joint-1 axis on the table top, +z up, +y = straight ahead of the arm "
                 "(towards the overview camera), +x = the arm's right-hand side.")
 
+    def frame_for(self, mode: str) -> str:
+        return self.profile.frame_text if mode == "real" else self.frame_text
+
     @property
     def layout_path(self) -> Path:
         """layout.json, or ROBOT_SIM_LAYOUT if that file is an SO-101 layout ("robot_model": "so101")."""
@@ -91,9 +93,10 @@ class So101Connector(ProfileConnector):
             twin, server = mount_generic(self, GENERATED / self.name)
 
             def close():
-                twin.running = False
+                twin.close()
             return Mount(self.name, mode, server, robot=twin, close=close)
-        r = importlib.import_module("real_arm_mcp")
+        from generaloid.core.legacy import real_tools
+        r = real_tools(self.profile_name)
         station.install()
         return Mount(self.name, mode, r.server, robot=r)
 

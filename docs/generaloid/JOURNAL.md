@@ -71,3 +71,67 @@ Times are local (22 Nov 2026, overnight run). Newest entries last.
   533 deg of gripper rotation, the cap turned 323 deg, not free (needs 1.25 turns = 450 deg). sim_loop only opens it
   on its third attempt, after two earlier attempts loosened it. Changed the check to 10 strokes, as the real demo
   takes needed (10-11 strokes).
+
+## 2026-11-22 08:42 CET — Codex takeover from Devin
+- Read the common brief first, all four branch commits (including WIP 16d6651), the journal and the end of
+  `/Users/bodha/Documents/b0dha/Robotics-Hackathon/logs/r5-generaloid.log`. Devin stopped when its quota expired.
+- Reviewed core, connector declarations, generic twin, CLI, fake Station and WIP tests. No uncommitted changes
+  existed at takeover. Required architecture/CLI/connector/migration/pitch docs were missing.
+- Independently inspected `origin/simulation_s101:sim/build_scene.py` and `origin/robot-profiles:sim/robots/so101.json`.
+  The SO-101 twin and real profile use different URDFs and base frames; real hardware remains unverified.
+- Started the common full-suite baseline with Station disabled; output is `takeover-baseline.txt` under the external
+  r5-generaloid data directory. Started the WIP connector suite separately (only short twin mounts/IK, no long sim).
+- Review fixes planned: expose the correct frame in real SO-101 server instructions; reject cached legacy servers
+  from a different connector; clean up generic twin resources; make scripted checks return failure on bad outcomes.
+- Never started real serving or connected to a real Station. Real-mode tests only use import and FakeStation.
+  No commits will be made, per this run's explicit instruction; the integrator will commit the working tree.
+
+## 2026-11-22 08:48 CET — Review and sandbox validation
+- WIP connector suite: **27 passed** before fixes; **30 passed** after mode-frame, cached-real-server and Station
+  policy regression tests. The policy test uses a private environment mapping; it never enables live tests in
+  the process environment.
+- Full common baseline in this sandbox: **278 passed, 6 failed, 1 skipped, 3 errors** (106.63 s). Eight failure/error
+  cases depend on rendering and fail with `mujoco.cgl.cgl.CGLError: invalid CoreGraphics connection`; the remaining
+  failure is the known executor marker-name assertion. This differs from Devin's less-restricted run above.
+- Added a sim-only, test-only headless launcher which labels its images as rendering disabled. Normal serving is
+  untouched. `GENERALOID_CHECK_HEADLESS=1` selects it for scripted checks and the result labels that substitution.
+  This validates MCP control and physics, not camera appearance or visual perception.
+- Scripted MCP pick: ElRobot cube **9.9 -> 110.0 mm**; SO-101 cube **9.9 -> 115.7 mm**, HOLDING. Both exit 0.
+  Evidence: external data directory `takeover-pick-elrobot.json`, `takeover-pick-so101.json` and corresponding
+  `takeover_pick_*/truth.jsonl`. Bottle twist is running as the only long simulation.
+- `nice -n 10` reports `setpriority: Operation not permitted` but executes the command; heavy checks are serialized.
+  `ps` is also denied by the sandbox; used tool session completion and output logs instead. No escalation requested.
+- Finished architecture, CLI, connector guide, migration and pitch drafts. No legacy server/package changes.
+- Further review found the SO-101 scene cache could reuse a prior layout when a different older file was selected.
+  Cache now fingerprints source paths/mtime/size, including the URDF; added an older-layout regression test.
+  Generic twin now closes its thread/renderer, bounds motion chunks by connector max delta and reports failure
+  instead of success when bounded motion does not converge. Check CLI now exits nonzero on failed pick/release.
+- Found a further inherited twin-clock bug: servo overload checks gated on every tenth step of each wall-clock
+  batch never run in normal one/two-step batches. Fixed only the new generic twin to account for every batch's
+  simulated duration, with a short deterministic regression test. Legacy sim is untouched (merge note for owner).
+
+## 2026-11-22 08:51 CET — Bottle result and final verification
+- Final focused suite: **32 passed in 27.84 s**, including the new cache and clock tests. Documentation link check
+  and `git diff --check` pass.
+- Scripted MCP bottle check exited 0 after ten strokes: gripper achieved **886.9 deg**, cap truth reports
+  **652.7 deg turned**, **free=true**, lift **-0.4 mm**. Thus the simulated threads released, but the cap was not
+  lifted clear. `check_cap` honestly reported `unclear: holding after lifting only 0 mm`; the episode's sensed
+  `cap_free` remains false. The client's truth-based `opened=true` means released threads, not removed cap.
+  Evidence is `takeover-twist-elrobot.json`, `takeover_twist_elrobot/truth.jsonl` and its isolated episode log.
+- Repeating SO-101 MCP pick after the generic overload-clock fix, then running the combined common + Generaloid suite.
+
+## 2026-11-22 08:55 CET — Handoff
+- Post-fix SO-101 MCP pick passed again: cube **9.9 -> 115.6 mm**, HOLDING.
+- Final combined common + Generaloid suite: **310 passed, 6 failed, 1 skipped, 3 errors in 145.74 s**.
+  Compared the summary identifiers with the baseline: exactly the same six failures and three errors; no new
+  failures. The 32 Generaloid tests also pass together with the common suite.
+- Documentation complete: README, architecture diagram, CLI, connector guide, migration plan, one-page pitch and
+  VALIDATION report. All local documentation links and `git diff --check` pass.
+- Reviewed inherited commits bf9b266, 372621f, 3225cae and WIP 16d6651. **No new commits**, as instructed.
+- Takeover edits are confined to `generaloid/` excluding comms and `docs/generaloid/`. Inherited external edits are
+  only the five authorized script Station-host substitutions plus their `os` imports. No existing sim/learning/
+  executor/robot_mcp/arm_mcp hooks were needed. All existing launch scripts/configs remain unchanged.
+- Integrator: commit the working tree with the reviewed inherited work; merge r5-comms independently against
+  `register(server, connector)`, and r5-skills normally (ElRobot adopts their existing server tools). Keep the legacy
+  overload-clock issue, SO-101 frame/calibration gap, camera-render check outside this sandbox, and real cap lift
+  verification as explicit follow-ups. Neither hardware qualification nor a real cap-removal test was performed.

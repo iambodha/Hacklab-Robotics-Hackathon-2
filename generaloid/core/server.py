@@ -45,7 +45,7 @@ def build_server(connector: "Connector", mode: str, station: Station | None = No
         raise ValueError(f"connector {connector.name!r} supports modes {connector.modes}, not {mode!r}")
     mount = connector.mount(mode, station or Station())
     server = FastMCP(name or f"generaloid-{connector.name}-{mode}",
-                     instructions=f"Generaloid robot server: {connector.title} ({mode}). {connector.frame_text}")
+                     instructions=f"Generaloid robot server: {connector.title} ({mode}). {connector.frame_for(mode)}")
     adopt_tools(server, mount.tools)
     mount.addons["comms"] = register_comms(server, connector) if addons else "disabled"
     return server, mount

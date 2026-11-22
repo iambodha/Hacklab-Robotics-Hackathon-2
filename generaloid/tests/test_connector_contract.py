@@ -34,6 +34,12 @@ def test_registry():
         connectors.get("no_such_robot")
 
 
+def test_so101_mode_frames_are_explicit():
+    conn = connectors.get("so101")
+    assert "+y = straight ahead" in conn.frame_for("sim")
+    assert "+x = straight ahead" in conn.frame_for("real")
+
+
 def test_joints_and_gripper(conn):
     js = conn.joints
     assert len({j.name for j in js}) == len(js) and len({j.motor_id for j in js}) == len(js)

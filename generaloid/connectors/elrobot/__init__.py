@@ -81,7 +81,8 @@ class ElRobotConnector(ProfileConnector):
                     s.arm.viewer.close()
                     time.sleep(1)
             return Mount(self.name, mode, s.server, robot=s, close=close)
-        r = importlib.import_module("real_arm_mcp")              # no Station connection at import (arm_mcp is lazy)
+        from generaloid.core.legacy import real_tools
+        r = real_tools(self.profile_name)                        # no Station connection at import (arm_mcp is lazy)
         station.install()                                        # every bus/camera connect: this Station, guarded
         return Mount(self.name, mode, r.server, robot=r)
 

@@ -76,7 +76,9 @@ class Client:
 
 
 async def _session(connector: str, tmp: Path, layout: str | None, fn):
-    args = ["-m", "generaloid", "serve", "--connector", connector, "--mode", "sim"] + (["--layout", layout] if layout else [])
+    headless = os.environ.get("GENERALOID_CHECK_HEADLESS") == "1"
+    launcher = "generaloid.tests.run_headless_server" if headless else "generaloid"
+    args = ["-m", launcher, "serve", "--connector", connector, "--mode", "sim"] + (["--layout", layout] if layout else [])
     params = StdioServerParameters(command=sys.executable, args=args, cwd=str(REPO), env=_env(tmp))
     with open(tmp / "server.stderr", "w") as err:
         async with stdio_client(params, errlog=err) as (r, w), ClientSession(r, w) as s:
@@ -146,7 +148,8 @@ def run(check: str, connector: str, layout: str | None = None, workdir: Path | N
     tmp = Path(workdir or tempfile.mkdtemp(prefix=f"generaloid_{check}_"))
     tmp.mkdir(parents=True, exist_ok=True)
     out = asyncio.run(CHECKS[check](connector, tmp, layout))
-    return {"check": check, "connector": connector, "workdir": str(tmp), **out}
+    return {"check": check, "connector": connector, "workdir": str(tmp),
+            "rendering": "diagnostic placeholder" if os.environ.get("GENERALOID_CHECK_HEADLESS") == "1" else "camera", **out}
 
 
 def main(argv=None) -> int:
@@ -156,8 +159,11 @@ def main(argv=None) -> int:
     ap.add_argument("--layout")
     ap.add_argument("--workdir", type=Path)
     a = ap.parse_args(argv)
-    print(json.dumps(run(a.check, a.connector, a.layout, a.workdir)))
-    return 0
+    if a.check == "twist" and a.connector != "elrobot":
+        ap.error("twist check requires the elrobot bottle twin")
+    result = run(a.check, a.connector, a.layout, a.workdir)
+    print(json.dumps(result))
+    return 0 if result.get("picked", result.get("opened", True)) else 1
 
 
 if __name__ == "__main__":

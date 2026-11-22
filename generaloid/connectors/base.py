@@ -160,6 +160,10 @@ class Connector(ABC):
         """Skills available in one mode (default: all of them in every mode)."""
         return self.skills
 
+    def frame_for(self, mode: str) -> str:
+        """Coordinate frame used by the tools in this mode (legacy models may differ)."""
+        return self.frame_text
+
     @property
     def arm_joints(self) -> list[Joint]:
         return [j for j in self.joints if j.role == "arm"]
