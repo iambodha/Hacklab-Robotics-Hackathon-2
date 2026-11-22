@@ -26,7 +26,7 @@ flowchart LR
 |---|---|---|
 | Arm tool server | `sim/real_arm_mcp.py` | 22 tools over MCP: look, move, pick, place, drop, wipe, stir, touch sense. Does the kinematics, the motion safety and the sensing so the model does not have to. |
 | Operator instructions | `sim/OPERATOR_TEMPLATE.md` → `sim/OPERATOR_REAL.md` | The one page the model reads. Rendered from the robot profile, so numbers in the text always match the code. |
-| Robot profile | `sim/robots/elrobot.json`, `so101.json` | Every robot-specific number (motors, cameras, speeds, grip, touch thresholds) in one file. A second profile for an SO-101 arm is included, tested offline only. |
+| Robot profile | `sim/robots/elrobot.json` | Every robot-specific number (motors, cameras, speeds, grip, touch thresholds) in one file, so the tools can be pointed at another arm by writing a new profile. |
 | Operator page | `sim/operator_ui.py` | Web page: type a task, Enhance it, Start / Resume / Stop, live cameras, live tool-call log, arm buttons (open gripper, park, relax, hold). |
 | Runners | `sim/run_agent_real.sh`, `sim/run_agent_openai.py` | Start a run with Claude, or with any OpenAI-compatible endpoint (Gemini, Gemma). |
 | Simulator twin | `sim/sim_arm_mcp.py`, `sim/build_scene.py` | The same tool surface on a MuJoCo model, used to develop tools before trying them on hardware. |
@@ -120,7 +120,8 @@ MODEL_BASE_URL=... MODEL_NAME=... MODEL_API_KEY=... bash sim/run_agent_model.sh 
 ```
 
 Camera IDs change when the cameras are re-plugged: set `ROBOT_WRIST_CAM` and `ROBOT_OVERVIEW_CAM` to the new
-ID prefixes, or edit the profile. For another arm, set `ROBOT_PROFILE=so101` (see `sim/robots/README.md`).
+ID prefixes, or edit the profile. For another arm, write a profile and select it with `ROBOT_PROFILE` (see
+`sim/robots/README.md`).
 
 Safety: a person must watch the arm and be ready to stop it. Stop leaves the servos holding their last goal.
 Relax switches torque off and a raised arm drops. Other scripts that write a speed cap to the motors
@@ -135,5 +136,5 @@ Relax switches torque off and a raised arm drops. Other scripts that write a spe
 5. **Adaptability**: coordinates removed from tasks; survey, DROP line and box-first procedure.
 6. **Operator page** and a task enhancer that rewrites a casual instruction using the camera images.
 7. **Touch sense**, table sensing, stirring, tip-grab and wiping.
-8. **Robot profiles**: every constant out of the code, second arm profile, golden-reference check.
+8. **Robot profiles**: every constant out of the code, golden-reference check.
 9. **Sunday**: recorded runs, `pick_thin`, `place_at`, the gripper speed-cap fix, and other model families.
