@@ -30,6 +30,7 @@ from .skills import SKILLS, Verdict
 from .validation import validate, validate_in_sim
 
 REPO = Path(__file__).resolve().parent.parent
+WIPE_SKILLS = ("wipe", "wipe_region")
 
 
 class EventLog:
@@ -156,6 +157,7 @@ class Executor:
         self.results: OrderedDict[str, ExecutionResult] = OrderedDict()
         self.proposals: dict[str, ActionProposal] = {}
         self.plans: dict[str, object] = {}
+        self.wipe_plans: dict[str, dict] = {}                  # plan_id -> before image + stroke executions
         self.threads: dict[str, threading.Thread] = {}
         self._obs: OrderedDict[str, Observation] = OrderedDict()
         self._frames: OrderedDict[str, dict] = OrderedDict()   # obs_id -> {role: jpeg}
@@ -273,6 +275,8 @@ class Executor:
                 self.results[eid] = r
                 self._result_event(r)
                 return eid
+            if p.skill in WIPE_SKILLS:
+                self._register_wipe(eid, p)
             self.current = eid
             self.cancel_ev.clear()
             self.results[eid] = ExecutionResult(eid, p.proposal_id, Status.RUNNING, {}, {}, "", [
@@ -283,6 +287,19 @@ class Executor:
             self.threads[eid] = th
             th.start()
         return eid
+
+    def _register_wipe(self, eid: str, p: ActionProposal) -> None:
+        """Strokes of one coverage plan (params.plan_id, else this execution alone) share the overview image of the
+        first stroke's observation as the evaluator's BEFORE image (evaluator._wipe_outcome)."""
+        pid = p.params.get("plan_id") or eid
+        o = self.observation(p.based_on_obs)
+        wp = self.wipe_plans.setdefault(pid, {
+            "before": self.frame_jpeg(p.based_on_obs, "overview"), "before_obs": p.based_on_obs,
+            "before_stale": bool(o and o.frames.get("overview") and o.frames["overview"].stale), "eids": [],
+            "board_world_xy": p.params.get("board_world_xy") or p.params.get("region_world_xy")})
+        wp["eids"].append(eid)
+        while len(self.wipe_plans) > 20:
+            self.wipe_plans.pop(next(iter(self.wipe_plans)))
 
     def _run(self, eid: str, p: ActionProposal, plan) -> None:
         skill = self.skills[p.skill]

@@ -465,4 +465,377 @@ class TouchTable(Skill):
                        {"vs_nominal_mm": round((ctx.P.touch.nominal_table_tcp_z - z) * 1000, 1)})
 
 
-SKILLS: dict[str, Skill] = {s.name: s for s in (MoveTcp(), Park(), Gripper(), Pick(), Place(), Stir(), TouchTable())}
+BIN_WORDS = ("bin", "bucket", "box", "basket", "bowl")
+
+
+def _est_dict(o) -> dict:
+    return {"name": o.name, "xyz_world": list(o.xyz_world), "size": o.size, "yaw": o.yaw, "uncertainty_mm": o.uncertainty_mm,
+            "visible": o.visible, "source": o.source}
+
+
+def resolve_object(ctx, query: str | None, color: str | None = None, pixel=None, camera: str = "overview",
+                   height_m: float | None = None, bin_like: bool = False):
+    """World estimate of a named / coloured / pointed-at object from the proposal's observation, in this order:
+    1. an object estimate in the observation whose name matches (or shares the colour word, or is bin-like),
+    2. perception.locate on the observation's overview frame with the colour hint ("blue" works),
+    3. a pixel on the overview frame (e.g. from Gemini), ray to the table plane.
+    -> (ObjectEstimate, how). PlanError if it cannot be localised."""
+    from .contracts import ObjectEstimate
+    from .perception import Hint, colour_in
+    obs = ctx.obs
+    if obs is None:
+        raise PlanError("no observation to localise from (based_on_obs unknown)", {"perception": {"result": "fail"}})
+    q = (query or "").lower().strip()
+    color = color or colour_in(q)
+    seen = [o for o in obs.objects]
+    for o in seen:
+        n = o.name.lower()
+        if (q and n == q) or (color and colour_in(n) == color) or (bin_like and any(w in n for w in BIN_WORDS)) or \
+                (q and any(w in n for w in BIN_WORDS if w in q)):
+            if not o.visible:
+                raise PlanError(f"{o.name} is not visible in observation {obs.obs_id} ({o.source}); look again",
+                                {"perception": {"result": "fail", "object": _est_dict(o)}})
+            return o, f"observation {obs.obs_id} estimate"
+    jpeg = ctx.frame("overview")
+    f = obs.frames.get("overview")
+    if f is not None and f.stale:
+        raise PlanError(f"overview frame of {obs.obs_id} is stale: cannot localise {query or color}", {"perception": {"result": "fail"}})
+    if color:
+        h = Hint(query or f"{color} object", color, height_m if height_m is not None else 0.02)
+        est, why = ctx.locator.locate_hint(jpeg, h, ctx.camera_info(), f.seq if f else None, f.t_capture if f else None)
+        if est is not None:
+            return est, f"perception colour {color} on {obs.obs_id}"
+        if pixel is None:
+            raise PlanError(f"{query or color} not found in {obs.obs_id}: {why}", {"perception": {"result": "fail", "why": why}})
+    if pixel is not None:
+        z = 0.0
+        r = ctx.locator.pixel_to_world(camera, pixel[0], pixel[1], z, ctx.camera_info())
+        if not r.get("ok"):
+            raise PlanError(f"cannot localise {camera} pixel {pixel}: {r.get('reason')}", {"perception": {"result": "fail", **r}})
+        hh = 0.02 if height_m is None else height_m
+        return ObjectEstimate(query or "pointed object", [r["xyz"][0], r["xyz"][1], hh / 2], None, None, r.get("sigma_mm"),
+                              f"{camera} pixel {list(pixel)} -> table ({r.get('mm_per_px')} mm/px)", True,
+                              f.t_capture if f else None), f"pixel {list(pixel)} on {obs.obs_id}"
+    raise PlanError(f"cannot find {query!r}: give xyz_world, an object name / colour seen in the observation, or a pixel",
+                    {"perception": {"result": "fail", "objects_seen": [o.name for o in seen]}})
+
+
+class PickAt(Pick):
+    """Pick an object located by perception: by name or colour hint (resolve_object), a pixel, or xyz_world."""
+    name, version = "pick_at", "1"
+    params_doc = {"object": "name or colour hint, e.g. 'blue' / 'blue object' (from the observation's estimates or "
+                            "perception.locate on its overview frame)",
+                  "xyz_world": "optional [x, y, z] metres, world: skips localisation",
+                  "camera / pixel": "optional: a pointed pixel [u, v] on the overview frame of based_on_obs",
+                  "object_height": "metres (default: the estimate's height)", "max_uncertainty_mm": "default 25",
+                  "yaw_deg": "optional jaw yaw (default: across the object's short side, or keep current if round)",
+                  "grip_force": "optional 0.1..1"}
+    doc = ("Pick at a perceived object: localise it (perception, with uncertainty), then open, hover, guarded descent, "
+           "close with touch, lift. Rejected if the estimate is not visible, stale or too uncertain.")
+
+    def plan(self, ctx, params):
+        if params.get("xyz_world") is not None and not params.get("needs_localisation"):
+            from .contracts import ObjectEstimate
+            est, how = ObjectEstimate(params.get("object") or "given point", list(_vec(params["xyz_world"])), None, None,
+                                      params.get("sigma_mm"), params.get("source", "proposal xyz_world")), "proposal xyz_world"
+        else:
+            est, how = resolve_object(ctx, params.get("object"), params.get("color"), params.get("pixel"),
+                                      params.get("camera", "overview"), params.get("object_height"))
+        limit = float(params.get("max_uncertainty_mm", 25.0))
+        if est.uncertainty_mm is not None and est.uncertainty_mm > limit:
+            raise PlanError(f"{est.name} position too uncertain: {est.uncertainty_mm} mm > {limit} mm",
+                            {"perception": {"result": "fail", "object": _est_dict(est), "limit_mm": limit}})
+        h = params.get("object_height")
+        h = float(h) if h is not None else float(est.size[2]) if est.size and len(est.size) > 2 else ctx.P.pick.default_height
+        yaw = params.get("yaw_deg")
+        if yaw is None and est.yaw is not None and est.size and est.size[1] and est.size[0] / est.size[1] > 1.3:
+            yaw = (np.degrees(est.yaw) + 90 + 90) % 180 - 90       # jaws close across the short side
+        plan = super().plan(ctx, {"xyz_world": est.xyz_world, "object_height": h, "yaw_deg": yaw,
+                                  "grip_force": params.get("grip_force")})
+        plan.checks["perception"] = {"result": "pass", "how": how, "object": _est_dict(est), "limit_mm": limit}
+        plan.target["object"] = _est_dict(est)
+        return plan
+
+    def verify(self, ctx, plan, run, res):
+        v = super().verify(ctx, plan, run, res)
+        v.achieved["object_estimate"] = plan.target["object"]
+        return v
+
+
+class DropAt(Place):
+    """Release above a target region (the bin): from the observation's bin estimate, a region, a bin dict or xyz_world."""
+    name, version = "drop_at", "1"
+    params_doc = {"target": "name of the place target in the observation (default: anything bin-like)",
+                  "region_world_xy": "optional [[x0, y0], [x1, y1]] metres, world: the opening to drop into",
+                  "bin": "optional {xyz_world, size [w, d, h], yaw_deg}", "xyz_world": "optional [x, y, z]: centre on the table",
+                  "camera / pixel": "optional: a pointed pixel on the overview frame of based_on_obs",
+                  "rim_height_m": "default: the bin's height, else 0.08", "clearance_m": "TCP above the rim, default 0.06",
+                  "object": "optional: what is being dropped (the evaluator looks for it inside the region afterwards)"}
+    doc = "Carry above the centre of the target region (rim + clearance), open, retreat. Twin preflight includes the bin walls."
+
+    def plan(self, ctx, params):
+        bin_ = None
+        if params.get("region_world_xy"):
+            (x0, y0), (x1, y1) = params["region_world_xy"]
+            x0, x1, y0, y1 = min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1)
+            rim = float(params.get("rim_height_m", 0.08))
+            bin_ = {"xyz_world": [(x0 + x1) / 2, (y0 + y1) / 2, 0.0], "size": [x1 - x0, y1 - y0, rim], "yaw_deg": 0.0,
+                    "wall": 0.004, "from": "region_world_xy"}
+            how = "region_world_xy"
+        elif isinstance(params.get("bin"), dict):
+            b = params["bin"]
+            bin_ = {"xyz_world": list(_vec(b["xyz_world"])), "size": list(b.get("size") or [0.2, 0.15, 0.08]),
+                    "yaw_deg": float(b.get("yaw_deg") or 0.0), "wall": float(b.get("wall") or 0.004), "from": "proposal bin"}
+            how = "bin"
+        elif params.get("xyz_world") is not None and not params.get("needs_localisation"):
+            c = _vec(params["xyz_world"])
+            rim = float(params.get("rim_height_m", 0.08))
+            bin_, how = {"xyz_world": c.tolist(), "size": [0.0, 0.0, rim], "yaw_deg": 0.0, "wall": 0.0, "from": "xyz_world"}, "xyz_world"
+        else:
+            est, how = resolve_object(ctx, params.get("target"), params.get("color"), params.get("pixel"),
+                                      params.get("camera", "overview"), params.get("rim_height_m"), bin_like=True)
+            s = list(est.size or [0.0, 0.0])
+            rim = float(params.get("rim_height_m") or (s[2] if len(s) > 2 else 0.08))
+            bin_ = {"xyz_world": list(est.xyz_world), "size": [s[0], s[1], rim], "yaw_deg": float(np.degrees(est.yaw or 0.0)),
+                    "wall": 0.004, "from": f"{how}: {est.source}", "uncertainty_mm": est.uncertainty_mm}
+        rim = float(bin_["size"][2])
+        z = rim + float(params.get("clearance_m", 0.06))
+        x, y = bin_["xyz_world"][:2]
+        plan = super().plan(ctx, {"xyz_world": [x, y, z], "yaw_deg": params.get("yaw_deg")})
+        w, d = bin_["size"][:2]
+        unc = bin_.get("uncertainty_mm")
+        plan.checks["target"] = {"result": "pass", "how": how, "centre_xy": [round(x, 4), round(y, 4)], "release_z": round(z, 4),
+                                 "rim_height_m": rim, "opening_m": [w, d], "uncertainty_mm": unc}
+        if w and d and unc is not None and 2 * unc / 1000 >= min(w, d) / 2:
+            raise PlanError(f"bin position too uncertain ({unc} mm) for an opening of {min(w, d) * 100:.0f} cm",
+                            {"target": {**plan.checks["target"], "result": "fail"}})
+        plan.target.update(region=bin_, object=params.get("object"))
+        if w and d:
+            plan.data["bin"] = bin_                       # twin preflight adds its walls
+        return plan
+
+    def verify(self, ctx, plan, run, res):
+        v = super().verify(ctx, plan, run, res)
+        b, rel = plan.target["region"], run.data.get("release_tcp")
+        v.achieved["target_region"] = b
+        if rel is not None and b["size"][0] and b["size"][1]:
+            local = np.array(rel[:2]) - np.array(b["xyz_world"][:2])
+            a = np.radians(b.get("yaw_deg") or 0.0)
+            u = np.array([[np.cos(a), np.sin(a)], [-np.sin(a), np.cos(a)]]) @ local
+            inside = bool(abs(u[0]) <= b["size"][0] / 2 - b["wall"] and abs(u[1]) <= b["size"][1] / 2 - b["wall"])
+            v.achieved["release_over_opening"] = inside
+            if not inside and v.status == Status.SUCCEEDED:
+                v.status, v.termination = Status.PARTIAL, "released outside the bin opening"
+        return v
+
+
+def _wipe_limits() -> dict:
+    from skills.wipe import limits as wl
+    return wl.load()
+
+
+class Wipe(Skill):
+    """skills/wipe proposals executed through the executor's phases. One proposal = one stroke (from_xy_world ->
+    to_xy_world, `passes` times there and back) with the FIXED contact settings of the hardware-validated wipe tool
+    (sim/real_arm_mcp.wipe, values from the robot profile via skills/wipe/limits.py). The proposal's attached `limits`
+    must equal the executor's own; a mismatch is rejected (nothing is adapted here)."""
+    name, version, freshness_s = "wipe", "1", 30.0
+    cameras = ()          # one plan's strokes share the inspection observation; the board is re-imaged after the park
+    params_doc = {"from_xy_world": "[x, y] metres, world", "to_xy_world": "[x, y] metres, world", "passes": "1..max (there/back)",
+                  "limits": "the fixed contact settings (skills/wipe/limits.py), must match the executor's",
+                  "plan_id": "groups the strokes of one coverage plan (the evaluator scores them together)",
+                  "lines_world_xy": "alternative: several strokes [[x0, y0, x1, y1], ...] in one execution"}
+    doc = ("Wipe with a held tissue: above the stroke start, guarded descent until the fingertips feel the table, light "
+           "pressure (contact - backoff), straight stroke(s), lift. Hard resistance aborts. The whole path is solved first.")
+    contact_label = "stroke"
+
+    def strokes_of(self, ctx, params) -> list[tuple[np.ndarray, np.ndarray]]:
+        if params.get("lines_world_xy"):
+            return [(_vec(l[:2], 2, "lines_world_xy"), _vec(l[2:4], 2, "lines_world_xy")) for l in params["lines_world_xy"]]
+        return [(_vec(params.get("from_xy_world"), 2, "from_xy_world"), _vec(params.get("to_xy_world"), 2, "to_xy_world"))]
+
+    def plan(self, ctx, params):
+        L = _wipe_limits()
+        given = params.get("limits")
+        if given:
+            diff = {k: (given[k], L[k]) for k in L if k in given and given[k] != L[k]}
+            if diff:
+                raise PlanError(f"wipe limits in the proposal differ from the executor's (proposal, executor): {diff}",
+                                {"limits": {"result": "fail", "differs": diff}})
+        strokes = self.strokes_of(ctx, params)
+        passes = int(params.get("passes", 1))
+        if not 1 <= passes <= L["max_passes"]:
+            raise PlanError(f"passes {passes} outside 1..{L['max_passes']}", {"limits": {"result": "fail", "passes": passes}})
+        TS, WS = ctx.P.touch, ctx.P.workspace
+        floor = TS.nominal_table_tcp_z - TS.max_below
+        step = float(ctx.P.wipe.waypoint_every)
+        yaw = ctx.kin.yaw_now(ctx.q0)
+        paths, info, seed = {}, [], ctx.q0
+        for i, (a, b) in enumerate(strokes, 1):
+            length = float(np.linalg.norm(b - a))
+            if not L["min_stroke_m"] - 1e-9 <= length <= L["max_stroke_m"] + 1e-9:
+                raise PlanError(f"stroke {i} is {length * 100:.1f} cm; must be {L['min_stroke_m'] * 100:.0f}..{L['max_stroke_m'] * 100:.0f} cm",
+                                {"limits": {"result": "fail", "stroke": i, "length_m": round(length, 4)}})
+            approach, _, _ = self.travel(ctx, np.r_[a, L["start_height_m"]], seed, yaw, label=f"stroke {i} approach")
+            free, steps = self.descent(ctx, a[0], a[1], L["start_height_m"], floor, yaw, approach[-1])
+            zc = max(floor, ctx.table_z(a[0], a[1]) - L["backoff_m"])
+            n = max(2, int(length / step) + 1)
+            line, _ = self.solve_chain(ctx, [np.r_[a + (b - a) * k / n, zc] for k in range(n + 1)], (steps or free or approach)[-1],
+                                       yaw, f"stroke {i}", min_z=floor)
+            end = b if passes % 2 else a
+            lift, _ = self.solve_chain(ctx, [np.r_[end, L["lift_after_m"]]], line[-1] if passes % 2 else line[0], yaw, f"stroke {i} lift")
+            paths.update({f"approach {i}": approach, f"free {i}": free, f"descent {i}": steps, f"{self.contact_label} {i}": line,
+                          f"lift {i}": lift})
+            info.append({"from": a.tolist(), "to": b.tolist(), "length_m": round(length, 4), "planned_contact_z": round(zc, 4),
+                         "waypoints": len(line)})
+            seed = lift[-1]
+        n_wp = sum(len(v) for v in paths.values())
+        return Plan(paths, {"reachability": {"result": "pass", "waypoints": n_wp},
+                            "limits": {"result": "pass", "hard_load_sum": L["hard_load_sum"], "backoff_m": L["backoff_m"],
+                                       "passes": passes, "strokes": len(strokes)}},
+                    {"strokes": info, "passes": passes, "yaw": yaw, "plan_id": params.get("plan_id")},
+                    {"contact_paths": [k for k in paths if k.startswith(("descent", self.contact_label))], "limits": L})
+
+    def execute(self, ctx, plan, run):
+        m, L = ctx.motion, plan.data["limits"]
+        A, TS = ctx.kin.arm_ids, ctx.P.touch
+        held0, _ = m.probe_hold()
+        run.data.update(held_before=held0, strokes_world=[], contact_z=[], passes_done=0, lifted=False)
+        run.note("holding something (the tissue)" if held0 else "nothing is held: wiping with the bare fingertips")
+        for i, s in enumerate(plan.target["strokes"], 1):
+            res = go_path(ctx, run, f"stroke {i} approach", plan.paths[f"approach {i}"] + plan.paths[f"free {i}"])
+            if res.status != Status.SUCCEEDED:
+                return res
+            run.data["in_contact"] = True
+            res, hit = m.descend_guarded(plan.paths[f"descent {i}"])
+            run.note(f"stroke {i} down: {res.termination}")
+            if res.status != Status.SUCCEEDED:
+                return res
+            run.data["contact_z"].append(hit)
+            if hit is None:
+                run.data["no_contact"] = True
+                return MotionResult(Status.PARTIAL, f"stroke {i}: the table was not felt down to the lowest allowed height")
+            ctx.remember_touch(*s["from"], hit)
+            line = plan.paths[f"{self.contact_label} {i}"]
+            z = max(TS.nominal_table_tcp_z - TS.max_below, hit - L["backoff_m"])
+            if abs(z - s["planned_contact_z"]) > 0.003:            # felt height differs from the plan: same line, at the felt height
+                a, b = np.array(s["from"]), np.array(s["to"])
+                pts = [np.r_[a + (b - a) * k / (len(line) - 1), z] for k in range(len(line))]
+                try:
+                    line, _ = self.solve_chain(ctx, pts, m.q_now(), plan.target["yaw"], f"stroke {i} (felt height)",
+                                               min_z=TS.nominal_table_tcp_z - TS.max_below)
+                except PlanError as e:
+                    return MotionResult(Status.PARTIAL, f"stroke {i}: {e.reason}")
+                run.note(f"stroke {i}: table felt at z={hit:.3f}, stroke re-solved at z={z:.3f} (planned {s['planned_contact_z']:.3f})")
+            start = ctx.kin.fk(m.q_now())[0]
+            hard = 0
+            for p in range(plan.target["passes"]):
+                for q in (line[1:] if p % 2 == 0 else line[-2::-1]):
+                    res = m.go_q(q, settle=False, dt=ctx.P.wipe.dt)
+                    if res.status != Status.SUCCEEDED:
+                        run.data["strokes_world"].append([start[:2].tolist(), ctx.kin.fk(m.q_now())[0][:2].tolist()])
+                        return res
+                    loads = sorted((m.read()[a]["load"] for a in A), reverse=True)
+                    hard = hard + 1 if loads[0] + loads[1] >= L["hard_load_sum"] else 0
+                    if hard >= L["hard_reads"]:
+                        m.b.hold()
+                        run.data["strokes_world"].append([start[:2].tolist(), ctx.kin.fk(m.q_now())[0][:2].tolist()])
+                        return MotionResult(Status.PARTIAL, f"stroke {i} pass {p + 1}: hard resistance (motor loads "
+                                                            f"{loads[0]}+{loads[1]} >= {L['hard_load_sum']})", contact=True)
+                end = ctx.kin.fk(m.q_now())[0]
+                run.data["strokes_world"].append([start[:2].tolist(), end[:2].tolist()])
+                start = end
+                run.data["passes_done"] += 1
+            lift = plan.paths[f"lift {i}"]
+            if abs(z - s["planned_contact_z"]) > 0.003:
+                lift, _ = self.solve_chain(ctx, [ctx.kin.fk(lift[-1])[0]], m.q_now(), plan.target["yaw"], f"stroke {i} lift")
+            res = go_path(ctx, run, f"stroke {i} lift", lift)
+            run.data["in_contact"] = False
+            if res.status != Status.SUCCEEDED:
+                return res
+        run.data["lifted"] = True
+        held1, _ = m.probe_hold()
+        run.data["held_after"] = held1
+        if held0 and not held1:
+            run.note("the tissue is no longer in the jaws: it stayed on the table")
+        return MotionResult(Status.SUCCEEDED, f"wiped {len(plan.target['strokes'])} stroke(s) x {plan.target['passes']} pass(es)")
+
+    def verify(self, ctx, plan, run, res):
+        d = run.data
+        p_tcp = ctx.kin.fk(ctx.motion.q_now())[0]
+        ach = {"strokes_world": d.get("strokes_world", []), "contact_z": d.get("contact_z", []), "passes_done": d.get("passes_done", 0),
+               "holding_before": d.get("held_before"), "holding_after": d.get("held_after"), "tcp_world": np.round(p_tcp, 4).tolist()}
+        want = len(plan.target["strokes"]) * plan.target["passes"]
+        resid = {"passes_missing": want - ach["passes_done"]}
+        if res.status != Status.SUCCEEDED:
+            return Verdict(res.status, res.termination, ach, resid)
+        if d.get("held_before") and not d.get("held_after"):
+            return Verdict(Status.PARTIAL, "wiped, but the tissue was lost from the jaws", ach, resid)
+        return Verdict(Status.SUCCEEDED, f"{res.termination}; table felt at z={[round(z, 3) for z in ach['contact_z']]}", ach, resid)
+
+    def recover(self, ctx, plan, run, res):
+        """Stopped on the table: lift straight up from where the TCP is now."""
+        if not run.data.get("in_contact") or res.status == Status.CANCELLED:
+            return None
+        m = ctx.motion
+        p = ctx.kin.fk(m.q_now())[0]
+        top = plan.data["limits"]["lift_after_m"]
+        try:
+            path, _ = self.solve_chain(ctx, [np.r_[p[:2], z] for z in np.linspace(p[2], top, 4)[1:]], m.q_now(), plan.target["yaw"],
+                                       "recover lift", min_z=ctx.P.touch.nominal_table_tcp_z - ctx.P.touch.max_below)
+        except PlanError as e:
+            m.b.hold()
+            return f"could not plan a vertical lift: {e.reason}; holding"
+        r = go_path(ctx, run, "recover: lift straight up", path)
+        return f"lifted straight up to z={top:.3f}: {r.status.value} {r.termination}"
+
+
+class WipeRegion(Wipe):
+    """A world rectangle (e.g. Gemini's wipe_region) covered by skills/wipe's boustrophedon planner, all strokes in one
+    execution (incumbent skill version unless `w_hat` / `beta` are given)."""
+    name = "wipe_region"
+    params_doc = {"region_world_xy": "[[x0, y0], [x1, y1]] metres, world", "budget": "max strokes (default 6)",
+                  "w_hat": "optional effective width m", "lines_world_xy": "optional explicit strokes (overrides the planner)"}
+    doc = "Cover a table rectangle with wipe strokes (skills/wipe planner), guarded contact on each, then lift."
+
+    def strokes_of(self, ctx, params):
+        if params.get("lines_world_xy"):
+            return super().strokes_of(ctx, params)
+        from skills.wipe import Region, WipeSkill
+        (x0, y0), (x1, y1) = params["region_world_xy"]
+        sk = WipeSkill()
+        v = sk.seed_version(**{k: params[k] for k in ("w_hat", "beta") if k in params})
+        wp = sk.plan(v, {"region": Region(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)), "budget": int(params.get("budget", 6))})
+        return [(np.array(s.start), np.array(s.end)) for s in wp.strokes]
+
+
+class Inspect(Skill):
+    name, version, freshness_s, cameras, moves = "inspect", "1", 30.0, (), False
+    params_doc = {"camera": "overview | wrist (informational)"}
+    doc = "No motion: acknowledges a request for a fresh look; observe() returns the images."
+
+    def plan(self, ctx, params):
+        return Plan({}, {"motion": {"result": "pass", "moves": False}}, {"camera": params.get("camera", "overview")})
+
+    def execute(self, ctx, plan, run):
+        return MotionResult(Status.SUCCEEDED, "no motion: observe() for fresh images")
+
+    def verify(self, ctx, plan, run, res):
+        return Verdict(res.status, res.termination, {}, {})
+
+
+class Stop(Inspect):
+    name = "stop"
+    params_doc = {"reason": "text"}
+    doc = "Hold position (an advisor's 'stop'). To stop a running execution, the operator cancels it instead."
+
+    def plan(self, ctx, params):
+        return Plan({}, {"motion": {"result": "pass", "moves": False}}, {"reason": str(params.get("reason", ""))})
+
+    def execute(self, ctx, plan, run):
+        ctx.motion.b.hold()
+        return MotionResult(Status.SUCCEEDED, f"holding position: {plan.target['reason'] or 'stop requested'}")
+
+
+SKILLS: dict[str, Skill] = {s.name: s for s in (MoveTcp(), Park(), Gripper(), Pick(), Place(), Stir(), TouchTable(), PickAt(), DropAt(),
+                                                Wipe(), WipeRegion(), Inspect(), Stop())}

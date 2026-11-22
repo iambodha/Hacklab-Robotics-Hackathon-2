@@ -46,10 +46,10 @@ def _load(layout: str):
         if not xml.exists() or xml.stat().st_mtime < max(p.stat().st_mtime for p in srcs):
             build_scene.build(lp, out, report=False)
         spec = mujoco.MjSpec.from_file(str(xml))
-        bin_body = spec.worldbody.add_body(name="preflight_bin", mocap=True, pos=[0, 0, -10])
-        for k in range(5):                                  # bottom + 4 walls, sized per check
-            bin_body.add_geom(name=f"preflight_bin_{k}", type=mujoco.mjtGeom.mjGEOM_BOX, size=[0.01, 0.01, 0.01],
-                              contype=2, conaffinity=1)
+        for k in range(5):           # bottom + 4 walls, sized and placed per check (one body each: a body's midphase
+            body = spec.worldbody.add_body(name=f"preflight_bin_{k}", mocap=True, pos=[0, 0, -10])   # BVH is compile-time)
+            body.add_geom(name=f"preflight_bin_{k}", type=mujoco.mjtGeom.mjGEOM_BOX, size=[0.01, 0.01, 0.01],
+                          contype=2, conaffinity=1)
         m = spec.compile()
         import json
         info = {"layout": str(lp), "name": lp.stem, "markers": json.loads(lp.read_text()).get("markers")}
@@ -87,7 +87,7 @@ class TwinPreflight:
                          if self._has_joint(n)]
             self.site = m.site(self.kin.P.kinematics.tcp_site).id
             self.bin_geoms = [m.geom(f"preflight_bin_{k}").id for k in range(5)]
-            self.bin_body = m.body("preflight_bin").mocapid[0]
+            self.bin_mocap = [int(m.body(f"preflight_bin_{k}").mocapid[0]) for k in range(5)]
             names = [m.geom(i).name for i in range(m.ngeom)]
             self.names = names
             body = m.geom_bodyid
@@ -143,22 +143,24 @@ class TwinPreflight:
 
     def _place_bin(self, b):
         m, d = self.m, self.d
-        if b is None:
-            d.mocap_pos[self.bin_body] = [0, 0, -10]
+        if b is None or not (b["size"][0] and b["size"][1]):
+            for k in self.bin_mocap:
+                d.mocap_pos[k] = [0, 0, -10]
             return
         w, dp, h = b["size"]
-        t = b["wall"]
+        t = max(float(b.get("wall") or 0.004), 0.002)
         parts = [([0, 0, t / 2], [w / 2, dp / 2, t / 2]), ([0, -(dp - t) / 2, h / 2], [w / 2, t / 2, h / 2]),
                  ([0, (dp - t) / 2, h / 2], [w / 2, t / 2, h / 2]), ([-(w - t) / 2, 0, h / 2], [t / 2, dp / 2, h / 2]),
                  ([(w - t) / 2, 0, h / 2], [t / 2, dp / 2, h / 2])]
-        for g, (pos, size) in zip(self.bin_geoms, parts):
-            m.geom_pos[g], m.geom_size[g] = pos, size
-            m.geom_rbound[g] = float(np.linalg.norm(size))
-            m.geom_aabb[g] = np.r_[[0, 0, 0], size]
         c = self.kin.to_base(np.r_[b["xyz_world"][:2], 0.0])
         yaw_b = math.radians(b["yaw_deg"] - self.kin.yaw_offset)
-        d.mocap_pos[self.bin_body] = c
-        d.mocap_quat[self.bin_body] = [math.cos(yaw_b / 2), 0, 0, math.sin(yaw_b / 2)]
+        R = np.array([[math.cos(yaw_b), -math.sin(yaw_b), 0], [math.sin(yaw_b), math.cos(yaw_b), 0], [0, 0, 1]])
+        for g, k, (pos, size) in zip(self.bin_geoms, self.bin_mocap, parts):
+            m.geom_size[g] = size
+            m.geom_rbound[g] = float(np.linalg.norm(size))
+            m.geom_aabb[g] = np.r_[[0, 0, 0], size]
+            d.mocap_pos[k] = c + R @ np.asarray(pos, float)
+            d.mocap_quat[k] = [math.cos(yaw_b / 2), 0, 0, math.sin(yaw_b / 2)]
 
     # --- the check ----------------------------------------------------------------------------
     def segments(self, plan, q0):
@@ -209,7 +211,7 @@ class TwinPreflight:
             return self._check(p, plan, obs, q0, t0)
 
     def _check(self, p, plan, obs, q0, t0):
-        b = self.bin_from(p, obs)
+        b = plan.data.get("bin") or self.bin_from(p, obs)
         self._place_bin(b)
         if q0 is None:
             q0 = next(np.asarray(path[0], float) for path in plan.paths.values() if path)

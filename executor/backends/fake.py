@@ -99,12 +99,31 @@ class FakeBackend(Backend):
         if self.kin is not None and self.table_z is not None:
             z = float(self.kin.fk(self._norm_q(new))[0][2])
             if z < self.table_z and z < float(self.kin.fk(self._norm_q(self.pos))[0][2]):
-                for m in self.motor_ids[:-1]:
-                    new[m] = self.pos[m]          # pressing on the table: the arm does not go further down
+                new = self._onto_table(new, z)    # pressing on the table: no further down, sliding along it is free
         for m in self.motor_ids:
             short = abs(self.goal[m] - new[m]) * (self.ranges[m][1] - self.ranges[m][0])
             self.load[m] = int(min(1000, 40 + (8 * short if short > 8 else 0)))
         self.pos = new
+
+    def _onto_table(self, new: dict, z: float) -> dict:
+        """Least-norm joint correction that lifts the TCP back to table_z (2 Gauss-Newton steps on FK z); falls back to
+        holding the arm where it was if that does not converge."""
+        kin, arm = self.kin, self.motor_ids[:-1]
+        q = self._norm_q(new)
+        for _ in range(2):
+            g = np.zeros(kin.na)
+            for i in range(kin.na):
+                dq = q.copy()
+                dq[i] += 1e-4
+                g[i] = (float(kin.fk(dq)[0][2]) - z) / 1e-4
+            if float(g @ g) < 1e-12:
+                break
+            q[:kin.na] += g * (self.table_z - z) / float(g @ g)
+            z = float(kin.fk(q)[0][2])
+        if abs(z - self.table_z) > 5e-4:
+            return {**new, **{m: self.pos[m] for m in arm}}
+        n = kin.norm_from_q(q)
+        return {**new, **{m: float(min(0.999, max(0.001, n[m]))) for m in arm}}
 
     # --- interface ------------------------------------------------------------------
     def _ticks(self, m, n):
