@@ -305,21 +305,25 @@ async def calibration_status() -> str:
 
 @server.tool(annotations={"readOnlyHint": True})
 async def locate(camera: str = "overview", u: float | None = None, v: float | None = None,
-                 bbox: list[float] | None = None, color: str | None = None, height_m: float = 0.0,
+                 bbox: list[float] | None = None, color: str | None = None, height_m: float | None = 0.0,
                  label: str | None = None) -> str:
     """MEASURE where something is on the table (world metres), from what you recognised in a camera image.
     camera: "overview" or "wrist" (299x224 pixels, u = column, v = row, as in annotated_view's ruler).
     Give a pixel (u, v) for a point, and/or bbox [u0, v0, u1, v1] around an object; optional color
-    (red/orange/yellow/green/blue/purple/black/white) helps segmentation. height_m: the object's height
-    if known (0 = flat); a tall object located with height 0 is biased away from the camera, the
-    result tells you by how much per cm. Returns centre_xy, size_m [long, short], yaw_deg (long side vs +x),
-    sigma_centre_mm, or for a bare pixel the table point xyz with sigma_mm."""
+    (red/orange/yellow/green/blue/purple/black/white) helps segmentation; a color alone searches the
+    whole table (e.g. locate(color="blue") for the blue cap). height_m: the object's height if known
+    (0 = flat), or null to estimate it from the silhouette (round or square objects: a cap, a bin); a tall
+    object located with height 0 is biased away from the camera, the result tells you by how much per cm.
+    For a container (bin) give its bbox and its rim height (or null): "top" is the rim centre and width.
+    Returns centre_xy, size_m [long, short], yaw_deg (long side vs +x), sigma_centre_mm, height_m, top,
+    or for a bare pixel the table point xyz with sigma_mm. sigma_vs_arm_mm adds the arm-base (world origin)
+    uncertainty: use it for grasp / drop tolerances."""
     loc = _locator()
     joints = await _joints() if camera == "wrist" else None
     if bbox is None and color is None:
         if u is None or v is None:
             raise ValueError("give a pixel (u, v), a bbox, or a color")
-        r = loc.pixel_to_table(camera, u, v, height_m, joints)
+        r = loc.pixel_to_table(camera, u, v, height_m or 0.0, joints)
     else:
         img = await _frame(camera)
         r = loc.locate_object(camera, img, bbox=bbox, pixel=None if u is None else (u, v), color=color,
@@ -327,7 +331,7 @@ async def locate(camera: str = "overview", u: float | None = None, v: float | No
     if r.get("ok"):
         _located.append({"label": label or color or "object", "camera": camera, "time": time.strftime("%H:%M:%S"),
                          **{k: r[k] for k in ("xyz", "centre_xy", "size_m", "yaw_deg", "polygon_xy", "sigma_mm",
-                                              "sigma_centre_mm") if k in r}})
+                                              "sigma_centre_mm", "height_m", "top") if k in r}})
         del _located[:-20]
     return _json(r)
 
