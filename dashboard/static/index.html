@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bottle opening · robot learning</title>
+<link rel="stylesheet" href="/static/app.css">
+<script>try{const t=new URLSearchParams(location.search).get('theme')||localStorage.getItem('r3-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>Bottle opening</h1>
+    <span class="sub">ElRobot learns to unscrew a cap, one attempt at a time</span>
+  </div>
+  <div class="status" id="status">
+    <span class="src" data-src="records"><i></i>records</span>
+    <span class="src" data-src="recorder"><i></i>arm</span>
+    <span class="src" data-src="relay"><i></i>cameras</span>
+    <span class="src" data-src="agent"><i></i>agent</span>
+    <button class="icon-btn" id="theme" type="button" aria-label="Toggle light or dark theme" title="Toggle theme">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <section class="grid-live" aria-label="Live">
+    <div class="panel cams">
+      <div class="panel-head"><h2>Live</h2><span class="meta" id="live-age">waiting for the arm</span></div>
+      <div class="cam-row" id="cams"></div>
+      <div class="telemetry">
+        <div class="joints" id="joints"></div>
+        <div class="gauges">
+          <div class="gauge" id="g-grip"><span class="g-label">Gripper opening</span><span class="g-val num">-</span><div class="g-bar"><b></b></div></div>
+          <div class="gauge" id="g-j7"><span class="g-label">Wrist roll j7 load</span><span class="g-val num">-</span><div class="g-bar"><b></b></div></div>
+          <div class="j7-live-wrap"><span class="g-label">j7 last 60 s: <span class="k-load">load</span>, <span class="k-pos">position</span></span><div id="j7-live"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel current" id="current">
+      <div class="panel-head"><h2>Current attempt</h2><span class="meta" id="cur-meta"></span></div>
+      <div id="cur-body"></div>
+    </div>
+  </section>
+
+  <section class="panel agent" aria-label="Agent stream">
+    <div class="panel-head"><h2>Agent stream</h2><span class="meta" id="agent-meta"></span></div>
+    <div class="agent-cols">
+      <div class="reasoning">
+        <h3>Latest reasoning</h3>
+        <div id="op-text" class="md op-text"></div>
+      </div>
+      <div class="calls">
+        <h3>Tool calls <span class="meta" id="calls-count"></span></h3>
+        <ol id="calls"></ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel learning" aria-label="Learning across attempts">
+    <div class="panel-head"><h2>Learning across attempts</h2><span class="meta" id="learn-meta"></span></div>
+    <div class="charts">
+      <figure class="chart"><figcaption>Rotation achieved, coloured by outcome</figcaption><div id="ch-rot"></div><div class="legend" id="legend"></div></figure>
+      <figure class="chart"><figcaption>Peak j7 load per attempt</figcaption><div id="ch-load"></div></figure>
+      <figure class="chart wide"><figcaption>Parameters per attempt</figcaption><div id="ch-params" class="small-multiples"></div></figure>
+    </div>
+    <ol class="timeline" id="timeline"></ol>
+  </section>
+
+  <section class="panel docs" aria-label="Documentation">
+    <div class="panel-head">
+      <h2>Documentation</h2>
+      <a class="btn" id="dl" href="/files/SUMMARY.md?download=1" download>
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Download summary
+      </a>
+    </div>
+    <div class="tabs" id="doc-tabs" role="tablist"></div>
+    <article class="md doc" id="doc"></article>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
