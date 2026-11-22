@@ -13,6 +13,8 @@ Protocol (verified on hardware both years):
            This read is camera-independent and never freezes on a camera drop.
   - Images: tail-read "inference/normvla" (combined frame w/ JPEGs), or follow
            "usbvideo/<hash>" queues when named explicitly.
+Every follow goes through perception.latest.Latest: one subscription per (client, queue) for the client's life
+(station_py has no unfollow, so following per read piles up streams until Station stalls).
 """
 from __future__ import annotations
 
@@ -78,6 +80,16 @@ def _norma():
     return station_py, st3215, commands, drivers, normvla
 
 
+def _latest(cli, queue: str):
+    """The client's single long-lived subscription to `queue` (perception.latest, repo root)."""
+    try:
+        from perception.latest import Latest
+    except ImportError:
+        sys.path.append(str(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        from perception.latest import Latest
+    return Latest.of(cli, queue)
+
+
 async def connect(server: str | None = None):
     """Connect to the station normfs server (default localhost:8888)."""
     station_py, *_ = _norma()
@@ -106,9 +118,7 @@ def _norm_raw(raw: int) -> int:
 async def list_buses(cli, timeout: float = 5.0) -> list[dict]:
     """Every ST3215 bus the station sees. With leader+follower there are two."""
     _, st3215, _, _, _ = _norma()
-    q: asyncio.Queue = asyncio.Queue()
-    cli.follow(ST3215_QUEUE, q)
-    entry = await asyncio.wait_for(q.get(), timeout)
+    entry = await _latest(cli, ST3215_QUEUE).get(timeout=timeout)
     if entry is None:
         raise RuntimeError(f"{ST3215_QUEUE} closed before delivering a bus state.")
     state = st3215.InferenceStateReader(memoryview(bytes(entry.Data)))
@@ -155,9 +165,7 @@ async def current_st3215(cli, bus_serial: str, timeout: float = 5.0, retries: in
     _, st3215, _, _, _ = _norma()
     for attempt in range(retries):
         try:
-            q: asyncio.Queue = asyncio.Queue()
-            cli.follow(ST3215_QUEUE, q)
-            e = await asyncio.wait_for(q.get(), timeout)
+            e = await _latest(cli, ST3215_QUEUE).get(fresh=True, timeout=timeout)    # a read newer than the call
             if e is None:
                 raise RuntimeError("st3215/inference closed")
             st = st3215.InferenceStateReader(memoryview(bytes(e.Data)))
@@ -214,10 +222,9 @@ async def camera_jpegs(cli, timeout: float = 3.0) -> tuple[list[bytes], str]:
         if usbvideo is not None:
             for qid in config.CAM_QUEUES:
                 try:
-                    q: asyncio.Queue = asyncio.Queue()
-                    cli.follow(f"usbvideo/{qid}", q)
+                    sub = _latest(cli, f"usbvideo/{qid}")
                     for _ in range(50):
-                        e = await asyncio.wait_for(q.get(), timeout)
+                        e = await sub.get(fresh=True, timeout=timeout)
                         rx = usbvideo.RxEnvelopeReader(memoryview(bytes(e.Data)))
                         pack = rx.get_frames()
                         if rx.get_type() != usbvideo.RxEnvelopeType.ET_FRAMES or pack is None:

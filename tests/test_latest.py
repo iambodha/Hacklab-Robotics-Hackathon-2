@@ -138,3 +138,72 @@ def test_arm_mcp_bus_frame_uses_one_subscription(monkeypatch):
         return cli.follows
 
     assert asyncio.run(go()) == [stn.ST3215_QUEUE]
+
+
+def _fake_st3215(serial: str, ids=range(1, 9)):
+    """InferenceStateReader whose motors all read the entry counter as their position."""
+    import struct
+
+    class Reader:
+        def __init__(self, mv):
+            self.k = int.from_bytes(bytes(mv), "little")
+
+        def get_buses(self):
+            s = bytearray(0x3A)
+            struct.pack_into("<H", s, 0x38, 1000 + self.k % 2000)
+            motors = [types.SimpleNamespace(get_id=lambda i=i: i, get_state=lambda: bytes(s),
+                                            get_range_min=lambda: 900, get_range_max=lambda: 3100) for i in ids]
+            bus = types.SimpleNamespace(get_serial_number=lambda: serial.encode(), get_port_name=lambda: b"tty")
+            return [types.SimpleNamespace(get_bus=lambda: bus, get_motors=lambda: motors)]
+    return types.SimpleNamespace(InferenceStateReader=Reader)
+
+
+def _sim_station_io():
+    import importlib.util
+    import pathlib
+    p = pathlib.Path(__file__).resolve().parent.parent / "sim" / "station_io.py"
+    spec = importlib.util.spec_from_file_location("sim_station_io_under_test", p)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_sim_station_io_one_subscription_per_queue(monkeypatch):
+    s = _sim_station_io()
+    assert s.Latest is Latest                                # shared registry with perception
+    _, usbvideo, fr = _fake_usbvideo()
+    monkeypatch.setattr(s, "_mods", lambda: (None, usbvideo, fr, _fake_st3215(s.BUS)))
+
+    async def go():
+        cli = FakeClient()
+        jf, jf2 = s.JointFollower(cli), s.JointFollower(cli)
+        ticks = [(await jf.read())[0][1] for _ in range(100)]
+        assert (await jf2.read())[0][1] >= ticks[-1]          # a second reader on the same client shares the stream
+        for _ in range(50):
+            await s.grab_jpegs(cli, "overview")
+        await s.grab_jpegs(cli, "wrist", 3)
+        for t in cli.tasks:
+            t.cancel()
+        return cli.follows, ticks
+
+    follows, ticks = asyncio.run(go())
+    assert sorted(follows) == sorted([s.ST3215_QUEUE, s.QUEUES["overview"], s.QUEUES["wrist"]])
+    assert all(b != a for a, b in zip(ticks, ticks[1:]))     # each read is a newer bus frame
+
+
+def test_station_lib_reads_use_one_subscription(monkeypatch):
+    from robot_mcp import station_lib as sl
+    monkeypatch.setattr(sl, "_norma", lambda: (None, _fake_st3215("BUS1"), None, None, None))
+
+    async def go():
+        cli = FakeClient()
+        assert [b["serial"] for b in await sl.list_buses(cli)] == ["BUS1"]
+        for _ in range(100):
+            joints, ranges, raws = await sl.current_st3215(cli, "BUS1")
+        for t in cli.tasks:
+            t.cancel()
+        return cli.follows, joints, ranges
+
+    follows, joints, ranges = asyncio.run(go())
+    assert follows == [sl.ST3215_QUEUE]
+    assert len(joints) == 8 and ranges[0] == (900, 3100)

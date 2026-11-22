@@ -332,3 +332,17 @@ def test_wipe_plan_scored_by_skills_eval(wex):
     o = ex.evaluate(results[-1].execution_id)                     # after the plan's park: the board is in clear view
     assert o.metric == "contamination_reduction" and o.success is True and o.value >= 0.9, o
     assert any("skills/eval" in e for e in o.evidence)
+
+
+def test_make_locator_finds_the_repo_perception_even_when_shadowed(tmp_path):
+    """perception/locate.py at the repo root wins over another `perception` found first on sys.path (an older
+    worktree's package, or executor/perception.py itself when a script runs from executor/)."""
+    import subprocess
+    import sys
+    shadow = tmp_path / "perception.py"
+    shadow.write_text("SHADOW = True\n")
+    code = ("import sys; sys.path.append(sys.argv[1]); import perception; assert perception.SHADOW; "
+            "from executor.perception import make_locator; l = make_locator(None); print(l.name, l.describe())")
+    r = subprocess.run([sys.executable, "-c", code, str(ROOT)], cwd=tmp_path, capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr[-2000:]
+    assert r.stdout.startswith("perception.locate"), r.stdout

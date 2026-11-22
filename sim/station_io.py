@@ -3,7 +3,8 @@
 Everything goes through Station queues (never the camera or serial device directly):
   usbvideo/<hash>    -> JPEG frames (299x224 with Station's resize_target 224)
   st3215/inference   -> ST3215 register dumps (present position at 0x38, calibrated range)
-Nothing here writes to Station.
+Nothing here writes to Station. One subscription per (client, queue) for the whole run (perception.latest.Latest):
+station_py has no unfollow, so following per call would pile up streams on the connection.
 
   python3 sim/station_io.py [outdir]     # save one frame per camera + print raw ticks
 """
@@ -20,6 +21,10 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
+if str(HERE.parent) not in sys.path:
+    sys.path.append(str(HERE.parent))
+from perception.latest import Latest  # noqa: E402
+
 _CANDIDATES = [os.environ.get("NORMA_CORE_REPO"), HERE.parent / "norma-core", HERE.parent.parent / "norma-core",
                HERE.parents[2] / "repo/norma-core" if len(HERE.parents) > 2 else None]
 NORMA_CORE = next((Path(p) for p in _CANDIDATES if p and (Path(p) / "software/station/shared/station_py").exists()), None)
@@ -58,36 +63,41 @@ async def connect():
     return await _mods()[0](STATION_HOST, _log)
 
 
-async def grab_jpegs(cli, cam: str, n: int = 1, timeout: float = 5.0) -> list[bytes]:
-    """The next n JPEG frames of a camera ("overview" | "wrist" | full queue name)."""
+def jpeg_of(e) -> bytes | None:
+    """The newest JPEG in a usbvideo queue entry, None if it holds no JPEG frame."""
     _, usbvideo, fr, _ = _mods()
-    q: asyncio.Queue = asyncio.Queue()
-    cli.follow(QUEUES.get(cam, cam), q)
+    env = usbvideo.RxEnvelopeReader(memoryview(bytes(e.Data)))
+    pack = env.get_frames()
+    if env.get_type() != usbvideo.RxEnvelopeType.ET_FRAMES or pack is None:
+        return None
+    frames = pack.get_frames_data() or []
+    return bytes(frames[-1]) if pack.get_format().get_kind() == fr.FrameFormatKind.FF_JPEG and frames else None
+
+
+async def grab_jpegs(cli, cam: str, n: int = 1, timeout: float = 5.0) -> list[bytes]:
+    """The next n JPEG frames of a camera ("overview" | "wrist" | full queue name), each newer than the call."""
+    sub = Latest.of(cli, QUEUES.get(cam, cam))
     out: list[bytes] = []
     while len(out) < n:
-        e = await asyncio.wait_for(q.get(), timeout)
-        env = usbvideo.RxEnvelopeReader(memoryview(bytes(e.Data)))
-        pack = env.get_frames()
-        if env.get_type() != usbvideo.RxEnvelopeType.ET_FRAMES or pack is None:
-            continue
-        frames = pack.get_frames_data() or []
-        if pack.get_format().get_kind() == fr.FrameFormatKind.FF_JPEG and frames:
-            out.append(bytes(frames[-1]))
+        j = jpeg_of(await sub.get(fresh=True, timeout=timeout))
+        if j is not None:
+            out.append(j)
     return out
 
 
 class JointFollower:
-    """Follows st3215/inference; read() returns the latest {motor_id: raw_tick} of BUS plus its age in seconds."""
+    """Follows st3215/inference once per client; read() returns the newest {motor_id: raw_tick} of BUS (waiting for
+    a new entry if the newest one was already returned) plus ranges and timing. A frame may lack motors (partial
+    bus read): callers that need all of them check."""
 
     def __init__(self, cli):
-        self.q: asyncio.Queue = asyncio.Queue()
-        cli.follow(ST3215_QUEUE, self.q)
+        self.sub = Latest.of(cli, ST3215_QUEUE)
+        self.seen = -1
         self.st3215 = _mods()[3]
 
     async def read(self, timeout: float = 5.0) -> tuple[dict, dict]:
-        e = await asyncio.wait_for(self.q.get(), timeout)
-        while not self.q.empty():                       # keep only the newest frame
-            e = self.q.get_nowait()
+        e = await self.sub.get(fresh=self.sub.seq == self.seen, timeout=timeout)
+        self.seen = self.sub.seq
         t_recv = time.time()
         st = self.st3215.InferenceStateReader(memoryview(bytes(e.Data)))
         for bs in st.get_buses() or []:

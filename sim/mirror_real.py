@@ -72,23 +72,19 @@ class Handler(BaseHTTPRequestHandler):
 
 
 async def follow_camera(cli, cam, latest):
-    """One subscription per camera for the whole run; keeps only the newest JPEG (bytes, sequence number)."""
-    import station_io as s
-    _, usbvideo, fr, _ = s._mods()
-    q: asyncio.Queue = asyncio.Queue()
-    cli.follow(s.QUEUES[cam], q)
+    """One subscription per camera for the whole run (perception.latest.Latest); keeps only the newest JPEG
+    (bytes, sequence number). A camera that stops just stops updating; the loop keeps waiting for it."""
+    sub = station_io.Latest.of(cli, station_io.QUEUES[cam])
     seq = 0
     while True:
-        e = await q.get()
-        while not q.empty():                            # parse only the newest envelope
-            e = q.get_nowait()
-        env = usbvideo.RxEnvelopeReader(memoryview(bytes(e.Data)))
-        pack = env.get_frames()
-        if env.get_type() == usbvideo.RxEnvelopeType.ET_FRAMES and pack is not None:
-            frames = pack.get_frames_data() or []
-            if pack.get_format().get_kind() == fr.FrameFormatKind.FF_JPEG and frames:
-                seq += 1
-                latest[cam] = (bytes(frames[-1]), seq)
+        try:
+            e = await sub.get(fresh=True, timeout=5.0)
+        except TimeoutError:
+            continue
+        jpg = station_io.jpeg_of(e)                     # parse only the newest envelope
+        if jpg is not None:
+            seq += 1
+            latest[cam] = (jpg, seq)
 
 
 async def run(a):
@@ -114,10 +110,15 @@ async def run(a):
     blank = np.zeros((H, W, 3), np.uint8)
     twin = {name: blank for name in compare_real.CAMS}
     real = {name: blank for name in compare_real.CAMS}
-    seen_seq, q_drawn = {}, None
+    seen_seq, q_drawn, partial = {}, None, 0
     while a.seconds is None or time.time() - t0 < a.seconds:
         t_loop = time.time()
         raw, meta = await jf.read()
+        if any(m not in raw for m in range(1, len(lo) + 1)):          # partial bus read: skip, keep the last pose
+            partial += 1
+            with STATE["lock"]:
+                STATE["state"] = {**STATE["state"], "partial_frames_skipped": partial}
+            continue
         q = real_joints.to_q(raw, meta["ranges"], lo, hi, mapping)
         dirty = False
         if q_drawn is None or np.abs(q - q_drawn).max() > a.q_tol:     # a still arm costs no renders
@@ -147,7 +148,7 @@ async def run(a):
         el = max(time.time() - t0, 1e-6)
         with STATE["lock"]:
             STATE["state"] = {"q_rad": np.round(q, 4).tolist(), "raw": raw, "mapping": mapping, "frames": n,
-                              "renders": renders, "fps": round(n / el, 1),
+                              "renders": renders, "fps": round(n / el, 1), "partial_frames_skipped": partial,
                               "cpu_pct": round(100 * (time.process_time() - cpu0) / el, 1),
                               "cameras_live": sorted(latest),
                               "latency_ms": round(latency * 1000, 1) if latency is not None else None,

@@ -28,8 +28,7 @@ DEFAULT_T_WORLD_BASE = np.array([[0.0, 1.0, 0.0, 0.0], [-1.0, 0.0, 0.0, 0.0], [0
 
 
 def scene_calib_path() -> Path | None:
-    for p in (os.environ.get("EXECUTOR_SCENE_CALIB"), REPO / "calibration" / "scene_calib.json",
-              REPO.parent / "perception" / "calibration" / "scene_calib.json"):
+    for p in (os.environ.get("EXECUTOR_SCENE_CALIB"), REPO / "calibration" / "scene_calib.json"):
         if p and Path(p).exists():
             return Path(p)
     return None
