@@ -437,7 +437,8 @@ function drawOverlay(){const svg=$('ov');if(!OV||!OV.camera){svg.innerHTML='';$(
     const A=OV.axes;if(A.o){[['x','#ff6b5e'],['y','#58d68d'],['z','#6aa8ff']].forEach(([k,c])=>{if(A[k])o+=`<line x1="${A.o[0]*W}" y1="${A.o[1]*H}" x2="${A[k][0]*W}" y2="${A[k][1]*H}" stroke="${c}" stroke-width="${sw*2.4}" stroke-linecap="round"/>`+label(A[k],k,c,2,0);});}
     (OV.markers||[]).forEach(m=>{o+=poly([...m.pts,m.pts[0]],`fill="rgba(255,214,10,.12)" stroke="#ffd60a" stroke-width="${sw*1.2}"`)+label(m.c,'#'+m.id,'#ffd60a',-fs*.6,fs*.35);});}
   if($('oObj').checked){
-    if(OV.bin_fixture&&OV.bin_fixture.box)OV.bin_fixture.box.forEach(r=>o+=poly([...r,r[0]],`fill="none" stroke="#f0a050" stroke-opacity=".55" stroke-width="${sw}" stroke-dasharray="${sw*3} ${sw*3}"`));
+    if(OV.bin_fixture&&OV.bin_fixture.box){OV.bin_fixture.box.forEach(r=>o+=poly([...r,r[0]],`fill="none" stroke="#f0a050" stroke-opacity=".8" stroke-width="${sw*1.2}" stroke-dasharray="${sw*3} ${sw*3}"`));
+      o+=label(OV.bin_fixture.uv,OV.bin_fixture.name+' (layout)','#f0a050',-fs*2,fs*.4);}
     (OV.objects||[]).forEach(b=>{const c=b.kind==='target'?'#3d8bff':b.kind==='bin'?'#f0a050':'rgba(255,255,255,.75)';if(!b.uv)return;
       if(b.box)b.box.forEach((r,i)=>o+=poly([...r,r[0]],`fill="${i?'none':'rgba(240,160,80,.14)'}" stroke="${c}" stroke-width="${sw*1.6}"`));
       if(b.kind==='other'){o+=`<circle cx="${b.uv[0]*W}" cy="${b.uv[1]*H}" r="${2.2*u}" fill="rgba(255,255,255,.55)" stroke="rgba(0,0,0,.5)" stroke-width="${sw*.6}"/>`;return;}
@@ -456,7 +457,8 @@ function drawOverlay(){const svg=$('ov');if(!OV||!OV.camera){svg.innerHTML='';$(
   $('camSrc').textContent='overlay: '+(OV.camera.source==='twin camera'?'twin camera model':OV.camera.source);
   $('ovNote').textContent=OV.path?`Path: ${OV.path.skill} (${OV.path.state==='running'?'running now':'last accepted plan, '+OV.path.status.toLowerCase()}), `+OV.path.segments.map(s=>s.label).join(' → ')+'.':'Grid every 5 cm on the table (z = 0); dashed arc = reach limit.';}
 ['oGrid','oObj','oPath'].forEach(i=>$(i).onchange=drawOverlay);
-function perception(){const all=(OV&&OV.objects)||[],rank={target:0,bin:1,other:2};
+function perception(){const all=[...((OV&&OV.objects)||[])],rank={target:0,bin:1,other:2},fx=OV&&OV.bin_fixture;
+  if(fx&&!all.some(o=>o.kind==='bin'))all.push({name:fx.name,kind:'bin',xyz:fx.xyz,visible:true,unc_mm:null,source:'twin layout fixture (not a camera estimate)'});
   const objs=[...all].sort((a,b)=>rank[a.kind]-rank[b.kind]),main=objs.filter(o=>o.kind!=='other'),rest=objs.filter(o=>o.kind==='other');
   const list=main.length?main:objs.slice(0,3);
   $('objs').innerHTML=objs.length?list.map(o=>`<div class=obj><i class="${o.kind}"></i><span><b>${esc(o.name)}</b>${o.visible?'':' <span class=faint>(not visible)</span>'}</span>
@@ -549,7 +551,7 @@ async function advisor(){try{const a=await api('/api/advisor');$('pTask').textCo
 let mirrorUp=null;
 function mirror(m){$('lMirror').href=m.url;$('lMirror').hidden=!m.ok;if(m.ok===mirrorUp)return;mirrorUp=m.ok;
   const f=$('mirrorFrame');f.querySelector('iframe')?.remove();$('mirrorOff').hidden=!!m.ok;f.classList.toggle('off',!m.ok);
-  if(m.ok){const i=document.createElement('iframe');i.src=m.url+'/';i.title='Twin mirror';i.loading='lazy';f.prepend(i);}}
+  if(m.ok){const i=document.createElement('iframe');i.src=m.url+'/';i.title='Twin mirror';f.prepend(i);}}
 function runLinks(){const t=S&&S.task;if(!t||t.state==='idle')return;
   $('runLinks').innerHTML=`<a class=cur href="${esc(t.viewer)}" target=_blank rel=noopener>${esc(t.recording_id)}<span>${t.state==='running'?'recording now':'recorder viewer'}</span></a>`;}
 async function recs(){try{const r=await api('/api/recordings');const cur=S&&S.task&&S.task.recording_id;
