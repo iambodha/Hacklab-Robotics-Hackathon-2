@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bottle opening · robot learning</title>
 <link rel="stylesheet" href="/static/app.css">
-<script>try{const t=localStorage.getItem('r3-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<script>try{const t=new URLSearchParams(location.search).get('theme')||localStorage.getItem('r3-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 </head>
 <body>
 <header class="top">
@@ -34,6 +34,7 @@
         <div class="gauges">
           <div class="gauge" id="g-grip"><span class="g-label">Gripper opening</span><span class="g-val num">-</span><div class="g-bar"><b></b></div></div>
           <div class="gauge" id="g-j7"><span class="g-label">Wrist roll j7 load</span><span class="g-val num">-</span><div class="g-bar"><b></b></div></div>
+          <div class="j7-live-wrap"><span class="g-label">j7 last 60 s: <span class="k-load">load</span>, <span class="k-pos">position</span></span><div id="j7-live"></div></div>
         </div>
       </div>
     </div>

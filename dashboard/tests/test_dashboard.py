@@ -56,7 +56,9 @@ def test_ten_attempts_and_versioning(served):
     with open(learn / "episodes.jsonl", "a") as f:
         f.write(json.dumps({"type": "episode_begin", "attempt": 11, "t": 1, "params": {"strokes": 8}}) + "\n")
     st2 = json.loads(get(base, "/api/state?v=" + st["version"])[2])
-    assert st2["attempts"][-1]["attempt"] == 11 and not st2["attempts"][-1]["done"]
+    a11 = st2["attempts"][-1]
+    assert a11["attempt"] == 11 and not a11["done"] and a11["changed"] == []  # delta params, strokes already 8
+    assert a11["params"]["grip_close"] == A[-1]["params"]["grip_close"]
     tr = json.loads(get(base, "/api/trace/3")[2])
     assert {"t", "j7_load", "j7_pos"} <= set(tr["columns"])
     assert get(base, "/api/trace/11")[0] == 404

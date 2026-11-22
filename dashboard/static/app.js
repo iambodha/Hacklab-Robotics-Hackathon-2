@@ -76,8 +76,21 @@ async function pollLive() {
     const cut = (live.wall || Date.now() / 1000) - 60; while (S.liveHist.length && S.liveHist[0].t < cut) S.liveHist.shift();
   }
   $('#live-age').textContent = `telemetry ${new Date((live.wall || Date.now() / 1000) * 1000).toLocaleTimeString()}`;
+  drawJ7Live();
   const cur = currentAttempt();
   if (cur && !cur.done && cur.phase === 'twist' && !(cur.files || []).includes('twist_trace.json')) drawLiveTrace();
+}
+
+function drawJ7Live() {
+  const H = S.liveHist, el = $('#j7-live'); if (!el || H.length < 2) return;
+  const W = 220, h = 70, t1 = H[H.length - 1].t, t0 = t1 - 60;
+  const sx = t => (t - t0) / 60 * W;
+  const lmax = Math.max(100, ...H.map(r => Math.abs(r.load)));
+  const line = (f, lo, hi) => H.map(r => `${sx(r.t).toFixed(1)},${(h - 4 - (f(r) - lo) / ((hi - lo) || 1) * (h - 8)).toFixed(1)}`).join(' ');
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${h}" role="img" aria-label="j7 position and load, last 60 seconds">
+    <line class="grid" x1="0" x2="${W}" y1="${h - 4}" y2="${h - 4}"/>
+    <polyline fill="none" stroke="var(--ink-3)" stroke-width="1.4" points="${line(r => r.pos, 0, 1)}"/>
+    <polyline fill="none" stroke="var(--accent)" stroke-width="1.6" points="${line(r => Math.abs(r.load), 0, lmax)}"/></svg>`;
 }
 
 /* ---------- learn state ---------- */
@@ -189,31 +202,37 @@ function bars(values, { unit = '', colors, h = 150 } = {}) {
 
 function renderCharts() {
   const A = S.learn.attempts;
-  if (!A.length) {
+  if (!A.some(a => a.done)) {
     ['#ch-rot', '#ch-load', '#ch-params'].forEach(s => $(s).innerHTML = '<p class="empty">Charts fill in as attempts finish.</p>');
     $('#legend').innerHTML = ''; return;
   }
   $('#ch-rot').innerHTML = bars(A.map(a => a.rotation_achieved_deg), { unit: '°', colors: A.map(a => a.done ? outColor(a.outcome) : 'var(--accent)') });
   const used = [...new Set(A.map(a => a.outcome).filter(Boolean))];
   $('#legend').innerHTML = used.map(o => `<span style="--c:${outColor(o)}"><i></i>${esc((OUTCOMES[o] || [o])[0])}</span>`).join('');
-  $('#ch-load').innerHTML = A.some(a => typeof a.peak_j7_load === 'number') ? bars(A.map(a => a.peak_j7_load), { colors: A.map(a => (a.peak_j7_load ?? 0) >= J7_LOAD_HOT ? 'var(--bad)' : 'var(--accent)') })
+  const abortAt = a => typeof a.params?.j7_load_abort === 'number' ? a.params.j7_load_abort : J7_LOAD_HOT;
+  $('#ch-load').innerHTML = A.some(a => typeof a.peak_j7_load === 'number') ? bars(A.map(a => a.peak_j7_load), { colors: A.map(a => (a.peak_j7_load ?? 0) >= abortAt(a) ? 'var(--bad)' : 'var(--accent)') })
+    + `<div class="legend"><span style="--c:var(--accent)"><i></i>below the attempt's j7_load_abort</span><span style="--c:var(--bad)"><i></i>at or above it</span></div>`
     : '<p class="empty">No j7 load measurements yet (episode_end measurements or twist_trace.json).</p>';
   const keys = [...new Set(A.flatMap(a => Object.keys(a.params || {})))];
   $('#ch-params').innerHTML = keys.map(k => paramChart(k, A)).join('') || '<p class="empty">No parameters recorded yet.</p>';
 }
 function paramChart(k, A) {
-  const vals = A.map(a => a.params?.[k]), W = 200, H = 54, P = 6;
+  const vals = A.map(a => a.params?.[k]), W = 200, H = 54, P = 6, L = 34;
   const nums = vals.filter(v => typeof v === 'number');
   const last = vals.filter(v => v !== undefined).pop();
+  const sx = i => L + P + i * (W - L - 2 * P) / Math.max(A.length - 1, 1);
+  const ch = i => A[i].changed.includes(k);
   let body;
   if (nums.length) {
-    const lo = Math.min(...nums), hi = Math.max(...nums), sx = i => P + i * (W - 2 * P) / Math.max(A.length - 1, 1), sy = v => H - P - (v - lo) / ((hi - lo) || 1) * (H - 2 * P);
+    const lo = Math.min(...nums), hi = Math.max(...nums), sy = v => H - P - (v - lo) / ((hi - lo) || 1) * (H - 2 * P);
     const pts = vals.map((v, i) => typeof v === 'number' ? [sx(i), sy(v), v, i] : null).filter(Boolean);
-    body = `<polyline fill="none" stroke="var(--ink-3)" stroke-width="1.4" points="${pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}"/>` +
-      pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="${A[p[3]].changed.includes(k) ? 3.6 : 2.4}" fill="${A[p[3]].changed.includes(k) ? 'var(--accent)' : 'var(--ink-3)'}"><title>#${A[p[3]].attempt}: ${p[2]}</title></circle>`).join('') +
-      `<text x="${W}" y="10" text-anchor="end">${+hi.toPrecision(3)}</text><text x="${W}" y="${H}" text-anchor="end">${+lo.toPrecision(3)}</text>`;
+    body = `<text x="${L - 6}" y="${P + 4}" text-anchor="end">${+hi.toPrecision(3)}</text>` + (hi !== lo ? `<text x="${L - 6}" y="${H - P + 3}" text-anchor="end">${+lo.toPrecision(3)}</text>` : '') +
+      `<polyline fill="none" stroke="var(--ink-3)" stroke-width="1.4" points="${pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}"/>` +
+      pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="${ch(p[3]) ? 3.6 : 2.4}" fill="${ch(p[3]) ? 'var(--accent)' : 'var(--ink-3)'}"><title>#${A[p[3]].attempt}: ${p[2]}</title></circle>`).join('');
   } else {
-    body = vals.map((v, i) => `<text x="${P + i * (W - 2 * P) / Math.max(A.length - 1, 1)}" y="${H / 2}" text-anchor="middle" ${A[i].changed.includes(k) ? 'style="fill:var(--accent-ink);font-weight:600"' : ''}>${esc(v === undefined ? '' : String(v).slice(0, 4))}</text>`).join('');
+    const cats = [...new Set(vals.filter(v => v !== undefined).map(String))], cw = (W - L - 2 * P) / Math.max(A.length, 1);
+    body = cats.map((c, ci) => `<text x="${L - 6}" y="${P + 10 + ci * 16}" text-anchor="end">${esc(c.slice(0, 6))}</text>`).join('') +
+      vals.map((v, i) => v === undefined ? '' : `<rect x="${L + P + i * cw + cw * 0.15}" y="${P + 2 + cats.indexOf(String(v)) * 16}" width="${cw * 0.7}" height="10" rx="2" fill="${ch(i) ? 'var(--accent)' : 'var(--ink-3)'}"><title>#${A[i].attempt}: ${esc(v)}</title></rect>`).join('');
   }
   return `<div class="sm"><h4>${esc(k)}<span>now ${esc(fmtV(last))}</span></h4><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(k)} per attempt">${body}</svg></div>`;
 }

@@ -123,10 +123,10 @@ def build_attempts(events: list[dict]) -> list[dict]:
     for n in sorted(by):
         a = by[n]
         b, end = a["begin"] or {}, a["end"] or {}
-        params = b.get("params") if isinstance(b.get("params"), dict) else {}
-        changed = sorted(k for k in params if prev_params is not None and params.get(k) != prev_params.get(k))
-        if prev_params is not None:
-            changed += sorted(k for k in prev_params if k not in params)
+        given = b.get("params") if isinstance(b.get("params"), dict) else {}
+        # params may be complete or only the deltas: the effective set carries earlier values forward
+        params = {**(prev_params or {}), **given}
+        changed = sorted(k for k in given if prev_params is not None and given[k] != prev_params.get(k))
         meas = end.get("measurements") if isinstance(end.get("measurements"), dict) else {}
         last_phase = a["phases"][-1] if a["phases"] else None
         slips = meas.get("slip_events")
@@ -137,7 +137,7 @@ def build_attempts(events: list[dict]) -> list[dict]:
             "t_begin": b.get("t"), "t_end": end.get("t") if end else None,
             "hypothesis": b.get("hypothesis"), "based_on": b.get("based_on") or [],
             "recording_id": b.get("recording_id"),
-            "params": params, "changed": changed,
+            "params": params, "params_given": sorted(given), "changed": changed,
             "phases": a["phases"],
             "phase": last_phase.get("phase") if last_phase else None,
             "phase_status": last_phase.get("status") if last_phase else None,
