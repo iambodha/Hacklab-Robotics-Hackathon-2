@@ -11,6 +11,20 @@ without jumps. It complements `robot_mcp/` (task-level skills).
 | `move_to(targets, step, dt)` | Creeps to absolute normalized targets. Joints you don't list hold their present raw position. Refuses if torque is off, if a commanded joint is outside its calibrated range (clamping it would snap the joint), or if the move is larger than `ROBOT_MAX_DELTA` (0.35). Aborts and holds on a tracking error (`ROBOT_TRACK_TOL` = 250 ticks) or a motor fault status. |
 | `gripper(open_fraction)` | Drives the jaws (`j8`). Stalling on an object counts as a grip, so there is no tracking abort. |
 
+Scene perception tools (read-only; read `calibration/scene_calib.json`, see `perception/README.md`):
+
+| Tool | What it does |
+|---|---|
+| `calibration_status` | Markers, intrinsics source, overview camera pose, how the arm base was found, hold-one-out mm, mm per pixel. |
+| `locate(camera, u, v, bbox, color, height_m, label)` | Pixel, bbox or colour in a camera image → world table coordinates (centre, size, yaw) with sigma in mm. |
+| `triangulate(overview_u, overview_v, wrist_u, wrist_v)` | 3D point from the same point seen in both cameras, with ray gap and sigma. |
+| `project_point(x, y, z)` | World point → pixel in each camera, plus an in-view flag. |
+| `scene_map` | Table, markers, arm base, both cameras' positions and footprints, TCP, objects located this session. |
+| `annotated_view(camera)` | Live frame with a 5 cm grid, world axes, markers, wrist footprint, TCP and located objects; the border ruler is in 299x224 px. |
+
+They need `opencv-contrib-python` and pin `mcp<2` (mcp 2.x renamed FastMCP):
+`uv run --no-project --with "mcp<2" --with pillow --with numpy --with opencv-contrib-python python arm_mcp/server.py`.
+
 `python arm_mcp/health.py` is a read-only check of bus reads, torque and calibration ranges.
 
 ## Running
