@@ -28,7 +28,17 @@ http://127.0.0.1:8910 (loopback only, no build step)
 - **Robot logic:** the advisor's prompts, its messages and tool calls, and one card per proposal. Each card shows
   rationale → validation checks with their numbers → twin preflight → phases with residuals → independent outcome.
   The strip above the cards is the run at a glance: pick → place → park.
-- **Twin and recordings:** the live twin mirror, plus the recorder viewer for this run.
+- **3D arm:** the arm's model posed from the measured joints on every backend, with the commanded pose as a ghost, the
+  planned TCP path, the target and the bin; drag to orbit. Next to it, the recorder viewer links for this run.
+
+The page opens on **Simple**: the task box, Talk, Start/Stop, a one-line progress report, the 3D arm and the cameras.
+**Details** (switch in the header) has everything listed above.
+
+**Voice (Talk button).** Needs `GEMINI_API_KEY` or `GOOGLE_API_KEY` in the console's environment; the key stays in
+the server and the page gets a single-use token. The voice model (Gemini Live, `CONSOLE_VOICE_MODEL`) only talks: it
+writes what you say into the task box, reads out progress, and stops on "stop". Tasks are still planned and run by
+the chosen advisor (Claude by default). A spoken "run it" starts a task only on the Fake and Sim twin backends; on
+the real arm you press Start. While Talk is on, microphone audio goes to Google.
 
 ## 3. Run the task in the twin
 

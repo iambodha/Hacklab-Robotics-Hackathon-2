@@ -124,7 +124,7 @@ def _get(url):
 def test_page_and_health(console_url):
     import json
     page = _get(console_url + "/")
-    for text in ("Robot logic", "Live view", "Put the blue object in the bin", "Twin and recordings"):
+    for text in ("Robot logic", "Live view", "Put the blue object in the bin", "3D arm"):
         assert text in page
     h = json.loads(_get(console_url + "/api/health"))
     assert {"station", "recorder", "cameras", "arm", "backend", "advisor", "setup_id", "mirror"} <= set(h)
@@ -184,4 +184,69 @@ def test_stack_sh_parses_and_documents_itself():
     assert subprocess.run(["bash", "-n", str(sh)]).returncode == 0
     out = subprocess.run(["bash", str(sh), "--help"], capture_output=True, text=True).stdout
     assert "up" in out and "--station" in out and "--real-motion" in out
+
+
+def test_3d_arm_inputs(console_url):
+    """The 3D view's data: joint angles for the URDF (measured and commanded), and asset routes that stay in bounds."""
+    import json
+    import urllib.error
+    import urllib.request
+    live = json.loads(_get(console_url + "/api/live"))
+    assert len(live["q"]) == len(live["q_goal"]) == len(live["joints"]) == 8
+    assert all(abs(a - b) < 0.2 for a, b in zip(live["q"], live["q_goal"]))      # idle: commanded pose = measured pose
+    assert "ColladaLoader" in _get(console_url + "/vendor/ColladaLoader.js")     # stub: served without a download
+    for bad in ("/vendor/nope.js", "/robot/..%2F..%2FREADME.md", "/robot/assets/missing.stl"):
+        try:
+            urllib.request.urlopen(console_url + bad, timeout=5)
+            raise AssertionError(f"{bad} was served")
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+
+
+def test_voice_token_and_sim_only_start(console_url, monkeypatch):
+    """Voice: no key = unavailable; the token request carries the whole setup and never the key in the reply;
+    a spoken start is refused on the real backend."""
+    import io
+    import json
+    import types
+    import pytest
+    from executor.console import voice
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setenv("MODELS_SECRETS_FILE", "/nonexistent/secrets.env")
+    assert voice.describe()["available"] is False
+    with pytest.raises(voice.VoiceError) as e:
+        voice.token()
+    assert e.value.code == 503
+    assert json.loads(_get(console_url + "/api/voice"))["start_backends"] == ["fake", "sim"]
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key-not-real")
+    seen = {}
+
+    class Reply(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def opener(req, timeout=0):
+        seen["body"], seen["key"], seen["url"] = json.loads(req.data), req.get_header("X-goog-api-key"), req.full_url
+        return Reply(json.dumps({"name": "auth_tokens/abc"}).encode())
+
+    out = voice.token(opener)
+    assert out["token"] == "auth_tokens/abc" and "test-key-not-real" not in json.dumps(out) and "key=" not in seen["url"]
+    assert seen["key"] == "test-key-not-real" and seen["body"]["uses"] == 1
+    setup = seen["body"]["bidiGenerateContentSetup"]
+    assert {d["name"] for d in setup["tools"][0]["functionDeclarations"]} == {"set_task", "start_task", "stop", "get_status"}
+
+    events, started = [], []
+    fake = types.SimpleNamespace(ex=types.SimpleNamespace(backend=types.SimpleNamespace(name="real")),
+                                 events=types.SimpleNamespace(add=lambda kind, **kw: events.append((kind, kw))),
+                                 start_task=lambda *a: started.append(a) or {"advisor": a[1], "backend": a[3]})
+    with pytest.raises(voice.VoiceError) as e:
+        voice.start_by_voice(fake, {"prompt": "Put the blue object in the bin"})
+    assert e.value.code == 403 and not started and events
+    fake.ex.backend.name = "sim"
+    assert voice.start_by_voice(fake, {"prompt": "Park", "advisor": "claude"}) == {"advisor": "claude", "backend": "sim"}
 

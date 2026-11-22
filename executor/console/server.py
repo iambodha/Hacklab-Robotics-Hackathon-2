@@ -8,6 +8,8 @@ and scripts all use the same API:
   POST /api/observe  /api/submit  /api/cancel/<execution_id|current>  /api/evaluate/<execution_id>
   GET  /api/health (status pills)  /api/overlay (projected world grid, estimates, planned path)  /api/estimates
   POST /api/task/start {prompt, advisor, backend?, model}  /api/task/stop  /api/backend {name}  /api/arm {enabled}  /api/tool {tool}
+  GET  /api/voice   POST /api/voice/token  /api/voice/start {prompt, advisor} (fake/sim only)  /api/voice/say {role, text}
+  GET  /vendor/<file>  /robot/<file>   (3D view: pinned libraries, arm model from NORMA_CORE_REPO)
 
 Advisors: claude | gemini | scripted (executor/console/scripted.py) | none (manual proposals from the console).
 """
@@ -31,6 +33,7 @@ from ..contracts import Status, proposal_from_dict, to_dict
 from ..core import EventLog, Executor
 from ..kinematics import Kinematics, scene_calib_path
 from ..recording import LOCAL_ROOT, SERVICE_URL, RecorderLink, service_up
+from . import assets3d, voice
 
 HERE = Path(__file__).resolve().parent
 STATE_DIR = HERE.parent / "logs"
@@ -220,7 +223,10 @@ class Console:
         m = st.motors
         q = ex.motion.q_now(m)
         tcp = ex.kin.fk(q)[0]
-        return {"t": ex.now(), "age_s": round(ex.now() - st.t_mono, 3), "busy": ex.busy(), "current": ex.current,
+        # joint angles (radians, URDF joint order rev_motor_01..08) for the 3D view: measured and commanded
+        q_goal = ex.kin.q_from_norm({i: (m[i]["goal"] - m[i]["lo"]) / max(1, m[i]["hi"] - m[i]["lo"]) for i in ex.kin.ids},
+                                    {i: m[i]["goal"] for i in ex.kin.ids})
+        return {"t": ex.now(), "q": [round(float(v), 4) for v in q], "q_goal": [round(float(v), 4) for v in q_goal], "age_s": round(ex.now() - st.t_mono, 3), "busy": ex.busy(), "current": ex.current,
                 "tcp_world": tcp.round(4).tolist(), "tilt_deg": round(ex.kin.tilt_deg(q), 1),
                 "joints": [{"name": ex.kin.name_of[i], "norm": m[i]["norm"], "raw": m[i]["raw"], "goal": m[i]["goal"],
                             "goal_norm": round((m[i]["goal"] - m[i]["lo"]) / max(1, m[i]["hi"] - m[i]["lo"]), 4),
@@ -343,10 +349,10 @@ def make_handler(c: Console):
         def log_message(self, *a):
             pass
 
-        def _send(self, code, body: bytes, ctype="application/json"):
+        def _send(self, code, body: bytes, ctype="application/json", cache="no-store"):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Cache-Control", cache)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -384,6 +390,12 @@ def make_handler(c: Console):
             ex = c.ex
             if method == "GET" and not parts:
                 return self._send(200, (HERE / "index.html").read_bytes(), "text/html; charset=utf-8")
+            if method == "GET" and len(parts) >= 2 and parts[0] in ("vendor", "robot"):   # 3D view: libraries, arm model
+                try:
+                    data, ctype = assets3d.vendor(parts[1]) if parts[0] == "vendor" else assets3d.robot(parts[1:])
+                except assets3d.NotAvailable as e:
+                    raise ApiError(404, str(e))
+                return self._send(200, data, ctype, cache="max-age=3600")
             if not parts or parts[0] != "api":
                 raise ApiError(404, "not found")
             r = parts[1:]
@@ -422,6 +434,8 @@ def make_handler(c: Console):
                     return self._json(to_dict(ex.observe()))
                 if r == ["skillcfg"]:
                     return self._json(ex.skill_config())
+                if r == ["voice"]:
+                    return self._json(voice.describe())
             if method == "POST":
                 b = self._body()
                 if r == ["observe"]:
@@ -449,6 +463,19 @@ def make_handler(c: Console):
                     return self._json(c.start_task(prompt, b.get("advisor", "scripted"), b.get("model"), b.get("backend")))
                 if r == ["task", "stop"]:
                     return self._json(c.stop_task())
+                if len(r) == 2 and r[0] == "voice":
+                    try:
+                        if r[1] == "token":
+                            out = voice.token()
+                            c.events.add("voice", role="console", text=f"voice session opened ({out['model']})")
+                            return self._json(out)
+                        if r[1] == "start":
+                            return self._json(voice.start_by_voice(c, b))
+                    except voice.VoiceError as e:
+                        raise ApiError(e.code, str(e))
+                    if r[1] == "say" and b.get("role") in ("you", "robot") and str(b.get("text", "")).strip():
+                        c.events.add("voice", role=b["role"], text=str(b["text"]).strip()[:500])
+                        return self._json({"ok": True})
                 if r == ["backend"]:
                     c.switch(b["name"])
                     return self._json(c.state())

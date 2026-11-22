@@ -88,7 +88,8 @@ def build(console) -> dict:
             top = float(o.size[2]) if len(o.size) >= 3 else 0.0
             ring = [cam.line([p + [dx, dy, z - p[2]] for dx, dy in ((-sx, -sy), (sx, -sy), (sx, sy), (-sx, sy))]) for z in (0.0, top)]
         objs.append({"name": o.name, "kind": kind, "xyz": np.round(p, 3).tolist(), "uv": cam.uv(p), "visible": o.visible,
-                     "unc_mm": o.uncertainty_mm, "r": cam.radius(p, (o.uncertainty_mm or 20) / 1000), "box": ring, "source": o.source})
+                     "unc_mm": o.uncertainty_mm, "r": cam.radius(p, (o.uncertainty_mm or 20) / 1000), "box": ring, "source": o.source,
+                     "size": [float(v) for v in o.size] if o.size else None})
     out["objects"] = objs
 
     bin_fixture = None
@@ -100,7 +101,8 @@ def build(console) -> dict:
         Rz = np.array([[np.cos(yaw), -np.sin(yaw), 0], [np.sin(yaw), np.cos(yaw), 0], [0, 0, 1]])
         ring = [cam.line([c + Rz @ np.array([dx, dy, z]) for dx, dy in ((-sx / 2, -sy / 2), (sx / 2, -sy / 2), (sx / 2, sy / 2), (-sx / 2, sy / 2))])
                 for z in (0.0, sz)]
-        bin_fixture = {"name": b.get("name", "bin"), "xyz": np.round(c, 3).tolist(), "uv": cam.uv(c), "box": ring, "source": "twin layout"}
+        bin_fixture = {"name": b.get("name", "bin"), "xyz": np.round(c, 3).tolist(), "uv": cam.uv(c), "box": ring, "source": "twin layout",
+                       "size": [sx, sy, sz], "yaw_deg": round(float(np.degrees(yaw)), 1)}
         break
     out["bin_fixture"] = bin_fixture
 
@@ -120,7 +122,7 @@ def build(console) -> dict:
         for label, qs in plan.paths.items():
             pts = tcp_path(ex.kin, qs)
             if pts:
-                segs.append({"label": label, "pts": cam.line(pts), "xyz_end": np.round(pts[-1], 3).tolist()})
+                segs.append({"label": label, "pts": cam.line(pts), "xyz": np.round(pts, 3).tolist(), "xyz_end": np.round(pts[-1], 3).tolist()})
         tgt = plan.target.get("xyz_world") or (plan.target.get("xy") and [*plan.target["xy"], plan.target.get("goal_z", 0.0)])
         path = {"execution_id": eid, "skill": p.skill if p else "", "state": state,
                 "status": ex.results[eid].status.value if eid in ex.results else "", "segments": segs,
