@@ -10,7 +10,10 @@ pytestmark = pytest.mark.usefixtures("needs_twin")
 def test_elrobot_sim_matches_sim_arm_mcp_over_stdio():
     direct = run_json(["-m", "generaloid.tests.run_tool_specs", "sim_arm_mcp"])
     served = run_json(["-m", "generaloid.checks", "tools", "--connector", "elrobot"])
-    assert sorted(direct) == served["tools"]
+    # The served server also carries the generaloid.comms add-on (comms_* tools); the base tools must match exactly.
+    addon = [t for t in served["tools"] if t.startswith("comms_")]
+    assert sorted(direct) == [t for t in served["tools"] if t not in addon]
+    assert {"comms_host", "comms_join", "comms_send", "comms_inbox"} <= set(addon)
     assert len(direct) >= 18
     for name, spec in direct.items():
         assert served["specs"][name] == spec, name
