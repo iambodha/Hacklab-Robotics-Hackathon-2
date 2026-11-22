@@ -14,6 +14,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .latest import Latest
+
 ROOT = Path(__file__).resolve().parent.parent
 _CANDIDATES = [os.environ.get("NORMA_CORE_REPO"), ROOT / "norma-core", ROOT.parent / "norma-core",
                ROOT.parent.parent / "repo/norma-core"]
@@ -49,13 +51,13 @@ def decode_jpeg(data: bytes) -> np.ndarray:
 
 
 async def grab_jpegs(cli, cam: str, n: int = 1, timeout: float = 5.0) -> list[bytes]:
-    """The next n JPEG frames from a camera queue ("overview" | "wrist" | full queue name)."""
+    """The next n JPEG frames from a camera queue ("overview" | "wrist" | full queue name), each newer than
+    the previous one. Reads the client's single shared subscription (perception.latest), never re-follows."""
     _, usbvideo, fr = _import_station()
-    q: asyncio.Queue = asyncio.Queue()
-    cli.follow(QUEUES.get(cam, cam), q)
+    sub = Latest.of(cli, QUEUES.get(cam, cam))
     out: list[bytes] = []
     while len(out) < n:
-        e = await asyncio.wait_for(q.get(), timeout)
+        e = await sub.get(fresh=True, timeout=timeout)
         env = usbvideo.RxEnvelopeReader(memoryview(bytes(e.Data)))
         pack = env.get_frames()
         if env.get_type() != usbvideo.RxEnvelopeType.ET_FRAMES or pack is None:

@@ -35,19 +35,47 @@ def detector(name: str, refine: bool = True) -> cv2.aruco.ArucoDetector:
     return cv2.aruco.ArucoDetector(dictionary(name), p)
 
 
+PAD_PX, UPSCALE = 4, 3
+
+
 def detect(img: np.ndarray, name: str, edge_refine: bool = True) -> dict[int, np.ndarray]:
     """-> {id: (4,2) corners in OpenCV order TL, TR, BR, BL of the marker's own frame}.
+    Detection runs on a white-padded (a marker touching the frame edge still closes its contour: marker 21)
+    and 3x cubic-upscaled copy (the far markers' 4x4 bits are ~2.5 px wide at 299x224 and decode unreliably).
     edge_refine: replace OpenCV's corners (biased 0.2-0.7 px inward on small, blurred markers) by
-    intersections of lines fitted to sub-pixel edge points along each side (see refine_edges)."""
+    intersections of lines fitted to sub-pixel edge points along each side (see refine_edges), at the
+    original resolution."""
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
-    corners, ids, _ = detector(name).detectMarkers(gray)
+    big = cv2.copyMakeBorder(gray, PAD_PX, PAD_PX, PAD_PX, PAD_PX, cv2.BORDER_CONSTANT, value=255)
+    big = cv2.resize(big, None, fx=UPSCALE, fy=UPSCALE, interpolation=cv2.INTER_CUBIC)
+    corners, ids, _ = detector(name).detectMarkers(big)
     if ids is None:
         return {}
-    out = {int(i): c.reshape(4, 2).astype(float) for i, c in zip(ids.ravel(), corners)}
+    # pixel centres: x_big = (x + PAD + 0.5) * UPSCALE - 0.5
+    out = {int(i): (c.reshape(4, 2).astype(float) + 0.5) / UPSCALE - 0.5 - PAD_PX for i, c in zip(ids.ravel(), corners)}
     if edge_refine:
         g32 = gray.astype(np.float32)
-        out = {i: refine_edges(g32, c) for i, c in out.items()}
+        H, W = gray.shape[:2]
+        for i, c in list(out.items()):
+            if _at_border(c, W, H):
+                # clipped by the frame edge: OpenCV's quad is cut off there, so the refined corner (an intersection of
+                # the fitted side lines, possibly just outside the frame) legitimately moves further. No refinement,
+                # no marker: the clipped quad would bias the fit.
+                r = refine_edges(g32, c, max_shift=CLIPPED_MAX_SHIFT)
+                if np.allclose(r, c):
+                    del out[i]
+                else:
+                    out[i] = r
+            else:
+                out[i] = refine_edges(g32, c)
     return out
+
+
+BORDER_PX, CLIPPED_MAX_SHIFT = 1.5, 6.0
+
+
+def _at_border(c: np.ndarray, W: int, H: int) -> bool:
+    return bool((c.min(0) < BORDER_PX).any() or (c[:, 0].max() > W - 1 - BORDER_PX) or (c[:, 1].max() > H - 1 - BORDER_PX))
 
 
 def _bilinear(img: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -128,14 +156,17 @@ def refine_edges(gray: np.ndarray, c: np.ndarray, iters: int = 2, half: float = 
     return c
 
 
-def autodetect_dictionary(frames: list[np.ndarray]) -> tuple[str | None, dict[str, set[int]]]:
+def autodetect_dictionary(frames: list[np.ndarray], min_frac: float = 0.3) -> tuple[str | None, dict[str, set[int]]]:
     """Try every dictionary on the frames; pick the one finding the most markers (ties: smallest dict).
+    Only ids seen in >= min_frac of the frames count (bigger dictionaries pick up one-frame false positives).
     Returns (name, {dict name: ids seen})."""
     seen: dict[str, set[int]] = {}
     for name in DICT_NAMES:
-        ids: set[int] = set()
+        counts: dict[int, int] = {}
         for f in frames:
-            ids |= set(detect(f, name))
+            for i in detect(f, name):
+                counts[i] = counts.get(i, 0) + 1
+        ids = {i for i, n in counts.items() if n >= max(1, min_frac * len(frames))}
         if ids:
             seen[name] = ids
     if not seen:

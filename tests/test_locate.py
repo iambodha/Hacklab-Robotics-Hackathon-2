@@ -88,6 +88,63 @@ def test_tall_object_without_height_is_biased_and_reported():
     assert e_good < e_flat and flat["centre_shift_mm_per_cm_height"] > 1.0
 
 
+def render_cylinder(T, intr, centre, diameter, height, color=(200, 60, 0), img=None, n=48):
+    """A cylinder's silhouette (convex hull of its top and bottom circles)."""
+    img = np.full((synth.H, synth.W, 3), 170, np.uint8) if img is None else img
+    a = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    ring = np.c_[np.cos(a), np.sin(a)] * diameter / 2 + centre
+    V = np.r_[np.c_[ring, np.zeros(n)], np.c_[ring, np.full(n, height)]]
+    ss = 8
+    uv, _ = g.project(T, intr, synth.W, synth.H, V)
+    big = cv2.resize(img, (synth.W * ss, synth.H * ss), interpolation=cv2.INTER_NEAREST)
+    hull = cv2.convexHull(np.float32((uv + 0.5) * ss)).reshape(-1, 2)
+    cv2.fillConvexPoly(big, np.int32(np.round(hull)), color, cv2.LINE_AA)
+    return cv2.resize(big, (synth.W, synth.H), interpolation=cv2.INTER_AREA)
+
+
+def test_colour_only_ignores_blue_off_the_table():
+    """Like the real overview: a blue window above the table must not win over the blue cap on it."""
+    T, intr = REAL_LIKE_T, REAL_LIKE_INTR
+    centre = np.array([0.28, -0.14])
+    img = render_cylinder(T, intr, centre, 0.055, 0.03)
+    img[0:30, 240:295] = (200, 90, 20)                         # bigger blue blob, above the table
+    r = Locator(synth_scene(T, intr)).locate_object("overview", img, color="blue", height_m=0.03)
+    assert r["ok"] and np.linalg.norm(np.array(r["centre_xy"]) - centre) < 0.003
+
+
+@pytest.mark.parametrize("shape,height", [("cylinder", 0.03), ("cylinder", 0.09), ("square", 0.05)])
+def test_auto_height_round_and_square(shape, height):
+    T, intr = REAL_LIKE_T, REAL_LIKE_INTR
+    centre = np.array([0.27, 0.10])
+    if shape == "cylinder":
+        img = render_cylinder(T, intr, centre, 0.06, height, color=(0, 0, 220))
+    else:
+        img = render_prism(T, intr, centre, (0.06, 0.06), math.radians(25), height)
+    r = Locator(synth_scene(T, intr)).locate_object("overview", img, color="red", height_m=None)
+    assert r["ok"], r
+    assert abs(r["height_m"] - height) < (0.006 if shape == "cylinder" else 0.012), r["height_m"]
+    assert np.linalg.norm(np.array(r["centre_xy"]) - centre) * 1000 < min(4.0 if shape == "cylinder" else 8.0,
+                                                                          1.5 * r["sigma_centre_mm"])
+    assert "height_source" in r
+
+
+def test_flat_object_auto_height_is_zero():
+    T, intr = REAL_LIKE_T, REAL_LIKE_INTR
+    img = render_cylinder(T, intr, np.array([0.3, 0.0]), 0.06, 0.0, color=(0, 0, 220))
+    r = Locator(synth_scene(T, intr)).locate_object("overview", img, color="red", height_m=None)
+    assert r["ok"] and r["height_m"] < 0.004
+
+
+def test_top_outline_of_a_cylinder():
+    T, intr = REAL_LIKE_T, REAL_LIKE_INTR
+    centre, dia, h = np.array([0.29, 0.09]), 0.10, 0.09
+    img = render_cylinder(T, intr, centre, dia, h, color=(0, 0, 220))
+    r = Locator(synth_scene(T, intr)).locate_object("overview", img, color="red", height_m=h)
+    top = r["top"]
+    assert np.linalg.norm(np.array(top["centre_xy"]) - centre) * 1000 < 4.0
+    assert abs(top["size_m"] - dia) * 1000 < 1.5 * r["mm_per_px"]
+
+
 def test_grabcut_bbox_segmentation():
     T, intr = synth.overview_cam(), synth.TRUE_INTR
     img = render_prism(T, intr, np.array([0.45, 0.0]), (0.06, 0.06), 0.0, 0.0, color=(40, 160, 40))

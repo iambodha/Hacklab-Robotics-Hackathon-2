@@ -68,6 +68,12 @@ class Locator:
         s_f = 1000 * 0.15 * f_rel                                    # ~15 cm typical off-axis distance in view
         return float(math.sqrt(s_b ** 2 + (1000 * r * s_yaw) ** 2 + s_ov ** 2 + s_f ** 2))
 
+    def base_sigma_mm(self, xyz) -> float:
+        """Arm-base (world origin) uncertainty at a world point: what the arm sees on top of sigma_centre_mm."""
+        b = self.sc.d["arm"].get("base_on_table", {})
+        s_b, s_yaw = float(b.get("sigma_mm") or 20.0), math.radians(float(b.get("sigma_yaw_deg") or 3.0))
+        return float(math.hypot(s_b, 1000 * float(np.linalg.norm(np.asarray(xyz)[:2])) * s_yaw))
+
     # ---- basic maps ------------------------------------------------------------------------------------
     def pixel_to_table(self, cam: str, u: float, v: float, z: float = 0.0, joints: dict | None = None,
                        pixel_sigma: float = DEFAULT_PIXEL_SIGMA) -> dict:
@@ -79,8 +85,10 @@ class Locator:
         sv = np.linalg.svd(J, compute_uv=False) * 1000
         s_px = float(sv[0]) * pixel_sigma
         s_cal = self.calib_sigma_mm(cam, P)
+        s = math.hypot(s_px, s_cal)
         return {"ok": True, "xyz": P.round(4).tolist(), "camera": cam, "pixel": [u, v], "z_plane": z,
-                "mm_per_px": sv.round(2).tolist(), "sigma_mm": round(math.hypot(s_px, s_cal), 1),
+                "mm_per_px": sv.round(2).tolist(), "sigma_mm": round(s, 1),
+                "sigma_vs_arm_mm": round(math.hypot(s, self.base_sigma_mm(P)), 1) if cam == "overview" else round(s, 1),
                 "sigma_parts_mm": {"pixel": round(s_px, 1), "calibration": round(s_cal, 1)},
                 "range_m": round(float(np.linalg.norm(P - T[:3, 3])), 3)}
 
@@ -124,15 +132,22 @@ class Locator:
         is segmented (colour threshold, else GrabCut in the bbox) and its footprint is taken as the table
         points whose projections at z=0 AND at z=height_m both fall inside the silhouette: exact for a
         vertical prism, and independent of where the camera looks from. height_m = 0 treats the object as
-        flat; `centre_shift_mm_per_cm_height` says how much the centre would move per cm of real height."""
+        flat; `centre_shift_mm_per_cm_height` says how much the centre would move per cm of real height.
+        height_m = None estimates the height, assuming a round or square footprint (estimate_height).
+        Colour without bbox/pixel searches only pixels that look at the table."""
         T, intr, W, H = self.camera(cam, joints)
-        mask, how = segment(image, bbox=bbox, pixel=pixel, color=color)
+        # colour only: search where the camera sees the table (not the window, the wall or the floor)
+        roi = table_mask(T, intr, W, H, self.sc.table_extent) if bbox is None and pixel is None else None
+        mask, how = segment(image, bbox=bbox, pixel=pixel, color=color, roi=roi)
         if mask is None or mask.sum() < 3:
             if pixel is not None:
-                r = self.pixel_to_table(cam, pixel[0], pixel[1], height_m, joints)
+                r = self.pixel_to_table(cam, pixel[0], pixel[1], height_m or 0.0, joints)
                 r["method"] = f"point only ({how}); no silhouette"
                 return r
             return {"ok": False, "reason": f"no object found ({how})"}
+        auto = height_m is None
+        if auto:
+            height_m = estimate_height(mask, T, intr, W, H, grid_mm)
         fp = footprint(mask, T, intr, W, H, height_m, grid_mm)
         if fp is None:
             return {"ok": False, "reason": "silhouette does not intersect the table plane"}
@@ -140,7 +155,17 @@ class Locator:
         alt = footprint(mask, T, intr, W, H, height_m + 0.01, grid_mm)
         if alt is not None:
             res["centre_shift_mm_per_cm_height"] = round(float(np.linalg.norm(alt.mean(0) - fp.mean(0))) * 1000, 1)
-        res.update({"camera": cam, "method": how, "height_m": height_m, "silhouette_px": int(mask.sum())})
+            if auto:              # estimated height good to ~0.5 (round) - 1 cm (square): add its effect on the centre
+                res["sigma_centre_mm"] = round(math.hypot(res["sigma_centre_mm"], 0.7 * res["centre_shift_mm_per_cm_height"]), 1)
+        res.update({"camera": cam, "method": how, "height_m": round(height_m, 3), "silhouette_px": int(mask.sum())})
+        # the wrist's sigma already contains the base (FK runs from it); the overview's does not
+        res["sigma_vs_arm_mm"] = round(math.hypot(res["sigma_centre_mm"], self.base_sigma_mm(res["centre_xy"])), 1) \
+            if cam == "overview" else res["sigma_centre_mm"]
+        if height_m > 0:
+            res["top"] = top_outline(mask, T, intr, W, H, height_m)
+        if auto:
+            res["height_source"] = ("estimated from the silhouette assuming a round (~+-5 mm) or square (~+-1 cm) "
+                                    "footprint; pass height_m if known")
         return res
 
     def _describe(self, pts, cam, T, intr, W, H, grid_mm) -> dict:
@@ -203,21 +228,38 @@ HSV_RANGES = {   # OpenCV HSV: H 0-180
 }
 
 
-def segment(image: np.ndarray, bbox=None, pixel=None, color: str | None = None):
-    """-> (mask uint8 0/1 or None, description)."""
+def table_mask(T, intr, W: int, H: int, extent_xy, margin_m: float = 0.05) -> np.ndarray:
+    """uint8 0/1: pixels whose ray meets the table plane inside extent_xy (+ margin)."""
+    vs, us = np.mgrid[0:H, 0:W]
+    P = g.pixel_to_plane(T, intr, W, H, np.c_[us.ravel(), vs.ravel()].astype(float), 0.0)[:, :2]
+    (x0, y0), (x1, y1) = np.asarray(extent_xy) + [[-margin_m, -margin_m], [margin_m, margin_m]]
+    with np.errstate(invalid="ignore"):
+        ok = (P[:, 0] >= x0) & (P[:, 0] <= x1) & (P[:, 1] >= y0) & (P[:, 1] <= y1)
+    return ok.reshape(H, W).astype(np.uint8)
+
+
+def segment(image: np.ndarray, bbox=None, pixel=None, color: str | None = None, roi: np.ndarray | None = None):
+    """-> (mask uint8 0/1 or None, description).
+    roi (no bbox/pixel only): 0/1 mask of where objects stand. The largest component whose lowest pixel (its
+    contact with the table, nearest the camera) is inside roi wins; the component itself is not clipped, so a tall
+    object whose top projects beyond the table still keeps its whole silhouette."""
     H, W = image.shape[:2]
-    roi = np.zeros((H, W), np.uint8)
+    stand = None
+    if roi is not None and bbox is None and pixel is None:
+        stand, roi = roi, None
     if bbox is not None:
+        roi = np.zeros((H, W), np.uint8)
         u0, v0, u1, v1 = [int(round(x)) for x in bbox]
         u0, u1 = sorted((max(0, u0), min(W - 1, u1)))
         v0, v1 = sorted((max(0, v0), min(H - 1, v1)))
         pad_u, pad_v = max(2, (u1 - u0) // 8), max(2, (v1 - v0) // 8)
         roi[max(0, v0 - pad_v):v1 + pad_v + 1, max(0, u0 - pad_u):u1 + pad_u + 1] = 1
     elif pixel is not None:
+        roi = np.zeros((H, W), np.uint8)
         u, v = int(round(pixel[0])), int(round(pixel[1]))
         roi[max(0, v - 30):v + 31, max(0, u - 30):u + 31] = 1
-    else:
-        roi[:] = 1
+    elif roi is None:
+        roi = np.ones((H, W), np.uint8)
     if color:
         if color not in HSV_RANGES:
             return None, f"unknown colour {color!r}; known {sorted(HSV_RANGES)}"
@@ -248,7 +290,17 @@ def segment(image: np.ndarray, bbox=None, pixel=None, color: str | None = None):
     if pixel is not None and lab[int(round(pixel[1])), int(round(pixel[0]))] > 0:
         k = lab[int(round(pixel[1])), int(round(pixel[0]))]
     else:
-        k = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+        cand = list(range(1, n))
+        if stand is not None:
+            def on_table(c):
+                ys, xs = np.nonzero(lab == c)
+                low = ys == ys.max()
+                return bool(stand[ys[low], xs[low]].any())
+            cand = [c for c in cand if on_table(c)]
+            if not cand:
+                return None, how + ": nothing standing on the table"
+            how += " (on the table)"
+        k = max(cand, key=lambda c: stats[c, cv2.CC_STAT_AREA])
     return (lab == k).astype(np.uint8), how
 
 
@@ -283,6 +335,52 @@ def footprint(mask: np.ndarray, T, intr, W, H, height_m: float = 0.0, grid_mm: f
     return G[keep] if keep.any() else None
 
 
+def top_outline(mask: np.ndarray, T, intr, W, H, height_m: float) -> dict:
+    """Top (rim) of an object of known height, for open containers that taper (a bin: wider at the top) where the
+    prism footprint is the smaller base. The silhouette's far boundary is the far rim edge and its widest part is the
+    rim width; assuming a round/square rim, its centre is half a rim width in front of the far edge.
+    -> {"centre_xy", "size_m", "z"}."""
+    ys, xs = np.nonzero(mask)
+    hull = cv2.convexHull(np.c_[xs, ys].astype(np.float32)).reshape(-1, 2)
+    P = g.pixel_to_plane(T, intr, W, H, np.r_[hull + [0.5, 0.5], hull - [0.5, 0.5]], height_m)[:, :2]
+    P = P[~np.isnan(P).any(1)]
+    d = P.mean(0) - T[:2, 3]
+    d /= np.linalg.norm(d)
+    n = np.array([-d[1], d[0]])
+    w = float(np.ptp(P @ n))
+    c = d * (float((P @ d).max()) - w / 2) + n * float((P @ n).min() + w / 2)
+    return {"centre_xy": c.round(4).tolist(), "size_m": round(w, 4), "z": round(height_m, 3),
+            "note": "rim from the silhouette (far edge + widest extent), assuming a round or square top"}
+
+
+def estimate_height(mask: np.ndarray, T, intr, W, H, grid_mm: float = 2.0, h_max: float = 0.25) -> float:
+    """Height of an object with a round or square footprint from one silhouette.
+
+    A tall object's silhouette reaches further back in the image than its footprint, so the z=0 back-projection is
+    stretched along the viewing direction. The footprint (points inside the silhouette at z=0 AND z=h) shrinks
+    along the viewing direction as h grows; for a circle or a square (any rotation) its extents along and across
+    the viewing direction are equal. -> the h where depth extent = lateral extent (0 if already flatter)."""
+    def ratio(h):
+        fp = footprint(mask, T, intr, W, H, h, grid_mm)
+        if fp is None or len(fp) < 4:
+            return None
+        d = fp.mean(0) - T[:2, 3]
+        d /= np.linalg.norm(d)
+        n = np.array([-d[1], d[0]])
+        return float(np.ptp(fp @ d) / max(np.ptp(fp @ n), 1e-6))
+    prev_h, prev_r = 0.0, ratio(0.0)
+    if prev_r is None or prev_r <= 1.0:
+        return 0.0
+    for h in np.arange(0.005, h_max + 1e-9, 0.005):
+        r = ratio(h)
+        if r is None:
+            break
+        if r <= 1.0:
+            return float(prev_h + (prev_r - 1.0) / (prev_r - r) * (h - prev_h))
+        prev_h, prev_r = h, r
+    return float(prev_h)
+
+
 # ---- module-level shortcuts ------------------------------------------------------------------------------
 def pixel_to_table(cam, u, v, z=0.0, joints=None):
     return Locator().pixel_to_table(cam, u, v, z, joints)
@@ -302,3 +400,89 @@ def locate_object(cam, image, **kw):
 
 def scene_map(joints=None, objects=None):
     return Locator().scene_map(joints, objects)
+
+
+def annotate_result(img: np.ndarray, r: dict, sc: Scene, mask: np.ndarray | None = None, scale: int = 4,
+                    pad: int = 30) -> np.ndarray:
+    """Evidence crop around a located object, upscaled: silhouette (yellow), footprint at z=0 (green) and at the
+    object's height (cyan), centre (red cross), world centre +- sigma as text."""
+    H, W = img.shape[:2]
+    T, intr = sc.T_world_overview, sc.intr("overview")
+    poly = np.array(r["polygon_xy"])
+    h = float(r.get("height_m") or 0.0)
+    uv0, _ = g.project(T, intr, W, H, np.c_[poly, np.zeros(len(poly))])
+    uvh, _ = g.project(T, intr, W, H, np.c_[poly, np.full(len(poly), h)])
+    c, _ = g.project(T, intr, W, H, [[*r["centre_xy"], 0.0]])
+    allp = np.r_[uv0, uvh]
+    u0, v0 = int(max(0, allp[:, 0].min() - pad)), int(max(0, allp[:, 1].min() - pad))
+    u1, v1 = int(min(W, allp[:, 0].max() + pad)), int(min(H, allp[:, 1].max() + pad))
+    out = cv2.resize(img[v0:v1, u0:u1], None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+
+    def P(p):
+        return np.round((np.atleast_2d(p) - [u0, v0] + 0.5) * scale - 0.5).astype(np.int32)
+    if mask is not None:
+        cs, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        for k in cs:
+            cv2.polylines(out, [P(k.reshape(-1, 2).astype(float))], True, (0, 255, 255), 1, cv2.LINE_AA)
+    cv2.polylines(out, [P(uv0)], True, (0, 255, 0), 1, cv2.LINE_AA)
+    if h > 0:
+        cv2.polylines(out, [P(uvh)], True, (255, 255, 0), 1, cv2.LINE_AA)
+    if r.get("top"):                       # rim: square of the rim width, aligned with the viewing direction, at z=h
+        tc, s = np.array(r["top"]["centre_xy"]), r["top"]["size_m"] / 2
+        d = tc - T[:2, 3]
+        d /= np.linalg.norm(d)
+        n = np.array([-d[1], d[0]])
+        sq = [tc + s * (a * d + b * n) for a, b in ((1, 1), (1, -1), (-1, -1), (-1, 1))]
+        uvt, _ = g.project(T, intr, W, H, np.c_[sq, np.full(4, h)])
+        cv2.polylines(out, [P(uvt)], True, (255, 0, 255), 1, cv2.LINE_AA)
+        txt_rim = f"rim centre ({tc[0]:.3f}, {tc[1]:.3f}) m, {2 * s * 1000:.0f} mm wide (magenta)"
+    else:
+        txt_rim = None
+    cv2.drawMarker(out, tuple(int(x) for x in P(c[0])[0]), (0, 0, 255), cv2.MARKER_CROSS, 12, 2)
+    txt = [f"centre ({r['centre_xy'][0]:.3f}, {r['centre_xy'][1]:.3f}) m  sigma {r['sigma_centre_mm']} mm",
+           f"size {r['size_m'][0] * 1000:.0f} x {r['size_m'][1] * 1000:.0f} mm  height {h * 100:.1f} cm",
+           "yellow silhouette, green footprint z=0, cyan at height"] + ([txt_rim] if txt_rim else [])
+    wpx = max(out.shape[1], 440)
+    canvas = np.zeros((out.shape[0] + 8 + 16 * len(txt), wpx, 3), np.uint8)
+    canvas[:out.shape[0], :out.shape[1]] = out
+    for k, t in enumerate(txt):
+        cv2.putText(canvas, t, (4, out.shape[0] + 16 + 16 * k), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 255), 1, cv2.LINE_AA)
+    return canvas
+
+
+def main():
+    """python -m perception.locate --color blue [--frame F.jpg] [--bbox u0 v0 u1 v1] [--height auto|M] [--out X.jpg]
+    Overview camera; live frame from Station unless --frame is given."""
+    import argparse
+    import asyncio
+    import json
+    ap = argparse.ArgumentParser(description=main.__doc__.splitlines()[0])
+    ap.add_argument("--frame")
+    ap.add_argument("--color")
+    ap.add_argument("--bbox", type=float, nargs=4)
+    ap.add_argument("--pixel", type=float, nargs=2)
+    ap.add_argument("--height", default="0", help="metres, or 'auto' (round/square footprint)")
+    ap.add_argument("--out")
+    a = ap.parse_args()
+    if a.frame:
+        img = cv2.imread(a.frame)
+    else:
+        from . import station_io as sio
+
+        async def grab():
+            return sio.decode_jpeg((await sio.grab_jpegs(await sio.connect(), "overview", 1))[0])
+        img = asyncio.run(grab())
+    loc = Locator(reload())
+    h = None if a.height == "auto" else float(a.height)
+    r = loc.locate_object("overview", img, bbox=a.bbox, pixel=a.pixel, color=a.color, height_m=h)
+    print(json.dumps({k: v for k, v in r.items() if k not in ("polygon_xy", "box_xy")}, indent=1))
+    if a.out and r.get("ok"):
+        T, intr, W, H = loc.camera("overview")
+        roi = table_mask(T, intr, W, H, loc.sc.table_extent) if a.bbox is None and a.pixel is None else None
+        mask, _ = segment(img, bbox=a.bbox, pixel=a.pixel, color=a.color, roi=roi)
+        cv2.imwrite(a.out, annotate_result(img, r, loc.sc, mask), [cv2.IMWRITE_JPEG_QUALITY, 85])
+        print("wrote", a.out)
+
+
+if __name__ == "__main__":
+    main()

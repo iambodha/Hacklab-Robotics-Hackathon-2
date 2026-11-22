@@ -16,7 +16,10 @@ if NORMA_CORE is None:
 for p in (NORMA_CORE, NORMA_CORE / "software/station/shared"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+if str(_HERE.parent) not in sys.path:
+    sys.path.append(str(_HERE.parent))
 
+from perception.latest import Latest  # noqa: E402  (one shared subscription per client and queue)
 from station_py import new_station_client, send_commands  # noqa: E402
 from target.gen_python.protobuf.drivers.st3215 import st3215  # noqa: E402
 from target.gen_python.protobuf.station import commands, drivers  # noqa: E402
@@ -46,10 +49,9 @@ async def connect():
 
 
 async def bus_frame(cli):
-    """One raw st3215/inference frame for BUS: list of motor readers, or None if the bus is absent."""
-    q: asyncio.Queue = asyncio.Queue()
-    cli.follow(ST3215_QUEUE, q)
-    e = await asyncio.wait_for(q.get(), 5)
+    """One fresh raw st3215/inference frame for BUS: list of motor readers, or None if the bus is absent.
+    Uses the client's single long-lived subscription (station_py has no unfollow)."""
+    e = await Latest.of(cli, ST3215_QUEUE).get(fresh=True, timeout=5)
     st = st3215.InferenceStateReader(memoryview(bytes(e.Data)))
     for bs in st.get_buses() or []:
         if as_str(bs.get_bus().get_serial_number()) == BUS:

@@ -96,3 +96,18 @@ def test_held_out_marker_side_lengths(known):
     assert len(rows) == 4
     assert max(r["rms_mm"] for r in rows) < 5.0
     assert max(r["side_err_mm_max"] for r in rows) < 8.0
+
+
+@pytest.mark.parametrize("out_px", [-0.5, 0.8, 2.0])
+def test_marker_clipped_by_frame_edge_is_detected_accurately(out_px):
+    """Like marker 21 on the real overview: one corner of the black square at/just past the right frame edge."""
+    T_wc = synth.overview_cam()
+    markers = synth.scene_markers()
+    img = synth.render(T_wc, synth.TRUE_INTR, markers)
+    truth = synth.true_corners(T_wc, synth.TRUE_INTR, markers)
+    mid = max(truth, key=lambda i: truth[i][:, 0].max())
+    u_max = truth[mid][:, 0].max()
+    W2 = int(round(u_max - out_px)) + 1                    # crop so the corner sits out_px beyond the last column
+    obs = aruco.detect(img[:, :W2], "DICT_4X4_50")
+    assert mid in obs
+    assert np.abs(obs[mid] - truth[mid]).max() < 0.6
