@@ -2,6 +2,7 @@
 
     python -m generaloid.comms demo            # two comms-only MCP processes
     python -m generaloid.comms demo --twin     # two MuJoCo ElRobot twin MCP processes (needs mujoco, NORMA_CORE_REPO)
+    python -m generaloid.comms demo --generaloid   # Generaloid servers: ElRobot twin + SO-101 twin (after the merge)
 
 Starts robot A ("elrobot", the helper) and robot B ("so101", the one that asks) as separate MCP server processes
 over stdio, and plays both agents with a script: A hosts, B joins, B asks for help with an observation, A accepts,
@@ -56,13 +57,14 @@ class Agent:
 
 
 @contextlib.asynccontextmanager
-async def robot(stack: contextlib.AsyncExitStack, args: list[str], name: str, env_extra: dict | None = None, say=None):
-    """Start `python -m generaloid.comms <args>` as an MCP server process and connect to it over stdio."""
+async def robot(stack: contextlib.AsyncExitStack, args: list[str], name: str, env_extra: dict | None = None, say=None,
+                module: str = "generaloid.comms", cwd: Path = ROOT):
+    """Start `python -m <module> <args>` as an MCP server process and connect to it over stdio. module =
+    'generaloid.comms' (comms-only / twin runners) or 'generaloid' (the Generaloid server: `serve --connector ...`)."""
     env = {**os.environ, "STATION_HOST": "station-disabled-in-tests.invalid", "ROBOT_SIM_RECORD": "0",
-           "PYTHONPATH": str(ROOT), "GENERALOID_COMMS_TOKEN": "", **(env_extra or {})}
+           "PYTHONPATH": str(cwd), "GENERALOID_COMMS_TOKEN": "", **(env_extra or {})}
     env.setdefault("MUJOCO_GL", "cgl" if sys.platform == "darwin" else "osmesa")
-    params = StdioServerParameters(command=sys.executable, args=["-m", "generaloid.comms", *args], cwd=str(ROOT),
-                                   env=env)
+    params = StdioServerParameters(command=sys.executable, args=["-m", module, *args], cwd=str(cwd), env=env)
     r, w = await stack.enter_async_context(stdio_client(params))
     s = await stack.enter_async_context(ClientSession(r, w))
     await s.initialize()
@@ -150,22 +152,30 @@ async def twin_gripper_action(a: Agent) -> dict:
             "j8_after": [line for line in after.splitlines() if line.strip().startswith("j8")][:1]}
 
 
-async def run_demo(twin: bool, log_path: Path):
+async def run_demo(mode: str, log_path: Path):
+    """mode: 'comms' (comms-only servers), 'twin' (two sim_arm_mcp ElRobot twins), 'generaloid' (Generaloid servers:
+    ElRobot twin + SO-101 twin, `python -m generaloid serve --connector <c> --mode sim`)."""
     t0 = time.time()
 
     def say(who, text):
         print(f"[{time.time() - t0:5.2f}s] {who}: {text}", flush=True)
 
-    kind = "twin" if twin else "mcp"
+    a_env = {"GENERALOID_COMMS_LOG": str(log_path), "GENERALOID_ROBOT_ID": "elrobot-a"}
+    b_env = {"GENERALOID_ROBOT_ID": "so101-b"}
+    if mode == "generaloid":
+        a_args, b_args, module = ["serve", "--connector", "elrobot", "--mode", "sim"], \
+            ["serve", "--connector", "so101", "--mode", "sim"], "generaloid"
+    elif mode == "twin":
+        # sim_arm_mcp only has the ElRobot twin, so here B is an ElRobot twin standing in for the SO-101
+        b_env["GENERALOID_ROBOT_ID"] = "so101-standin-b"
+        a_args, b_args, module = ["twin"], ["twin"], "generaloid.comms"
+    else:
+        a_args, b_args, module = ["mcp", "--connector", "elrobot"], ["mcp", "--connector", "so101"], "generaloid.comms"
     async with contextlib.AsyncExitStack() as st:
-        a = await st.enter_async_context(robot(st, [kind, "--robot-id", "elrobot-a"] +
-                                               ([] if twin else ["--connector", "elrobot"]), "A",
-                                               {"GENERALOID_COMMS_LOG": str(log_path)}, say))
-        # sim_arm_mcp only has the ElRobot twin, so in --twin mode B is an ElRobot twin standing in for the SO-101
-        b = await st.enter_async_context(robot(st, [kind, "--robot-id", "so101-standin-b" if twin else "so101-b"] +
-                                               ([] if twin else ["--connector", "so101"]), "B", None, say))
-        say("-", f"two {'MuJoCo twin' if twin else 'comms-only'} MCP server processes up")
-        await help_scenario(a, b, twin_gripper_action if twin else no_twin)
+        a = await st.enter_async_context(robot(st, a_args, "A", a_env, say, module))
+        b = await st.enter_async_context(robot(st, b_args, "B", b_env, say, module))
+        say("-", f"two MCP server processes up: python -m {module} {' '.join(a_args)} | {' '.join(b_args)}")
+        await help_scenario(a, b, no_twin if mode == "comms" else twin_gripper_action)
         await b.j("comms_leave")
         await a.j("comms_leave")
     say("-", f"hub log: {log_path}")
@@ -173,11 +183,13 @@ async def run_demo(twin: bool, log_path: Path):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="python -m generaloid.comms demo")
-    ap.add_argument("--twin", action="store_true", help="use two MuJoCo twin MCP servers")
+    ap.add_argument("--twin", action="store_true", help="use two MuJoCo twin MCP servers (sim/sim_arm_mcp.py)")
+    ap.add_argument("--generaloid", action="store_true",
+                    help="use two Generaloid servers: ElRobot twin + SO-101 twin (needs generaloid.core)")
     ap.add_argument("--log", help="hub log path (JSONL); default: a temp file")
     args = ap.parse_args(argv)
     log = Path(args.log) if args.log else Path(tempfile.mkdtemp(prefix="comms-demo-")) / "hub.jsonl"
-    asyncio.run(run_demo(args.twin, log))
+    asyncio.run(run_demo("generaloid" if args.generaloid else "twin" if args.twin else "comms", log))
 
 
 if __name__ == "__main__":

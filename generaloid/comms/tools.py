@@ -56,22 +56,49 @@ def _names(v) -> list[str]:
     return [str(x if isinstance(x, str) else getattr(x, "name", x)) for x in (v or [])][:200]
 
 
+def _from_describe(connector) -> tuple[list[str], dict]:
+    """Capabilities and reach from a Generaloid Connector's describe() (read-only, public per connectors/base.py)."""
+    describe = getattr(connector, "describe", None)
+    if not callable(describe):
+        return [], {}
+    d = describe()
+    arm = [j for j in d.get("joints", []) if j.get("role") == "arm"]
+    caps = ([f"{len(arm)}dof-arm"] if arm else []) + (["gripper"] if d.get("gripper") else []) + \
+        [f"camera:{c['role']}" for c in d.get("cameras", []) if c.get("role")] + \
+        (["hardware-verified"] if d.get("hardware_verified") else ["twin-verified-only"])
+    s = d.get("safety") or {}
+    reach = {k: s[k] for k in ("min_tcp_z", "max_tcp_z", "max_radius") if k in s}
+    return caps, reach
+
+
 def profile_from_connector(connector, robot_id: str | None = None) -> dict:
-    """The hello for this robot. A connector may provide `comms_profile() -> dict`; otherwise read `name`, `skills`,
-    `capabilities`, `frames` if present. Nothing else on the connector is touched."""
+    """The hello for this robot. A connector may provide `comms_profile() -> dict`; otherwise read the public
+    identity of a Generaloid Connector: `name`, `title`, `skills`, `frame_text`, `describe()` (joints, gripper,
+    cameras, safety reach), or plain `capabilities` / `frames` attributes. Nothing that moves the arm is touched."""
     prof = {}
     if connector is not None and callable(getattr(connector, "comms_profile", None)):
         prof = dict(connector.comms_profile())
     name = prof.get("connector") or (getattr(connector, "name", None) if connector is not None else None) or "robot"
     rid = robot_id or prof.get("robot_id") or os.environ.get("GENERALOID_ROBOT_ID") or \
         _slug(f"{name}-{socket.gethostname().split('.')[0]}")
+    caps = prof.get("capabilities") or _names(getattr(connector, "capabilities", None))
+    reach = prof.get("reach") or {}
+    if connector is not None and not caps:
+        caps, reach = _from_describe(connector)
+    frames = prof.get("frames") or getattr(connector, "frames", None)
+    if not frames:
+        frames = dict(DEFAULT_FRAMES)
+        if isinstance(getattr(connector, "frame_text", None), str):
+            frames["base"] = connector.frame_text
     return {
         "robot_id": _slug(rid),
         "connector": str(name),
-        "display_name": prof.get("display_name") or getattr(connector, "display_name", None) or str(name),
-        "capabilities": prof.get("capabilities") or _names(getattr(connector, "capabilities", None)),
-        "skills": prof.get("skills") or _names(getattr(connector, "skills", None)),
-        "frames": prof.get("frames") or getattr(connector, "frames", None) or DEFAULT_FRAMES,
+        "display_name": prof.get("display_name") or getattr(connector, "display_name", None) or
+        getattr(connector, "title", None) or str(name),
+        "capabilities": caps,
+        "skills": prof.get("skills") or sorted(_names(getattr(connector, "skills", None))),
+        "frames": frames,
+        "reach": reach,
         "agent": prof.get("agent") or os.environ.get("GENERALOID_AGENT", ""),
     }
 
@@ -157,7 +184,7 @@ class CommsTools:
     @staticmethod
     def _peer_line(p: dict) -> dict:
         return {k: p.get(k) for k in ("robot_id", "connector", "display_name", "online", "skills", "capabilities",
-                                       "frames", "status") if p.get(k) not in (None, [], {})}
+                                       "frames", "reach", "status") if p.get(k) not in (None, [], {})}
 
     def peers(self) -> dict:
         c = self._need_client()

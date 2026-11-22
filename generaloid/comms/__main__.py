@@ -102,7 +102,8 @@ def cmd_twin(args):
 
 def cmd_demo(args):
     from .demo import main as demo_main
-    demo_main((["--twin"] if args.twin else []) + (["--log", args.log] if args.log else []))
+    demo_main((["--twin"] if args.twin else []) + (["--generaloid"] if args.generaloid else []) +
+              (["--log", args.log] if args.log else []))
 
 
 def main(argv=None):
@@ -137,6 +138,7 @@ def main(argv=None):
     t.set_defaults(fn=cmd_twin)
     d = sub.add_parser("demo", help="two robot MCP processes on localhost: B asks A for help")
     d.add_argument("--twin", action="store_true")
+    d.add_argument("--generaloid", action="store_true")
     d.add_argument("--log")
     d.set_defaults(fn=cmd_demo)
     args = ap.parse_args(argv)

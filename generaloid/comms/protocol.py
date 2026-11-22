@@ -202,8 +202,11 @@ def validate_hello(h: dict) -> dict:
         validate_pose({"name": "base", **frames["base_in_world"]}, "frames.base_in_world")
     for k in ("connector", "display_name", "agent"):
         _need(h.get(k) is None or (isinstance(h[k], str) and len(h[k]) <= MAX_TASK), f"{k} must be a short string")
+    reach = h.get("reach") or {}
+    _need(isinstance(reach, dict) and all(isinstance(v, (int, float)) for v in reach.values()),
+          "reach must be an object of numbers (e.g. max_radius, min_tcp_z, max_tcp_z in metres)")
     return {"robot_id": rid, "connector": h.get("connector") or "unknown", "display_name": h.get("display_name") or rid,
-            "agent": h.get("agent") or "", **lists, "frames": frames, "protocol_version": VERSION}
+            "agent": h.get("agent") or "", **lists, "frames": frames, "reach": reach, "protocol_version": VERSION}
 
 
 @dataclass

@@ -43,7 +43,7 @@ def test_register_adds_the_tools_to_a_fastmcp_server():
 def test_profile_reads_only_identity():
     TrapConnector.touched = []
     p = profile_from_connector(TrapConnector(), "so101-a")
-    assert p["robot_id"] == "so101-a" and p["skills"] == ["twist_cap", "pick"] and p["frames"]["world"] == "table"
+    assert p["robot_id"] == "so101-a" and p["skills"] == ["pick", "twist_cap"] and p["frames"]["world"] == "table"
     assert TrapConnector.touched == ["comms_profile"]          # probed with getattr(..., None), nothing else
     q = profile_from_connector(SimpleNamespace(comms_profile=lambda: {"connector": "elrobot", "skills": ["hold"]}),
                                "Elrobot B")
