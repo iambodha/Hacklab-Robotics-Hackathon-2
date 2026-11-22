@@ -1,0 +1,75 @@
+{
+  "name": "kit_a4_v1",
+  "_about": [
+    "The one layout spec of the kitting task: the printed sheet (paper, markers, target cells, start spots), the object classes and which object goes where. tasks/kitting/spec.py reads it; sheet.py prints it; sim/kitting_scene.py builds the twin from it; locate.py finds it in a camera image.",
+    "Units: mm. Sheet frame: origin = centre of the page, +x = towards the right edge of the printed page (landscape, text upright), +y = towards the top edge, z out of the paper. Laid on the table with its BOTTOM edge towards the arm base (sheet +y = arm forward at sheet yaw 0).",
+    "Start spots: where the human puts each object before a run (outline printed on the sheet, long axis drawn). At 299x224 the overview camera cannot localise a 4 mm screw (about 1.3 px wide at 0.45 m), so object positions come from the located sheet: pose(object) = pose(sheet) * pose(spot). See docs/kitting/README.md."
+  ],
+  "paper": {"size_mm": [297.0, 210.0], "print_dpi": 300, "_about": "A4 landscape, print at 100 % (no fit-to-page)"},
+  "markers": {
+    "dictionary": "DICT_4X4_50",
+    "size_mm": 50.0,
+    "quiet_zone_mm": 6.0,
+    "_about": "ids 10..13 (the table already uses 20..23). 50 mm is the largest that fits the corners: at the sheet's distance (0.35..0.55 m) the overview camera sees ~15 x 10 px per marker, enough for perception/aruco.detect (3x upscaled). Centres 6 mm + half a marker in from the page edges (printers keep ~4 mm margins).",
+    "items": [
+      {"id": 10, "center": [-117.5, 74.0], "yaw_deg": 0},
+      {"id": 11, "center": [117.5, 74.0], "yaw_deg": 0},
+      {"id": 12, "center": [117.5, -74.0], "yaw_deg": 0},
+      {"id": 13, "center": [-117.5, -74.0], "yaw_deg": 0}
+    ]
+  },
+  "grid": {
+    "_about": "3 columns x 2 rows of target cells in the top (far) half, the same for the start spots in the bottom (near) half. Column pitch 60 mm keeps the open jaws (outer width ~73 mm) clear of neighbours by ~8 mm; 42 mm cells leave ~6 mm around a 30 mm cap.",
+    "cell_size": [42.0, 42.0],
+    "columns_x": [-60.0, 0.0, 60.0],
+    "cell_rows_y": [73.0, 25.0],
+    "spot_rows_y": [-25.0, -73.0]
+  },
+  "cells": [
+    {"id": "A1", "center": [-60.0, 73.0], "label": "A1"},
+    {"id": "A2", "center": [0.0, 73.0], "label": "A2"},
+    {"id": "A3", "center": [60.0, 73.0], "label": "A3"},
+    {"id": "B1", "center": [-60.0, 25.0], "label": "B1"},
+    {"id": "B2", "center": [0.0, 25.0], "label": "B2"},
+    {"id": "B3", "center": [60.0, 25.0], "label": "B3"}
+  ],
+  "start_spots": [
+    {"id": "S1", "center": [-60.0, -25.0], "yaw_deg": 0},
+    {"id": "S2", "center": [0.0, -25.0], "yaw_deg": 0},
+    {"id": "S3", "center": [60.0, -25.0], "yaw_deg": 0},
+    {"id": "S4", "center": [-60.0, -73.0], "yaw_deg": 0},
+    {"id": "S5", "center": [0.0, -73.0], "yaw_deg": 0},
+    {"id": "S6", "center": [60.0, -73.0], "yaw_deg": 0}
+  ],
+  "classes": {
+    "screw": {
+      "shape": "screw", "shank_diameter": 4.0, "shank_length": 25.0, "head_diameter": 7.0, "head_height": 2.8,
+      "mass_g": 3.3, "rgba": [0.62, 0.63, 0.66, 1],
+      "_about": "M4 x 25 pan-head steel screw lying on its side; long axis = sheet x at spot yaw 0 (head towards -x). Mass: steel 7.85 g/cm3 x 0.42 cm3."
+    },
+    "cap": {
+      "shape": "cylinder", "diameter": 30.0, "height": 12.0, "mass_g": 2.5, "rgba": [0.85, 0.15, 0.12, 1],
+      "_about": "PET bottle cap (28 mm neck finish), closed side up; 2.5 g weighed caps are 2-3 g. Modelled solid (contact is the same)."
+    },
+    "box": {
+      "shape": "box", "size": [30.0, 20.0, 15.0], "mass_g": 6.0, "rgba": [0.15, 0.45, 0.85, 1],
+      "_about": "small plastic parts box 30 x 20 x 15 mm; long side = sheet x at spot yaw 0. 6 g."
+    }
+  },
+  "objects": [
+    {"name": "screw_1", "class": "screw", "spot": "S1", "cell": "A3"},
+    {"name": "cap_1", "class": "cap", "spot": "S2", "cell": "A1"},
+    {"name": "box_1", "class": "box", "spot": "S3", "cell": "A2"},
+    {"name": "screw_2", "class": "screw", "spot": "S4", "cell": "B2"},
+    {"name": "cap_2", "class": "cap", "spot": "S5", "cell": "B3"},
+    {"name": "box_2", "class": "box", "spot": "S6", "cell": "B1"}
+  ],
+  "placement": {
+    "_about": "Nominal pose of the sheet centre in the arm base frame (sim frame: +y = arm forward, +x = the arm's right) and the training randomization. Far cells reach 0.32 m, near spots 0.17 m from the base: inside the comfortable radius (profile workspace.comfortable_radius 0.35).",
+    "sheet_xy_m": [0.0, 0.24],
+    "sheet_yaw_deg": 0.0,
+    "randomize": {"x_m": [-0.025, 0.025], "y_m": [-0.02, 0.02], "yaw_deg": [-10.0, 10.0]},
+    "human_placement": {"_about": "how well a person puts an object on its printed spot (assumed, not measured)",
+                        "sigma_mm": 3.0, "max_mm": 8.0, "yaw_sigma_deg": 6.0}
+  }
+}

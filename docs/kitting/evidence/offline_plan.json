@@ -1,0 +1,575 @@
+{
+  "sheet_pose": [
+    0.0,
+    0.23972,
+    -0.006
+  ],
+  "profile": "/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/r5-kitsim/tasks/kitting/profiles/kit_learned.json",
+  "mode": "dry",
+  "commands": [
+    {
+      "object": "screw_2",
+      "phase": "open",
+      "skill": "gripper",
+      "params": {
+        "open_fraction": 1.0
+      }
+    },
+    {
+      "object": "screw_2",
+      "phase": "approach",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.16672249889307172,
+          0.06000466873746747,
+          0.07
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "screw_2",
+      "phase": "grasp_height",
+      "skill": "descend_guarded",
+      "params": {
+        "xy_world": [
+          0.16672249889307172,
+          0.06000466873746747
+        ],
+        "z_world": 0.034,
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "screw_2",
+      "phase": "lift",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.16672249889307172,
+          0.06000466873746747,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "screw_2",
+      "phase": "carry",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.26471655456941884,
+          -5.039244666446622e-06,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "screw_2",
+      "phase": "place_height",
+      "skill": "descend_guarded",
+      "params": {
+        "xy_world": [
+          0.26471655456941884,
+          -5.039244666446622e-06
+        ],
+        "z_world": 0.06,
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "screw_2",
+      "phase": "release",
+      "skill": "gripper",
+      "params": {
+        "open_fraction": 1.0
+      }
+    },
+    {
+      "object": "screw_2",
+      "phase": "retreat",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.26471655456941884,
+          -5.039244666446622e-06,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "cap_2",
+      "phase": "open",
+      "skill": "gripper",
+      "params": {
+        "open_fraction": 1.0
+      }
+    },
+    {
+      "object": "cap_2",
+      "phase": "approach",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.1667165550502894,
+          4.6690318780313075e-06,
+          0.07
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "cap_2",
+      "phase": "grasp_height",
+      "skill": "descend_guarded",
+      "params": {
+        "xy_world": [
+          0.1667165550502894,
+          4.6690318780313075e-06
+        ],
+        "z_world": 0.038,
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "cap_2",
+      "phase": "lift",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.1667165550502894,
+          4.6690318780313075e-06,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "cap_2",
+      "phase": "carry",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.2647106107266365,
+          -0.060005038950255885,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "cap_2",
+      "phase": "place_height",
+      "skill": "descend_guarded",
+      "params": {
+        "xy_world": [
+          0.2647106107266365,
+          -0.060005038950255885
+        ],
+        "z_world": 0.039,
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "cap_2",
+      "phase": "release",
+      "skill": "gripper",
+      "params": {
+        "open_fraction": 1.0
+      }
+    },
+    {
+      "object": "cap_2",
+      "phase": "retreat",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.2647106107266365,
+          -0.060005038950255885,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "box_2",
+      "phase": "open",
+      "skill": "gripper",
+      "params": {
+        "open_fraction": 1.0
+      }
+    },
+    {
+      "object": "box_2",
+      "phase": "approach",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.16671061120750708,
+          -0.059995330673711406,
+          0.07
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "box_2",
+      "phase": "grasp_height",
+      "skill": "descend_guarded",
+      "params": {
+        "xy_world": [
+          0.16671061120750708,
+          -0.059995330673711406
+        ],
+        "z_world": 0.038,
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "box_2",
+      "phase": "lift",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.16671061120750708,
+          -0.059995330673711406,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "box_2",
+      "phase": "carry",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.26472249841220113,
+          0.059994960460922994,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "box_2",
+      "phase": "place_height",
+      "skill": "descend_guarded",
+      "params": {
+        "xy_world": [
+          0.26472249841220113,
+          0.059994960460922994
+        ],
+        "z_world": 0.041499999999999995,
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "box_2",
+      "phase": "release",
+      "skill": "gripper",
+      "params": {
+        "open_fraction": 1.0
+      }
+    },
+    {
+      "object": "box_2",
+      "phase": "retreat",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.26472249841220113,
+          0.059994960460922994,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "screw_1",
+      "phase": "open",
+      "skill": "gripper",
+      "params": {
+        "open_fraction": 1.0
+      }
+    },
+    {
+      "object": "screw_1",
+      "phase": "approach",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.21472249865754328,
+          0.0599999136632416,
+          0.07
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "screw_1",
+      "phase": "grasp_height",
+      "skill": "descend_guarded",
+      "params": {
+        "xy_world": [
+          0.21472249865754328,
+          0.0599999136632416
+        ],
+        "z_world": 0.034,
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "screw_1",
+      "phase": "lift",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.21472249865754328,
+          0.0599999136632416,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "screw_1",
+      "phase": "carry",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.31271061049110804,
+          -0.060009794024481755,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "screw_1",
+      "phase": "place_height",
+      "skill": "descend_guarded",
+      "params": {
+        "xy_world": [
+          0.31271061049110804,
+          -0.060009794024481755
+        ],
+        "z_world": 0.06,
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "screw_1",
+      "phase": "release",
+      "skill": "gripper",
+      "params": {
+        "open_fraction": 1.0
+      }
+    },
+    {
+      "object": "screw_1",
+      "phase": "retreat",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.31271061049110804,
+          -0.060009794024481755,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "cap_1",
+      "phase": "open",
+      "skill": "gripper",
+      "params": {
+        "open_fraction": 1.0
+      }
+    },
+    {
+      "object": "cap_1",
+      "phase": "approach",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.21471655481476096,
+          -8.60423478354325e-08,
+          0.07
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "cap_1",
+      "phase": "grasp_height",
+      "skill": "descend_guarded",
+      "params": {
+        "xy_world": [
+          0.21471655481476096,
+          -8.60423478354325e-08
+        ],
+        "z_world": 0.038,
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "cap_1",
+      "phase": "lift",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.21471655481476096,
+          -8.60423478354325e-08,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "cap_1",
+      "phase": "carry",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.3127224981766727,
+          0.059990205386697124,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "cap_1",
+      "phase": "place_height",
+      "skill": "descend_guarded",
+      "params": {
+        "xy_world": [
+          0.3127224981766727,
+          0.059990205386697124
+        ],
+        "z_world": 0.039,
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "cap_1",
+      "phase": "release",
+      "skill": "gripper",
+      "params": {
+        "open_fraction": 1.0
+      }
+    },
+    {
+      "object": "cap_1",
+      "phase": "retreat",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.3127224981766727,
+          0.059990205386697124,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "box_1",
+      "phase": "open",
+      "skill": "gripper",
+      "params": {
+        "open_fraction": 1.0
+      }
+    },
+    {
+      "object": "box_1",
+      "phase": "approach",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.2147106109719786,
+          -0.060000085747937276,
+          0.07
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "box_1",
+      "phase": "grasp_height",
+      "skill": "descend_guarded",
+      "params": {
+        "xy_world": [
+          0.2147106109719786,
+          -0.060000085747937276
+        ],
+        "z_world": 0.038,
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "box_1",
+      "phase": "lift",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.2147106109719786,
+          -0.060000085747937276,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "box_1",
+      "phase": "carry",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.31271655433389034,
+          -9.794318892313361e-06,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "box_1",
+      "phase": "place_height",
+      "skill": "descend_guarded",
+      "params": {
+        "xy_world": [
+          0.31271655433389034,
+          -9.794318892313361e-06
+        ],
+        "z_world": 0.041499999999999995,
+        "yaw_deg": -90.0056759517679
+      }
+    },
+    {
+      "object": "box_1",
+      "phase": "release",
+      "skill": "gripper",
+      "params": {
+        "open_fraction": 1.0
+      }
+    },
+    {
+      "object": "box_1",
+      "phase": "retreat",
+      "skill": "move_tcp",
+      "params": {
+        "xyz_world": [
+          0.31271655433389034,
+          -9.794318892313361e-06,
+          0.08
+        ],
+        "yaw_deg": -90.0056759517679
+      }
+    }
+  ]
+}

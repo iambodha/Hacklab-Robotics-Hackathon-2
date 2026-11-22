@@ -1,0 +1,308 @@
+[
+  {
+    "iteration": 0,
+    "version": 0,
+    "episodes": 3,
+    "objects": 18,
+    "kits_complete": 0,
+    "success_rate": 0.3333333333333333,
+    "mean_error_mm": 5.7,
+    "per_class": {
+      "screw": {
+        "objects": 6,
+        "placed": 0,
+        "success_rate": 0.0
+      },
+      "cap": {
+        "objects": 6,
+        "placed": 2,
+        "success_rate": 0.3333333333333333
+      },
+      "box": {
+        "objects": 6,
+        "placed": 4,
+        "success_rate": 0.6666666666666666
+      }
+    },
+    "applied": [
+      "screw.grasp_z_mm 18->15",
+      "cap.place_z_mm 40->32",
+      "box.place_z_mm 40->32"
+    ],
+    "rejected": [],
+    "provenance": "transcribed from completed console evaluation; raw episode ids remain on disconnected drive"
+  },
+  {
+    "iteration": 1,
+    "version": 3,
+    "episodes": 3,
+    "objects": 18,
+    "kits_complete": 0,
+    "success_rate": 0.3888888888888889,
+    "mean_error_mm": 5.33,
+    "per_class": {
+      "screw": {
+        "objects": 6,
+        "placed": 0,
+        "success_rate": 0.0
+      },
+      "cap": {
+        "objects": 6,
+        "placed": 3,
+        "success_rate": 0.5
+      },
+      "box": {
+        "objects": 6,
+        "placed": 4,
+        "success_rate": 0.6666666666666666
+      }
+    },
+    "applied": [
+      "cap.place_z_mm 32->24",
+      "box.place_z_mm 32->24"
+    ],
+    "rejected": [],
+    "provenance": "transcribed from completed console evaluation; raw episode ids remain on disconnected drive"
+  },
+  {
+    "iteration": 2,
+    "version": 5,
+    "episodes": 3,
+    "objects": 18,
+    "kits_complete": 0,
+    "success_rate": 0.3333333333333333,
+    "mean_error_mm": 5.8,
+    "per_class": {
+      "screw": {
+        "objects": 6,
+        "placed": 0,
+        "success_rate": 0.0
+      },
+      "cap": {
+        "objects": 6,
+        "placed": 2,
+        "success_rate": 0.3333333333333333
+      },
+      "box": {
+        "objects": 6,
+        "placed": 4,
+        "success_rate": 0.6666666666666666
+      }
+    },
+    "applied": [
+      "screw.grasp_z_mm 15->14",
+      "cap.place_z_mm 24->19"
+    ],
+    "rejected": [],
+    "provenance": "transcribed from completed console evaluation; raw episode ids remain on disconnected drive"
+  },
+  {
+    "iteration": 3,
+    "version": 10,
+    "episodes": 3,
+    "objects": 18,
+    "kits_complete": 0,
+    "success_rate": 0.5,
+    "mean_error_mm": 4.63,
+    "per_class": {
+      "screw": {
+        "objects": 6,
+        "placed": 2,
+        "success_rate": 0.3333333333333333
+      },
+      "cap": {
+        "objects": 6,
+        "placed": 3,
+        "success_rate": 0.5
+      },
+      "box": {
+        "objects": 6,
+        "placed": 4,
+        "success_rate": 0.6666666666666666
+      }
+    },
+    "applied": [
+      "box.place_z_mm 24->21.5"
+    ],
+    "rejected": [],
+    "provenance": "transcribed from completed console evaluation; raw episode ids remain on disconnected drive"
+  },
+  {
+    "iteration": 4,
+    "version": 11,
+    "episodes": 3,
+    "objects": 18,
+    "kits_complete": 0,
+    "success_rate": 0.5,
+    "mean_error_mm": 4.53,
+    "per_class": {
+      "screw": {
+        "objects": 6,
+        "placed": 2,
+        "success_rate": 0.3333333333333333
+      },
+      "cap": {
+        "objects": 6,
+        "placed": 3,
+        "success_rate": 0.5
+      },
+      "box": {
+        "objects": 6,
+        "placed": 4,
+        "success_rate": 0.6666666666666666
+      }
+    },
+    "applied": [
+      "box.place_z_mm 21.5->19"
+    ],
+    "rejected": [],
+    "provenance": "transcribed from completed console evaluation; raw episode ids remain on disconnected drive"
+  },
+  {
+    "iteration": 5,
+    "version": 12,
+    "episodes": 3,
+    "objects": 18,
+    "kits_complete": 0,
+    "success_rate": 0.4444444444444444,
+    "mean_error_mm": 4.29,
+    "per_class": {
+      "screw": {
+        "objects": 6,
+        "placed": 2,
+        "success_rate": 0.3333333333333333
+      },
+      "cap": {
+        "objects": 6,
+        "placed": 3,
+        "success_rate": 0.5
+      },
+      "box": {
+        "objects": 6,
+        "placed": 3,
+        "success_rate": 0.5
+      }
+    },
+    "applied": [],
+    "rejected": [],
+    "provenance": "transcribed from completed console evaluation; raw episode ids remain on disconnected drive"
+  },
+  {
+    "iteration": 6,
+    "version": 12,
+    "episodes": 3,
+    "objects": 18,
+    "kits_complete": 0,
+    "success_rate": 0.4444444444444444,
+    "mean_error_mm": 4.29,
+    "per_class": {
+      "screw": {
+        "objects": 6,
+        "placed": 2,
+        "success_rate": 0.3333333333333333
+      },
+      "cap": {
+        "objects": 6,
+        "placed": 3,
+        "success_rate": 0.5
+      },
+      "box": {
+        "objects": 6,
+        "placed": 3,
+        "success_rate": 0.5
+      }
+    },
+    "applied": [],
+    "rejected": [],
+    "provenance": "transcribed from completed console evaluation; raw episode ids remain on disconnected drive"
+  },
+  {
+    "iteration": 7,
+    "version": 12,
+    "episodes": 3,
+    "objects": 18,
+    "kits_complete": 0,
+    "success_rate": 0.4444444444444444,
+    "mean_error_mm": 4.29,
+    "per_class": {
+      "screw": {
+        "objects": 6,
+        "placed": 2,
+        "success_rate": 0.3333333333333333
+      },
+      "cap": {
+        "objects": 6,
+        "placed": 3,
+        "success_rate": 0.5
+      },
+      "box": {
+        "objects": 6,
+        "placed": 3,
+        "success_rate": 0.5
+      }
+    },
+    "applied": [
+      "cap.grasp_z_mm 18->17"
+    ],
+    "rejected": [],
+    "provenance": "transcribed from completed console evaluation; raw episode ids remain on disconnected drive"
+  },
+  {
+    "iteration": 8,
+    "version": 13,
+    "episodes": 3,
+    "objects": 18,
+    "kits_complete": 0,
+    "success_rate": 0.3888888888888889,
+    "mean_error_mm": 3.74,
+    "per_class": {
+      "screw": {
+        "objects": 6,
+        "placed": 2,
+        "success_rate": 0.3333333333333333
+      },
+      "cap": {
+        "objects": 6,
+        "placed": 2,
+        "success_rate": 0.3333333333333333
+      },
+      "box": {
+        "objects": 6,
+        "placed": 3,
+        "success_rate": 0.5
+      }
+    },
+    "applied": [],
+    "rejected": [],
+    "provenance": "transcribed from completed console evaluation; raw episode ids remain on disconnected drive"
+  },
+  {
+    "iteration": 9,
+    "version": 14,
+    "episodes": 3,
+    "objects": 18,
+    "kits_complete": 0,
+    "success_rate": 0.5,
+    "mean_error_mm": 4.53,
+    "per_class": {
+      "screw": {
+        "objects": 6,
+        "placed": 2,
+        "success_rate": 0.3333333333333333
+      },
+      "cap": {
+        "objects": 6,
+        "placed": 3,
+        "success_rate": 0.5
+      },
+      "box": {
+        "objects": 6,
+        "placed": 4,
+        "success_rate": 0.6666666666666666
+      }
+    },
+    "applied": [],
+    "rejected": [],
+    "provenance": "transcribed from completed console evaluation; raw episode ids remain on disconnected drive"
+  }
+]

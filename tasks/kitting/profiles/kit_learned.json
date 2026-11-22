@@ -1,0 +1,470 @@
+{
+ "name": "kitting",
+ "generated": "2026-11-22T09:58:37+0100",
+ "source": "skillcfg target twin version 1",
+ "_about": "Learned per-class kitting parameters (tasks/kitting/profile.py: PARAMS gives meanings and envelopes). Read as-is by tasks/kitting/run_real.py. Regenerate with python -m tasks.kitting.learn.",
+ "classes": {
+  "screw": {
+   "hover_above_mm": 50.0,
+   "grasp_z_mm": 14.0,
+   "grip_force": 0.35,
+   "yaw_deg": 0.0,
+   "place_z_mm": 40.0,
+   "release_open": 1.0
+  },
+  "cap": {
+   "hover_above_mm": 50.0,
+   "grasp_z_mm": 18.0,
+   "grip_force": 0.35,
+   "yaw_deg": 0.0,
+   "place_z_mm": 19.0,
+   "release_open": 1.0
+  },
+  "box": {
+   "hover_above_mm": 50.0,
+   "grasp_z_mm": 18.0,
+   "grip_force": 0.35,
+   "yaw_deg": 0.0,
+   "place_z_mm": 21.5,
+   "release_open": 1.0
+  }
+ },
+ "generic": {
+  "screw": {
+   "hover_above_mm": 50.0,
+   "grasp_z_mm": 18.0,
+   "grip_force": 0.35,
+   "yaw_deg": 0.0,
+   "place_z_mm": 40.0,
+   "release_open": 1.0
+  },
+  "cap": {
+   "hover_above_mm": 50.0,
+   "grasp_z_mm": 18.0,
+   "grip_force": 0.35,
+   "yaw_deg": 0.0,
+   "place_z_mm": 40.0,
+   "release_open": 1.0
+  },
+  "box": {
+   "hover_above_mm": 50.0,
+   "grasp_z_mm": 18.0,
+   "grip_force": 0.35,
+   "yaw_deg": 0.0,
+   "place_z_mm": 40.0,
+   "release_open": 1.0
+  }
+ },
+ "provenance": {
+  "test": {
+   "seeds": [
+    90000,
+    90005
+   ],
+   "generic_randomized": {
+    "episodes": 6,
+    "objects": 36,
+    "executed_objects": 36,
+    "kits_complete": 0,
+    "aborted": 0,
+    "success_rate": 0.25,
+    "mean_error_mm": 6.21,
+    "mean_error_released_mm": 16.34,
+    "sheet_error_mm": 6.39,
+    "per_class": {
+     "screw": {
+      "objects": 12,
+      "placed": 0,
+      "success_rate": 0.0,
+      "mean_error_mm": null,
+      "outcomes": {
+       "missed": 12
+      },
+      "symptoms": {
+       "grasp_too_high": 12,
+       "knocked_neighbour": 3
+      }
+     },
+     "cap": {
+      "objects": 12,
+      "placed": 3,
+      "success_rate": 0.25,
+      "mean_error_mm": 6.1,
+      "outcomes": {
+       "missed": 2,
+       "off_cell": 7,
+       "placed": 3
+      },
+      "symptoms": {
+       "bounced_on_release": 10,
+       "knocked_neighbour": 4,
+       "pushed_on_descent": 2,
+       "dragged_on_retreat": 2
+      }
+     },
+     "box": {
+      "objects": 12,
+      "placed": 6,
+      "success_rate": 0.5,
+      "mean_error_mm": 6.27,
+      "outcomes": {
+       "dropped": 1,
+       "off_cell": 5,
+       "placed": 6
+      },
+      "symptoms": {
+       "bounced_on_release": 11,
+       "knocked_neighbour": 3,
+       "slipped_in_carry": 1
+      }
+     }
+    }
+   },
+   "generic_nominal": {
+    "episodes": 2,
+    "objects": 12,
+    "executed_objects": 12,
+    "kits_complete": 0,
+    "aborted": 0,
+    "success_rate": 0.5,
+    "mean_error_mm": 5.2,
+    "mean_error_released_mm": 6.1,
+    "sheet_error_mm": 0.29,
+    "per_class": {
+     "screw": {
+      "objects": 4,
+      "placed": 0,
+      "success_rate": 0.0,
+      "mean_error_mm": null,
+      "outcomes": {
+       "missed": 4
+      },
+      "symptoms": {
+       "grasp_too_high": 4,
+       "knocked_neighbour": 2
+      }
+     },
+     "cap": {
+      "objects": 4,
+      "placed": 2,
+      "success_rate": 0.5,
+      "mean_error_mm": 4.8,
+      "outcomes": {
+       "off_cell": 2,
+       "placed": 2
+      },
+      "symptoms": {
+       "bounced_on_release": 4,
+       "knocked_neighbour": 2
+      }
+     },
+     "box": {
+      "objects": 4,
+      "placed": 4,
+      "success_rate": 1.0,
+      "mean_error_mm": 5.4,
+      "outcomes": {
+       "placed": 4
+      },
+      "symptoms": {
+       "bounced_on_release": 4
+      }
+     }
+    }
+   },
+   "learned_randomized": {
+    "episodes": 6,
+    "objects": 36,
+    "executed_objects": 36,
+    "kits_complete": 0,
+    "aborted": 0,
+    "success_rate": 0.361,
+    "mean_error_mm": 5.58,
+    "mean_error_released_mm": 12.8,
+    "sheet_error_mm": 6.39,
+    "per_class": {
+     "screw": {
+      "objects": 12,
+      "placed": 2,
+      "success_rate": 0.167,
+      "mean_error_mm": 4.25,
+      "outcomes": {
+       "dropped": 2,
+       "missed": 3,
+       "off_cell": 5,
+       "placed": 2
+      },
+      "symptoms": {
+       "bounced_on_release": 6,
+       "closed_empty": 3,
+       "knocked_neighbour": 2,
+       "slipped_in_carry": 2,
+       "off_target": 1
+      }
+     },
+     "cap": {
+      "objects": 12,
+      "placed": 4,
+      "success_rate": 0.333,
+      "mean_error_mm": 5.52,
+      "outcomes": {
+       "missed": 2,
+       "off_cell": 6,
+       "placed": 4
+      },
+      "symptoms": {
+       "bounced_on_release": 5,
+       "dragged_on_retreat": 1,
+       "pushed_on_descent": 1,
+       "closed_empty": 1,
+       "off_target": 1,
+       "knocked_neighbour": 1
+      }
+     },
+     "box": {
+      "objects": 12,
+      "placed": 7,
+      "success_rate": 0.583,
+      "mean_error_mm": 6.0,
+      "outcomes": {
+       "dropped": 1,
+       "off_cell": 4,
+       "placed": 7
+      },
+      "symptoms": {
+       "knocked_neighbour": 5,
+       "off_target": 2,
+       "slipped_in_carry": 1
+      }
+     }
+    }
+   },
+   "learned_nominal": {
+    "episodes": 2,
+    "objects": 12,
+    "executed_objects": 12,
+    "kits_complete": 2,
+    "aborted": 0,
+    "success_rate": 1.0,
+    "mean_error_mm": 4.83,
+    "mean_error_released_mm": 4.83,
+    "sheet_error_mm": 0.29,
+    "per_class": {
+     "screw": {
+      "objects": 4,
+      "placed": 4,
+      "success_rate": 1.0,
+      "mean_error_mm": 3.1,
+      "outcomes": {
+       "placed": 4
+      },
+      "symptoms": {
+       "bounced_on_release": 4
+      }
+     },
+     "cap": {
+      "objects": 4,
+      "placed": 4,
+      "success_rate": 1.0,
+      "mean_error_mm": 6.05,
+      "outcomes": {
+       "placed": 4
+      },
+      "symptoms": {
+       "bounced_on_release": 2
+      }
+     },
+     "box": {
+      "objects": 4,
+      "placed": 4,
+      "success_rate": 1.0,
+      "mean_error_mm": 5.35,
+      "outcomes": {
+       "placed": 4
+      },
+      "symptoms": {
+       "bounced_on_release": 2
+      }
+     }
+    }
+   }
+  },
+  "evaluation_replay": {
+   "generic": {
+    "episodes": 3,
+    "objects": 18,
+    "executed_objects": 18,
+    "kits_complete": 0,
+    "aborted": 0,
+    "success_rate": 0.333,
+    "mean_error_mm": 5.7,
+    "mean_error_released_mm": 44.17,
+    "sheet_error_mm": 9.43,
+    "per_class": {
+     "screw": {
+      "objects": 6,
+      "placed": 0,
+      "success_rate": 0.0,
+      "mean_error_mm": null,
+      "outcomes": {
+       "missed": 6
+      },
+      "symptoms": {
+       "grasp_too_high": 6,
+       "knocked_neighbour": 3
+      }
+     },
+     "cap": {
+      "objects": 6,
+      "placed": 2,
+      "success_rate": 0.333,
+      "mean_error_mm": 5.15,
+      "outcomes": {
+       "off_cell": 4,
+       "placed": 2
+      },
+      "symptoms": {
+       "bounced_on_release": 6,
+       "knocked_neighbour": 3,
+       "dragged_on_retreat": 2
+      }
+     },
+     "box": {
+      "objects": 6,
+      "placed": 4,
+      "success_rate": 0.667,
+      "mean_error_mm": 5.98,
+      "outcomes": {
+       "off_cell": 2,
+       "placed": 4
+      },
+      "symptoms": {
+       "bounced_on_release": 6,
+       "knocked_neighbour": 2
+      }
+     }
+    }
+   },
+   "selected": {
+    "episodes": 3,
+    "objects": 18,
+    "executed_objects": 18,
+    "kits_complete": 0,
+    "aborted": 0,
+    "success_rate": 0.5,
+    "mean_error_mm": 4.53,
+    "mean_error_released_mm": 7.6,
+    "sheet_error_mm": 9.43,
+    "per_class": {
+     "screw": {
+      "objects": 6,
+      "placed": 2,
+      "success_rate": 0.333,
+      "mean_error_mm": 0.65,
+      "outcomes": {
+       "dropped": 1,
+       "missed": 2,
+       "off_cell": 1,
+       "placed": 2
+      },
+      "symptoms": {
+       "bounced_on_release": 3,
+       "closed_empty": 2,
+       "knocked_neighbour": 2,
+       "slipped_in_carry": 1
+      }
+     },
+     "cap": {
+      "objects": 6,
+      "placed": 3,
+      "success_rate": 0.5,
+      "mean_error_mm": 5.47,
+      "outcomes": {
+       "dropped": 1,
+       "missed": 1,
+       "off_cell": 1,
+       "placed": 3
+      },
+      "symptoms": {
+       "bounced_on_release": 2,
+       "slipped_in_carry": 1,
+       "rotated_in_grasp": 1,
+       "pushed_on_descent": 1,
+       "knocked_neighbour": 1
+      }
+     },
+     "box": {
+      "objects": 6,
+      "placed": 4,
+      "success_rate": 0.667,
+      "mean_error_mm": 5.78,
+      "outcomes": {
+       "off_cell": 2,
+       "placed": 4
+      },
+      "symptoms": {
+       "bounced_on_release": 1,
+       "off_target": 1,
+       "knocked_neighbour": 1
+      }
+     }
+    }
+   }
+  },
+  "final_params": {
+   "screw": {
+    "hover_above_mm": 50.0,
+    "grasp_z_mm": 14.0,
+    "grip_force": 0.35,
+    "yaw_deg": 0.0,
+    "place_z_mm": 40.0,
+    "release_open": 1.0
+   },
+   "cap": {
+    "hover_above_mm": 50.0,
+    "grasp_z_mm": 18.0,
+    "grip_force": 0.35,
+    "yaw_deg": 0.0,
+    "place_z_mm": 19.0,
+    "release_open": 1.0
+   },
+   "box": {
+    "hover_above_mm": 50.0,
+    "grasp_z_mm": 18.0,
+    "grip_force": 0.35,
+    "yaw_deg": 0.0,
+    "place_z_mm": 21.5,
+    "release_open": 1.0
+   }
+  },
+  "final_version": 1,
+  "out": "/tmp/r5-kitsim-rescue",
+  "renderer": "cpu",
+  "dr": {
+   "sheet": true,
+   "human": true,
+   "light_scale": [
+    0.6,
+    1.5
+   ],
+   "ambient": [
+    0.5,
+    0.95
+   ],
+   "light_dir_jitter": 0.35,
+   "cam_pos_m": 0.003,
+   "cam_rot_deg": 0.4,
+   "base_m": 0.002,
+   "base_yaw_deg": 0.4,
+   "mass_scale": [
+    0.8,
+    1.25
+   ],
+   "friction_scale": [
+    0.7,
+    1.3
+   ]
+  },
+  "provenance": "Recovered selected v11 values; original external drive disconnected during first held-out run"
+ }
+}
