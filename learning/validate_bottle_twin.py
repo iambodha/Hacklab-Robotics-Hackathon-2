@@ -19,6 +19,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--small', action='store_true')
     ap.add_argument('--preposition', action='store_true')
+    ap.add_argument('--no-budget', action='store_true',
+                    help='twist.time_budget_s 0 in the scratch twin config: on a loaded host the wall-clock budget '
+                         'ends the call before the first stroke (the twin steps in real time)')
     a = ap.parse_args()
     os.environ['STATION_HOST'] = 'station-disabled-in-tests.invalid'
     os.environ['SKILL_PROFILES'] = 'bottle_cap'
@@ -32,6 +35,11 @@ def main():
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'sim'))
     import sim_arm_mcp as S
     from .twist import Twister
+    if a.no_budget:
+        p = SC.propose({'twist.time_budget_s': 0.0}, 'validation on a loaded host: no wall-clock budget',
+                       ['learning/validate_bottle_twin.py --no-budget'], 'validate_bottle_twin', 'twin')
+        if not (p['ok'] and SC.apply(p['proposal']['id'], 'validate_bottle_twin --no-budget').get('ok')):
+            raise SystemExit(f'cannot clear the time budget in the scratch config: {p}')
 
     async def run():
         import numpy as np

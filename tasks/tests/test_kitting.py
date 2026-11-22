@@ -24,6 +24,33 @@ def test_sheet_geometry_and_object_assignment():
     assert not s.problems()
 
 
+@pytest.mark.parametrize('site',['home','office'])
+def test_kitting_layout_follows_the_site(monkeypatch,site):
+    from sim.kitting_scene import make_layout, scene_dir
+    from sites import get_site
+    from tasks.kitting.spec import table_marker_ids
+    monkeypatch.setenv('SITE',site)
+    s=Spec.load()
+    lay=make_layout(s)
+    base=json.loads(get_site(site).layout.read_text())
+    assert lay['kitting']['base_layout']==site and lay['markers']==base['markers'] and lay['table']==base['table']
+    pose=s.site_sheet_pose(site)
+    assert lay['kitting']['sheet_pose']==pose.as_list()
+    assert np.allclose(lay['objects'][0]['pos'][:2],[s.targets(pose)[0]['start'].x,s.targets(pose)[0]['start'].y])
+    assert {m['id'] for m in base['markers']['items']} <= set(table_marker_ids())
+    assert scene_dir(site).name==('scene' if site=='home' else f'scene_{site}')
+
+
+def test_home_kitting_layout_unchanged(monkeypatch):
+    from sim.kitting_scene import make_layout
+    monkeypatch.delenv('SITE',raising=False)
+    s=Spec.load()
+    assert s.site_sheet_pose('home')==s.nominal_sheet_pose()
+    lay=make_layout(s)
+    assert lay['kitting']['base_layout']=='home' and lay['kitting']['sheet_pose']==s.nominal_sheet_pose().as_list()
+    assert lay['markers']==json.loads((Path(__file__).resolve().parents[2]/'sim/layouts/home.json').read_text())['markers']
+
+
 def test_print_scale_and_marker_decoding(tmp_path):
     from tasks.kitting.sheet import write_print
     from tasks.kitting.locate import detect_sheet_markers

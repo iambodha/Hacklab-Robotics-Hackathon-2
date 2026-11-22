@@ -86,7 +86,8 @@ def main():
     S=Spec.load(); params=profile.load(a.profile)
     if a.only and a.only not in [o['name'] for o in S.objects()]:
         ap.error('unknown --only object')
-    layout=json.loads((Path(__file__).resolve().parents[2]/'sim/layouts/home.json').read_text())
+    from sites import get_site
+    layout=json.loads(get_site().layout.read_text())
     from executor.kinematics import Kinematics
     kin=Kinematics()
     cam=camera_model(layout,twin=a.twin)
