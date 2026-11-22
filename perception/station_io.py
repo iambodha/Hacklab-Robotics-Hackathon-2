@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from sites import get_site
 import sys
 from pathlib import Path
 
@@ -22,8 +23,8 @@ _CANDIDATES = [os.environ.get("NORMA_CORE_REPO"), ROOT / "norma-core", ROOT.pare
 NORMA_CORE = next((Path(p) for p in _CANDIDATES if p and (Path(p) / "software/station/shared/station_py").exists()), None)
 
 QUEUES = {
-    "overview": os.environ.get("PERCEPTION_OVERVIEW_QUEUE", "usbvideo/9ea4cacd5be94751e1eea7be90bcf628"),
-    "wrist": os.environ.get("PERCEPTION_WRIST_QUEUE", "usbvideo/28ff0ca87978e8f993c2ac64a84d188a"),
+    "overview": get_site().queue("overview", "PERCEPTION"),
+    "wrist": get_site().queue("wrist", "PERCEPTION"),
 }
 STATION_HOST = os.environ.get("STATION_HOST", "localhost")
 _log = logging.getLogger("perception")

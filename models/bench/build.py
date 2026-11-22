@@ -33,7 +33,9 @@ DATA = HERE / "data"
 FRAMES = DATA / "frames"
 RUNS = ROOT / "sim" / "real_runs" / "2026-11-21"
 RECORDINGS = WS / "recorder" / "recordings"
-CAMS = {"overview": "9ea4cacd", "wrist": "28ff0ca8"}
+sys.path.insert(0, str(ROOT))
+from sites import get_site
+CAMS = {role: get_site().camera_hash(role)[:8] for role in ("overview", "wrist")}
 
 sys.path.insert(0, str(ROOT))
 from models import perception_bridge as pb  # noqa: E402

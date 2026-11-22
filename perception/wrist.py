@@ -35,7 +35,8 @@ def wrist_camera():
             os.environ["NORMA_CORE_REPO"] = str(NORMA_CORE)
         sys.path.insert(0, str(ROOT))
         from camera_pose.elrobot_camera import WristCamera
-        _WCAM = WristCamera()
+        from sites import get_site
+        _WCAM = WristCamera(camera_json=get_site().wrist_mount)
     return _WCAM
 
 

@@ -23,13 +23,12 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
-SESS = HERE / "real_sessions"
+sys.path.insert(0, str(REPO))
+from sites import get_site
+SESS = get_site().action_log_dir
 CAM_URL = os.environ.get("ROBOT_CAM_URL", "http://127.0.0.1:8890")
 def _cams() -> dict:
-    sys.path.insert(0, str(HERE))
-    import operator_prompt
-    c = operator_prompt.profile()["cameras"]
-    return {"wrist": os.environ.get("ROBOT_WRIST_CAM", c["wrist"]), "overview": os.environ.get("ROBOT_OVERVIEW_CAM", c["overview"])}
+    return {role: get_site().robot_camera(role) for role in ("wrist", "overview")}
 
 
 CAMS = _cams()

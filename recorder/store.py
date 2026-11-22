@@ -9,7 +9,8 @@ from pathlib import Path
 
 from .fmt import FORMAT_VERSION, NAMES, cam_role, slug
 
-ROOT = Path(os.environ.get("RECORDER_DIR", Path(__file__).resolve().parent.parent / "recordings"))
+from sites import get_site
+ROOT = get_site().record_dir
 LATE_S = 0.25  # camera frame counted as late when it arrives this long after Station stamped it
 
 

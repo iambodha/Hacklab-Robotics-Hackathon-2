@@ -26,6 +26,9 @@ from PIL import Image
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from sites import get_site
 OBJECT_CONTACT = {'contype': '2', 'conaffinity': '3'}
 STATIC_CONTACT = {'contype': '2', 'conaffinity': '1'}
 PAD_CONTACT = {'contype': '4', 'conaffinity': '2'}
@@ -35,9 +38,13 @@ CV_TO_MJ = np.diag([1.0, -1.0, -1.0])  # OpenCV camera axes (x right, y down, z 
 
 
 def layout_path(choice=None):
-    """Layout file from a path or a name: None/'venue' -> sim/layout.json, 'home' -> sim/layouts/home.json.
-    Without an argument, env SIM_LAYOUT (or ROBOT_SIM_LAYOUT) decides."""
-    choice = str(choice or os.environ.get('SIM_LAYOUT') or os.environ.get('ROBOT_SIM_LAYOUT') or 'venue')
+    """Explicit path/name, then SIM_LAYOUT / ROBOT_SIM_LAYOUT, then the selected site's layout."""
+    choice = choice or os.environ.get('SIM_LAYOUT') or os.environ.get('ROBOT_SIM_LAYOUT')
+    if choice is None:
+        return get_site().layout
+    choice = str(choice)
+    if choice == Path(choice).name and (REPO / 'sites' / choice / 'site.json').is_file():
+        return get_site(choice).layout
     if choice in ('venue', 'layout'):
         return HERE / 'layout.json'
     p = Path(choice)
@@ -52,6 +59,8 @@ def layout_path(choice=None):
 def generated_dir(layout_file):
     """sim/generated for the venue layout, sim/generated/<stem> for any other."""
     layout_file = Path(layout_file)
+    if layout_file.parent.parent == REPO / 'sites':
+        return HERE / 'generated' / ('site_' + layout_file.parent.name)
     return HERE / 'generated' if layout_file.name == 'layout.json' else HERE / 'generated' / layout_file.stem
 
 
@@ -135,7 +144,10 @@ def add_gripper_parts(root, layout):
                       mass='.005', **PAD_CONTACT)
     cam = layout['wrist_camera']
     # Inline T_link_cam (e.g. synced from scene_calib.json) or the CAD pose file; link = Gripper_Base_v1_1.
-    T = np.array(cam['T_link_cam'] if 'T_link_cam' in cam else json.loads((REPO / cam['pose_file']).read_text())['T_link_camera'])
+    pose_file = cam.get('pose_file')
+    # Frozen legacy layouts use this token for the active site's mount; custom poses stay explicit.
+    pose = get_site().wrist_mount if pose_file == 'camera_pose/wrist_camera.json' else REPO / (pose_file or get_site().wrist_mount)
+    T = np.array(cam['T_link_cam'] if 'T_link_cam' in cam else json.loads(pose.read_text())['T_link_camera'])
     if cam.get('pitch_offset_deg'):  # mount tilted vs the CAD: rotate about the camera's own x axis
         a = math.radians(cam['pitch_offset_deg'])
         T = T.copy(); T[:3, :3] = T[:3, :3] @ np.array([[1, 0, 0], [0, math.cos(a), -math.sin(a)], [0, math.sin(a), math.cos(a)]])
@@ -565,7 +577,7 @@ def build(layout_path=HERE / 'layout.json', out_dir=HERE / 'generated', photo=No
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('--layout', help='layout file or name (venue | home); default: env SIM_LAYOUT, else venue')
+    p.add_argument('--layout', help='layout file or name (venue | home); default: env SIM_LAYOUT / ROBOT_SIM_LAYOUT, else SITE')
     p.add_argument('--out', type=Path, help='output folder (default sim/generated[/<layout name>])')
     p.add_argument('--photo', type=Path, help='real overview photo to put next to the overview_cam render')
     args = p.parse_args()

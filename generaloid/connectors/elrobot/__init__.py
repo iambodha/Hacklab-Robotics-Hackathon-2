@@ -42,6 +42,12 @@ class ElRobotConnector(ProfileConnector):
         return frozenset(self.SIM_SKILLS if mode == "sim" else self.REAL_SKILLS)
 
     @property
+    def cameras(self):
+        from dataclasses import replace
+        from sites import get_site
+        return [replace(c, station_id=get_site().robot_camera(c.role)) for c in super().cameras]
+
+    @property
     def twin(self) -> TwinSpec:
         ensure_sim_on_path()
         import build_scene
@@ -54,9 +60,10 @@ class ElRobotConnector(ProfileConnector):
         ensure_sim_on_path()
         import build_scene
         import mujoco
-        xml = SIM / self.profile.kinematics.xml
+        layout = build_scene.layout_path()
+        xml = build_scene.generated_dir(layout) / "workspace.xml"
         if not xml.exists():
-            build_scene.build(report=False)
+            build_scene.build(layout, xml.parent, report=False)
         return build_scene.ArmIK(mujoco.MjModel.from_xml_path(str(xml)))
 
     def kinematics(self):

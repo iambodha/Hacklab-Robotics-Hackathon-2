@@ -18,10 +18,14 @@ import math
 from pathlib import Path
 
 import numpy as np
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from sites import get_site
 
 HERE = Path(__file__).resolve().parent
 RZ90 = np.array([[0, -1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1.0]])
 PRIORITY = {"fixed": 0, "estimate": 1, "scene_calib": 2}
+# Legacy layout token retained for old scene-contract producers; build_scene resolves it through SITE.
 POSE_FILE = "camera_pose/wrist_camera.json"
 
 
@@ -153,7 +157,9 @@ def apply_calib(calib: dict, layout: dict, src: str = "scene_calib", force: bool
     wr = cams.get("wrist")
     if wr and allowed(layout.get("wrist_camera")):
         w = layout["wrist_camera"]
-        if wr.get("T_link_cam") and POSE_FILE in str(wr.get("source", "")):
+        mount = get_site().wrist_mount
+        mount_sources = (POSE_FILE, str(mount), get_site().manifest["files"]["wrist_mount"])
+        if wr.get("T_link_cam") and any(token in str(wr.get("source", "")) for token in mount_sources):
             w.pop("T_link_cam", None)             # the mount's single source: build_scene reads the pose file itself
             w.update(pose_file=POSE_FILE, link=wr.get("link", "Gripper_Base_v1_1"))
             w.pop("pitch_offset_deg", None)
@@ -173,8 +179,8 @@ def apply_calib(calib: dict, layout: dict, src: str = "scene_calib", force: bool
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("calib", type=Path)
-    p.add_argument("--layout", type=Path, default=HERE / "layouts" / "home.json")
+    p.add_argument("calib", type=Path, nargs="?", default=get_site().scene_calib)
+    p.add_argument("--layout", type=Path, default=get_site().layout)
     p.add_argument("--src", default="scene_calib", choices=list(PRIORITY))
     p.add_argument("--force", action="store_true")
     a = p.parse_args()

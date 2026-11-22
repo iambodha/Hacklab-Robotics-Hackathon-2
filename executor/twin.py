@@ -26,6 +26,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+from sites import get_site, ROOT as SITE_ROOT
 
 BIN_WORDS = ("bin", "bucket", "box", "basket", "bowl")
 _CACHE: dict = {}
@@ -52,7 +53,7 @@ def _load(layout: str):
                           contype=2, conaffinity=1)
         m = spec.compile()
         import json
-        info = {"layout": str(lp), "name": lp.stem, "markers": json.loads(lp.read_text()).get("markers")}
+        info = {"layout": str(lp), "name": lp.parent.name if lp.parent.parent == SITE_ROOT / "sites" else lp.stem, "markers": json.loads(lp.read_text()).get("markers")}
         _CACHE[layout] = (m, info)
         return _CACHE[layout]
 
@@ -61,7 +62,7 @@ class TwinPreflight:
     def __init__(self, kin, layout: str | None = None, budget_s: float = 1.5, step_rad: float = 0.03,
                  margin_m: float = 0.02, tol_m: float = 0.001, warm: bool = True):
         self.kin = kin
-        self.layout = layout or os.environ.get("EXECUTOR_TWIN_LAYOUT") or os.environ.get("SIM_LAYOUT") or "home"
+        self.layout = layout or os.environ.get("EXECUTOR_TWIN_LAYOUT") or os.environ.get("SIM_LAYOUT") or os.environ.get("ROBOT_SIM_LAYOUT") or str(get_site().layout)
         self.budget_s, self.step, self.margin, self.tol = budget_s, step_rad, margin_m, tol_m
         self.error: str | None = None
         self._ready = threading.Event()

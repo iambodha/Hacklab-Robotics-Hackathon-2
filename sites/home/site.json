@@ -1,0 +1,19 @@
+{
+  "cameras": {
+    "overview": "usbvideo/9ea4cacd5be94751e1eea7be90bcf628",
+    "wrist": "usbvideo/28ff0ca87978e8f993c2ac64a84d188a"
+  },
+  "files": {
+    "scene_calib": "sites/home/scene_calib.json",
+    "layout": "sites/home/layout_home.json",
+    "overview_camera": "sites/home/real_overview_camera.json",
+    "wrist_mount": "sites/home/wrist_camera.json",
+    "intrinsics_overview": "sites/home/intrinsics_overview.json",
+    "intrinsics_wrist": "sites/home/intrinsics_wrist.json"
+  },
+  "directories": {
+    "actions": "logs/real_sessions_home",
+    "episodes": "logs/learning/bottle",
+    "recordings": "recordings"
+  }
+}

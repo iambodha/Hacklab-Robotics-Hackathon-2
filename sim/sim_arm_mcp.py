@@ -98,7 +98,8 @@ class SimArm:
     def __init__(self):
         out_dir = build_scene.generated_dir(LAYOUT)
         scene = out_dir / 'workspace.xml'
-        sources = [LAYOUT, HERE / 'build_scene.py']
+        from sites import get_site
+        sources = [LAYOUT, get_site().wrist_mount, HERE / 'build_scene.py']
         if not scene.exists() or scene.stat().st_mtime < max(p.stat().st_mtime for p in sources):
             build_scene.build(LAYOUT, out_dir, report=False)
         self.layout = json.loads(LAYOUT.read_text())

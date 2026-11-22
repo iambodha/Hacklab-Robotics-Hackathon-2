@@ -20,7 +20,8 @@ from ..eval import evaluate, synth
 from ..eval.geometry import Board
 from ..wipe import WipeSkill
 
-OVERVIEW_HASH = "9ea4cacd5be94751e1eea7be90bcf628"
+from sites import get_site
+OVERVIEW_HASH = get_site().camera_hash("overview")
 
 
 def build(out: str | Path, *, recording: str | Path | None, outcome: Outcome, stats: dict, version: dict, task: dict,
