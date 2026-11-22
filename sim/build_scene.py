@@ -98,9 +98,10 @@ def camera_lens(cam, image_size):
     pixel-centre coordinates, normalised by the image width/height), else fovy. fovy alone puts the principal point
     at the image centre (the overview's is 4 px right of and 6 px below it) with fx = fy. MuJoCo scales the
     intrinsics to any render size and derives model.cam_fovy from fy; camera_K() returns the matrix it renders with.
-    Lens distortion is not modelled (compare against undistorted real frames)."""
+    Lens distortion is not modelled (compare against undistorted real frames). TWIN_CALIBRATED_PINHOLE=0 builds the
+    fovy-only cameras (for tools that still project with a centred pinhole from cam_fovy)."""
     k = cam.get('K_normalized')
-    if not k or not image_size:
+    if not k or not image_size or os.environ.get('TWIN_CALIBRATED_PINHOLE', '1') == '0':
         return {'fovy': str(cam['fovy'])}
     W, H = image_size
     fx, fy, cx, cy = k['fx'] * W, k['fy'] * H, k['cx'] * W, k['cy'] * H
