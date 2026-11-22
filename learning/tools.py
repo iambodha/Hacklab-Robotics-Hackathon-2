@@ -105,16 +105,22 @@ async def check_cap(st: E.EpisodeStore, rig):
     images = await rig.frames()
     paths = st.save_images(n, "check", images)
     if r["cap_free"]:
-        verdict = f"cap came free: lifted {r['cap_lift_mm']:.0f} mm in the jaws without resistance"
+        verdict = (f"cap probably free: the gripper rose {r['cap_lift_mm']:.0f} mm still holding it, unhindered (the jaws "
+                   f"could also have slid up the cap: confirm a gap between cap and bottle in the images)")
     elif not r["holding_before"]:
         verdict = "cannot tell from the signals: the jaws were not holding the cap"
     elif r["resisted"]:
-        verdict = f"cap still attached: the lift was held back ({r.get('resist_note', '')})"
+        verdict = (f"cap still attached: the lift was held back (gripper rose {r['gripper_rose_mm']:.0f} of "
+                   f"{r.get('lift_planned_mm', 0):.0f} mm{'; ' + r['stopped'] if r.get('stopped') else ''})")
     else:
         verdict = "cap still attached: it slipped out of the jaws during the lift" if not r["holding_after"] else \
             f"unclear: holding after lifting only {r['cap_lift_mm']:.0f} mm"
     st.judge(n, "camera", verdict, paths, signals=r)
-    lines = [f"CHECK (attempt {n}): {verdict}.", f"signals: {json.dumps(r)}"]
+    lines = [f"CHECK (attempt {n}): {verdict}.", f"signals: {json.dumps(r, default=str)}"]
+    if hasattr(rig, "truth"):                     # the twin knows how far the cap really turned (never on hardware)
+        t = rig.truth()
+        st.judge(n, "twin", f"cap turned {t['turned_deg']:.0f} deg in total, thread lift {t['lift_mm']:.1f} mm, "
+                            f"{'FREE' if t['free'] else 'still on the thread'}", [], truth=t)
     if os.environ.get("BOTTLE_GEMINI_JUDGE", "1") == "1" and images:
         from .judge import gemini_cap_judge
         g = gemini_cap_judge(images)

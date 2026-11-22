@@ -42,7 +42,8 @@ LAG_STALL_DEG = 15.0         # achieved rotation this far behind the command = t
 RELEASE_OPEN = 0.25          # how much the jaws open (norm) to release the cap between strokes
 RETREAT_UP = 0.04            # m straight up after an abort
 CHECK_LIFT = 0.015           # check_cap: lift this far with the cap gripped
-CHECK_RESIST = 180           # check_cap: rise of the summed arm loads that means "still attached"
+TILTS_DEG = (4, -4, 8, -8, 12, -12)   # IK fallback tilts (see Twister._solve)
+CHECK_LOAD_STOP = 400        # check_cap: safety stop on the rise of the two largest arm loads while lifting
 
 
 def rz(deg: float) -> np.ndarray:
@@ -96,6 +97,23 @@ class Twister:
         self.trace.append(row)
         return row
 
+    def _solve(self, xyz, R, seed):
+        """IK for (xyz, R); where that is just out of reach (jaws-down poses sit near a wrist joint limit on this arm),
+        the same point with the gripper tilted a few degrees about the horizontal axis across the arm's reach."""
+        sol = self.rig.solve(xyz, R, seed)
+        if sol is not None:
+            return sol
+        r = np.asarray(xyz[:2], float)
+        r = r / max(float(np.linalg.norm(r)), 1e-6)
+        axis = np.array([-r[1], r[0], 0.0])
+        for t in TILTS_DEG:
+            a = math.radians(t)
+            K = np.array([[0, -axis[2], axis[1]], [axis[2], 0, -axis[0]], [-axis[1], axis[0], 0]])
+            sol = self.rig.solve(xyz, (np.eye(3) + math.sin(a) * K + (1 - math.cos(a)) * K @ K) @ R, seed)
+            if sol is not None:
+                return sol
+        return None
+
     async def _plan(self, R0, p0, q0, deg_from: float, deg_to: float, step: float, lift_per_turn_mm: float):
         """IK waypoints rotating from deg_from to deg_to (about vertical, signed so that + = counter-clockwise) and
         rising with the thread. Truncated where IK fails; returns [(deg, q)]."""
@@ -107,7 +125,7 @@ class Twister:
             for k in range(1, n + 1):
                 d = deg_from + (deg_to - deg_from) * k / n
                 xyz = p0 + np.array([0.0, 0.0, lift_per_turn_mm / 1000.0 * (d - deg_from) / 360.0])
-                sol = self.rig.solve(xyz, rz(sign * (d - deg_from)) @ R0, seed)
+                sol = self._solve(xyz, rz(sign * (d - deg_from)) @ R0, seed)
                 if sol is None or float(np.max(np.abs(np.asarray(sol)[:7] - np.asarray(seed)[:7]))) > 0.5:
                     break
                 out.append((d, sol))
@@ -298,7 +316,7 @@ class Twister:
         free. Returns {"cap_free", "cap_lift_mm", "resisted", "holding_after", ...}."""
         p = self.p
         force = min(float(p["grip_torque_limit"]), SAFETY["max_grip_force"])
-        held = await self.rig.holding()
+        held = bool(await self.rig.holding())
         if not held:
             text, held = await self.rig.grip(1.0 - float(p["grip_close"]), force)
         q, pos0, R = await self._pose()
@@ -311,25 +329,31 @@ class Twister:
             def plan():
                 pts, sd = [], seed
                 for k in range(1, n + 1):
-                    sol = self.rig.solve(pos0 + np.array([0, 0, CHECK_LIFT * k / n]), R, sd)
+                    sol = self._solve(pos0 + np.array([0, 0, CHECK_LIFT * k / n]), R, sd)
                     if sol is None:
                         break
                     pts.append(sol)
                     sd = sol
                 return pts
-            for sol in await asyncio.to_thread(plan):
+            lift = await asyncio.to_thread(plan)
+            out["lift_planned_mm"] = round(CHECK_LIFT * 1000 * len(lift) / n, 1)
+            for sol in lift:
                 r = await self.rig.go(sol, 0.15, False)
                 row = await self._sample("check", 0, 0.0, yaw_of(R))
                 out["lift_steps"] += 1
-                if r.startswith("ABORTED") or row["arm_load_sum"] - base["arm_load_sum"] > CHECK_RESIST:
-                    out["resisted"] = True
-                    out["resist_note"] = (r.splitlines()[0] if r.startswith("ABORTED") else
-                                          f"arm loads rose by {row['arm_load_sum'] - base['arm_load_sum']}")
+                out["load_rise"] = row["arm_load_sum"] - base["arm_load_sum"]
+                if r.startswith("ABORTED") or out["load_rise"] > CHECK_LOAD_STOP:
+                    out["stopped"] = r.splitlines()[0] if r.startswith("ABORTED") else \
+                        f"arm loads rose by {out['load_rise']} (stop at {CHECK_LOAD_STOP})"
                     break
             await asyncio.sleep(0.3)
         _, pos1, _ = await self._pose()
-        out["holding_after"] = await self.rig.holding()
-        out["cap_lift_mm"] = round((float(pos1[2]) - float(pos0[2])) * 1000, 1) if out["holding_after"] else 0.0
-        out["cap_free"] = bool(held and out["holding_after"] and not out["resisted"]
-                               and out["cap_lift_mm"] >= CHECK_LIFT * 1000 * 0.6)
+        out["holding_after"] = bool(await self.rig.holding())
+        rose = round((float(pos1[2]) - float(pos0[2])) * 1000, 1)
+        out["gripper_rose_mm"] = rose
+        # Held back = the gripper stayed well short of the lift it was commanded (the thread holds the cap and the
+        # jaws hold the cap), or the safety load stop fired. Motor load alone is no evidence: it swings with the motion.
+        out["resisted"] = bool(held and (out.get("stopped") or rose < 0.5 * out.get("lift_planned_mm", 0)))
+        out["cap_free"] = bool(held and out["holding_after"] and not out["resisted"] and rose >= CHECK_LIFT * 1000 * 0.6)
+        out["cap_lift_mm"] = rose if out["cap_free"] else 0.0
         return out
