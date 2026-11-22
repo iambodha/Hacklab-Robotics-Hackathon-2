@@ -54,7 +54,13 @@ async def _capture_wrist_poses(n_poses: int, timeout_s: float = 240, still_s: fl
     print(f"Wrist poses: move the arm by hand so the wrist camera sees one or more markers from {n_poses} different "
           f"poses (vary base rotation and wrist tilt), and hold each still for ~2 s.")
     while len(poses) < n_poses and time.time() - t0 < timeout_s:
-        j = await sio.read_joints(cli)
+        try:
+            j = await sio.read_joints(cli)
+        except (TimeoutError, asyncio.TimeoutError, RuntimeError) as ex:   # the bus stalls for a few s under load
+            print(f"  (joint read stalled: {ex}; retrying)", flush=True)
+            still_since, last = None, None
+            await asyncio.sleep(0.5)
+            continue
         if last is not None and _joints_moved(last, j, tol=4) is None:
             still_since = still_since or time.time()
         else:
@@ -62,10 +68,16 @@ async def _capture_wrist_poses(n_poses: int, timeout_s: float = 240, still_s: fl
         last = j
         new = all(_joints_moved(p["joints"], j, tol=min_ticks) for p in poses)
         if still_since and time.time() - still_since > still_s and new:
-            frames = await sio.grab_jpegs(cli, "wrist", 15)
-            if _joints_moved(j, await sio.read_joints(cli), tol=4) is None:
+            try:
+                frames = await sio.grab_jpegs(cli, "wrist", 15)
+                j2 = await sio.read_joints(cli)
+            except (TimeoutError, asyncio.TimeoutError, RuntimeError) as ex:
+                print(f"  (capture stalled: {ex}; hold the pose, retrying)", flush=True)
+                still_since = None
+                continue
+            if _joints_moved(j, j2, tol=4) is None:
                 poses.append({"joints": j, "jpegs": frames})
-                print(f"  pose {len(poses)}/{n_poses} recorded")
+                print(f"  pose {len(poses)}/{n_poses} recorded", flush=True)
         await asyncio.sleep(0.3)
     return poses
 
