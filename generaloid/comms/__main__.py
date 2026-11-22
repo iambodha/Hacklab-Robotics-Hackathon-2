@@ -31,14 +31,18 @@ def _token(args, create: bool) -> str:
         return tok
     f = Path(args.token_file).expanduser() if getattr(args, "token_file", None) else None
     if f and f.exists():
-        return f.read_text().strip()
+        tok = f.read_text().strip()
+        if not tok:
+            sys.exit("token file is empty")
+        return tok
     if not create:
         sys.exit("no token: set GENERALOID_COMMS_TOKEN or pass --token-file")
     tok = secrets.token_urlsafe(24)
     if f:
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(tok + "\n")
-        f.chmod(0o600)
+        fd = os.open(f, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as stream:
+            stream.write(tok + "\n")
         print(f"join token written to {f} (mode 600)", file=sys.stderr)
     else:
         print(f"join token (give it privately to the robots that should join): {tok}", file=sys.stderr)

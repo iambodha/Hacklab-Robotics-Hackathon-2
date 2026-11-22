@@ -307,3 +307,78 @@ def test_sse_stream_delivers_the_mailbox(hub, pair):
                     assert m["payload"]["state"] == "twisting" and m["from"] == "so101-a"
                     break
     probe.leave()
+
+
+@pytest.mark.parametrize("body", [
+    {"v": 1, "id": P.new_id(), "kind": [], "to": "elrobot-b", "payload": {}},
+    {"v": 1, "id": P.new_id(), "kind": "accept", "to": "elrobot-b", "re": P.new_id(), "payload": []},
+])
+def test_malformed_messages_return_400_without_breaking_hub(hub, pair, body):
+    a, _ = pair
+    assert raw(hub, "POST", "/v1/send", token=a.session, json=body).status_code == 400
+    assert len(a.peers()) == 2
+
+
+def test_chunked_body_is_bounded_and_nonfinite_json_is_rejected(hub, pair):
+    a, _ = pair
+    def chunks():
+        for _ in range(10):
+            yield b"x" * 65536
+    assert raw(hub, "POST", "/v1/send", token=a.session, content=chunks()).status_code == 413
+    for value in ("NaN", "Infinity", "1e999"):
+        assert raw(hub, "POST", "/v1/heartbeat", token=a.session,
+                   content='{"status":{"x":' + value + '}}').status_code == 400
+
+
+def test_idempotency_conflict_is_explicit(pair):
+    a, _ = pair
+    mid = P.new_id()
+    a.send("elrobot-b", "message", {"text": "once"}, msg_id=mid)
+    with pytest.raises(CommsError) as e:
+        a.send("elrobot-b", "message", {"text": "changed"}, msg_id=mid)
+    assert e.value.code == 409
+
+
+def test_deadline_enforced_before_sweep_and_departed_peer_cancel():
+    # No server/sweeper: advancing the clock just past the deadline must still block acceptance.
+    now = [100.0]
+    h = Hub(token=TOKEN, clock=lambda: now[0])
+    h.join(TOKEN, {"hello": {"robot_id": "robot-a"}}, "local")
+    h.join(TOKEN, {"hello": {"robot_id": "robot-b"}}, "local")
+    a, b = h.peers["robot-a"], h.peers["robot-b"]
+    rid = P.new_id()
+    h.send(a, {"id": rid, "kind": "request", "to": "robot-b", "payload": {"task": "hold", "ttl_s": 1}})
+    now[0] += 1.01
+    from generaloid.comms.hub import HubError
+    with pytest.raises(HubError) as e:
+        h.send(b, {"id": P.new_id(), "kind": "accept", "to": "robot-a", "re": rid})
+    assert e.value.code == 409 and h.tracker.requests[rid].state == P.EXPIRED
+    rid = P.new_id()
+    h.send(a, {"id": rid, "kind": "request", "to": "robot-b", "payload": {"task": "hold"}})
+    h.leave(b)
+    ack = h.send(a, {"id": P.new_id(), "kind": "cancel", "to": "*", "re": rid})
+    assert ack["request"]["state"] == "cancelled" and ack["delivered_to"] == []
+
+
+def test_broadcast_candidates_are_told_when_help_is_claimed(hub, pair):
+    a, b = pair
+    c = CommsClient(hub.url, TOKEN, {"robot_id": "robot-c"}, poll_wait=1)
+    c.join()
+    try:
+        rid = a.help("*", "hold bottle")["id"]
+        b.wait_for(lambda m: m["id"] == rid)
+        c.wait_for(lambda m: m["id"] == rid)
+        b.reply(rid, "accept")
+        claimed = c.wait_for(lambda m: m["kind"] == "request_claimed" and m["re"] == rid)
+        assert claimed["payload"]["assignee"] == b.robot_id
+        assert c.waiting_for_me() == []
+        a.cancel(rid)
+        c.wait_for(lambda m: m["kind"] == "cancel" and m["re"] == rid)
+    finally:
+        c.leave()
+
+
+def test_extra_image_metadata_on_a_request_cannot_crash_logging(pair):
+    a, _ = pair
+    ack = a.request("elrobot-b", "hold", images=[{"data_b64": 42}])
+    assert ack["request"]["state"] == "open"

@@ -3,8 +3,8 @@ an SO-101 twin and an ElRobot twin, each its own Generaloid MCP process with the
 generaloid.core.hooks. The SO-101 asks the ElRobot to hold the bottle; the ElRobot's agent accepts and moves its
 own twin's gripper with its own tool.
 
-Skipped until generaloid.core.server exists in this checkout (it lives on branch r5-generaloid). Verified before the
-merge on a scratch copy that combined both branches (docs/comms/JOURNAL.md, 08:40).
+Skipped until generaloid.core.server exists in this checkout (it lives on branch r5-generaloid). The takeover
+also verifies it on a temporary copy combining both branches; see docs/comms/JOURNAL.md for evidence.
 """
 import asyncio
 import contextlib

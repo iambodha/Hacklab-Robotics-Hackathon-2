@@ -21,7 +21,7 @@ ELROBOT_TWIN = SimpleNamespace(
     skills=["twist_cap", "check_cap", "stir_spoon", "move_tcp", "gripper", "look"],
     capabilities=["7dof-arm", "parallel-gripper", "wrist-camera", "overview-camera", "twin"],
     frames={"world": "table", "units": "m",
-            "convention": "sim base frame: +x ahead of the arm, +y left, z up; the table's ArUco frame is shared"},
+            "convention": "sim base frame: +x ahead of the arm, +y left, z up; cross-robot alignment requires calibration"},
 )
 
 

@@ -115,7 +115,8 @@ def _strip_images(payload: dict) -> dict:
     """Log copy of a payload: inline image data replaced by its size, so the log stays small."""
     if not isinstance(payload.get("images"), list):
         return payload
-    imgs = [{**{k: v for k, v in i.items() if k != "data_b64"}, "data_b64_len": len(i["data_b64"])}
+    imgs = [{**{k: v for k, v in i.items() if k != "data_b64"},
+             "data_b64_len": len(i["data_b64"]) if isinstance(i["data_b64"], str) else None}
             if isinstance(i, dict) and "data_b64" in i else i for i in payload["images"]]
     return {**payload, "images": imgs}
 
@@ -238,6 +239,8 @@ class Hub:
         resumed = False
         if old is not None:
             resume = body.get("resume") or ""
+            if not isinstance(resume, str):
+                raise HubError(400, "resume must be a string")
             if resume and hmac.compare_digest(_hash(resume), old.session_hash):
                 resumed = True
             elif self._alive(old, now, self.config.peer_stale_s):
@@ -265,18 +268,23 @@ class Hub:
                 "peers": self.roster(now)}
 
     def send(self, peer: Peer, body: dict) -> dict:
+        self.sweep()  # enforce deadlines even between periodic sweeps
         now = self.clock()
         try:
             env = P.validate_envelope(body)
         except P.ProtocolError as e:
             raise HubError(e.code, str(e))
         key = (peer.robot_id, env["id"])
+        fingerprint = _hash(json.dumps(env, sort_keys=True, allow_nan=False))
         if key in self.seen:                         # idempotent retry: same answer, no second delivery
-            return {**self.seen[key], "duplicate": True}
+            previous, original = self.seen[key]
+            if fingerprint != original:
+                raise HubError(409, "message id reused with different content")
+            return {**previous, "duplicate": True}
         if not peer.send_bucket.take(now):
             raise HubError(429, f"rate limit: more than {self.config.send_rate:g} messages/s")
         to = env["to"]
-        if to != P.BROADCAST and to not in self.peers:
+        if env["kind"] != "cancel" and to != P.BROADCAST and to not in self.peers:
             raise HubError(404, f"no robot {to!r} in this session (see /v1/peers)")
         if to == peer.robot_id:
             raise HubError(400, "a robot cannot message itself")
@@ -289,18 +297,22 @@ class Hub:
             elif kind in P.REPLY_KINDS | P.CANCEL_KINDS:
                 request = self.tracker.apply(env, peer.robot_id, now)
                 if kind == "cancel":                 # a cancel goes wherever the request went
-                    to = request.assignee or request.to
+                    to = request.to if request.to == P.BROADCAST else request.assignee or request.to
         except P.ProtocolError as e:
             raise HubError(e.code, str(e))
         msg = {**env, "to": to, "from": peer.robot_id, "ts": round(now, 3)}
-        targets = [p for p in self.peers.values() if p is not peer] if to == P.BROADCAST else [self.peers[to]]
+        targets = [p for p in self.peers.values() if p is not peer] if to == P.BROADCAST else \
+            ([self.peers[to]] if to in self.peers else [])
         for t in targets:
             self._deliver(t, msg)
+        if kind == "accept" and request.to == P.BROADCAST:
+            others = [p for p in self.peers.values() if p.robot_id not in (peer.robot_id, request.requester)]
+            self._system(others, "request_claimed", {"assignee": peer.robot_id}, re=request.id)
         self._log("message", **{k: msg[k] for k in ("id", "kind", "from", "to", "re")},
                   payload=_strip_images(env["payload"]), delivered_to=[t.robot_id for t in targets])
         ack = {"ok": True, "id": env["id"], "ts": msg["ts"], "delivered_to": [t.robot_id for t in targets],
                "request": request.view(now) if request else None}
-        self.seen[key] = ack
+        self.seen[key] = (ack, fingerprint)
         while len(self.seen) > self.config.seen_ids_max:
             self.seen.popitem(last=False)
         return ack
@@ -351,14 +363,23 @@ def create_app(hub: Hub) -> Starlette:
     cfg = hub.config
 
     async def body_json(req: HTTPRequest) -> dict:
-        if int(req.headers.get("content-length") or 0) > cfg.max_body_bytes:
-            raise HubError(413, f"body larger than {cfg.max_body_bytes} bytes")
-        raw = await req.body()
-        if len(raw) > cfg.max_body_bytes:
-            raise HubError(413, f"body larger than {cfg.max_body_bytes} bytes")
         try:
-            data = json.loads(raw or b"{}")
+            length = int(req.headers.get("content-length") or 0)
         except ValueError:
+            raise HubError(400, "invalid content-length")
+        if length > cfg.max_body_bytes:
+            raise HubError(413, f"body larger than {cfg.max_body_bytes} bytes")
+        raw = bytearray()
+        async for chunk in req.stream():
+            if len(raw) + len(chunk) > cfg.max_body_bytes:
+                raise HubError(413, f"body larger than {cfg.max_body_bytes} bytes")
+            raw.extend(chunk)
+        try:
+            def bad_constant(value):
+                raise ValueError(f"non-finite JSON number: {value}")
+            data = json.loads(raw or b"{}", parse_constant=bad_constant)
+            json.dumps(data, allow_nan=False)  # also reject overflow such as 1e999
+        except (ValueError, RecursionError):
             raise HubError(400, "body is not JSON")
         if not isinstance(data, dict):
             raise HubError(400, "body must be a JSON object")
@@ -391,7 +412,7 @@ def create_app(hub: Hub) -> Starlette:
     def _int(req, name, default, lo, hi):
         try:
             return max(lo, min(hi, int(float(req.query_params.get(name, default)))))
-        except ValueError:
+        except (ValueError, OverflowError):
             raise HubError(400, f"{name} must be a number")
 
     @handler
@@ -533,6 +554,8 @@ class HubServer:
     @property
     def url(self) -> str:
         host = "127.0.0.1" if self.host in ("0.0.0.0", "") else self.host
+        if ":" in host:
+            host = f"[{host}]"
         return f"http://{host}:{self.port}"
 
     def stop(self):

@@ -1,17 +1,17 @@
-[ 1.80s] -: two MCP server processes up: python -m generaloid serve --connector elrobot --mode sim | serve --connector so101 --mode sim
-[ 1.91s] A: comms_host -> hub at http://127.0.0.1:59262 (A is elrobot-a)
-[ 1.97s] B: comms_join -> joined as so101-b; peers: ['elrobot-a']
-[ 1.97s] B: comms_peers -> elrobot-a: connector=elrobot, skills=['camera_info', 'drop', 'episodes', 'grab', 'gripper', 'joint_state', 'look', 'move_tcp', 'move_to', 'operator_reset_scene', 'pick', 'pixel_to_table', 'set_torque', 'skill_config', 'stir', 'survey', 'tcp_pose', 'touch_table', 'twist_cap', 'wipe']
-[ 1.97s] B: comms_send help -> request 8cd6978f state=open, deadline in 120.0 s
-[ 1.98s] B: comms_send observation -> bottle pose in the shared table frame
-[ 1.98s] A: comms_inbox -> help from so101-b: "hold the bottle body still while I unscrew the cap" (untrusted; A's agent decides)
-[ 1.98s] A: comms_reply accept -> state=accepted
-[ 1.98s] A: comms_reply progress 0.3 (approach)
-[ 2.49s] A: gripper(0.9) on its own twin
-[ 2.49s] A: gripper(0.2) REFUSED by A's own envelope: j8: 0.900->0.200 exceeds max delta 0.35; use waypoints
-[ 4.31s] A: gripper(0.6), gripper(0.3): closes in waypoints
-[ 4.31s] A: comms_reply progress 0.8 (holding)
-[ 4.32s] A: comms_reply result ok -> state=done
-[ 4.32s] B: comms_inbox -> ['accept', 'progress', 'progress', 'result']; result: "holding the bottle; go ahead"
-[ 4.32s] B: comms_requests -> 8cd6978f done, history ['help', 'accept', 'progress', 'progress', 'result']
-[ 4.61s] -: hub log: docs/comms/evidence/generaloid_demo_hub.jsonl
+[ 3.80s] -: two MCP server processes up: python -m generaloid serve --connector elrobot --mode sim | serve --connector so101 --mode sim
+[ 4.02s] A: comms_host -> hub at http://127.0.0.1:62623 (A is elrobot-a)
+[ 4.14s] B: comms_join -> joined as so101-b; peers: ['elrobot-a']
+[ 4.15s] B: comms_peers -> elrobot-a: connector=elrobot, skills=['camera_info', 'drop', 'episodes', 'grab', 'gripper', 'joint_state', 'look', 'move_tcp', 'move_to', 'operator_reset_scene', 'pick', 'pixel_to_table', 'set_torque', 'skill_config', 'stir', 'survey', 'tcp_pose', 'touch_table', 'twist_cap', 'wipe']
+[ 4.16s] B: comms_send help -> request 767bd81f state=open, deadline in 120.0 s
+[ 4.16s] B: comms_send observation -> bottle pose in the shared table frame
+[ 4.17s] A: comms_inbox -> help from so101-b: "hold the bottle body still while I unscrew the cap" (untrusted; A's agent decides)
+[ 4.18s] A: comms_reply accept -> state=accepted
+[ 4.19s] A: comms_reply progress 0.3 (approach)
+[ 4.70s] A: gripper(0.9) on its own twin
+[ 4.70s] A: gripper(0.2) REFUSED by A's own envelope: j8: 0.900->0.200 exceeds max delta 0.35; use waypoints
+[ 6.54s] A: gripper(0.6), gripper(0.3): closes in waypoints
+[ 6.55s] A: comms_reply progress 0.8 (scripted holding stage; physical grasp unverified)
+[ 6.57s] A: comms_reply result ok -> state=done
+[ 6.57s] B: comms_inbox -> ['accept', 'progress', 'progress', 'result']; result: "twin action complete; physical bottle hold not verified"
+[ 6.58s] B: comms_requests -> 767bd81f done, history ['help', 'accept', 'progress', 'progress', 'result']
+[ 6.99s] -: hub log: /Volumes/Dell HDD/Robotics-Hackathon/r5-comms/takeover-generaloid-hub.jsonl

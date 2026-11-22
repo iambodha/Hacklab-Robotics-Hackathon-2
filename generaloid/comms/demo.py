@@ -110,14 +110,17 @@ async def help_scenario(a: Agent, b: Agent, twin_action, token: str = DEMO_TOKEN
     say("A", "comms_reply progress 0.3 (approach)")
     evidence = await twin_action(a)
     await a.j("comms_reply", request_id=rid, kind="progress", payload={"fraction": 0.8, "stage": "holding"})
-    say("A", "comms_reply progress 0.8 (holding)")
+    say("A", "comms_reply progress 0.8 (scripted holding stage; physical grasp unverified)")
     res = await a.j("comms_reply", request_id=rid, kind="result",
-                    payload={"ok": True, "summary": "holding the bottle; go ahead", "data": evidence})
+                    payload={"ok": True, "summary": "twin action complete; physical bottle hold not verified", "data": evidence})
     say("A", f"comms_reply result ok -> state={res['request']['state']}")
     assert res["request"]["state"] == "done"
 
     got = []
+    deadline = asyncio.get_running_loop().time() + 15.0
     while not got or got[-1]["kind"] != "result":
+        if asyncio.get_running_loop().time() >= deadline:
+            raise AssertionError("B did not receive a result within 15 s after A sent it")
         got += [m for m in (await b.j("comms_inbox", wait_s=1.0))["messages"] if m.get("re") == rid]
     say("B", f"comms_inbox -> {[m['kind'] for m in got]}; result: \"{got[-1]['payload']['summary']}\"")
     assert [m["kind"] for m in got] == ["accept", "progress", "progress", "result"]

@@ -122,3 +122,29 @@ def test_expiry_and_prune():
     assert t.expire(200.0) == []                           # only once
     t.prune(105.0 + 601, keep_s=600)
     assert r.id not in t.requests
+
+
+@pytest.mark.parametrize("msg", [
+    {**env("accept", re=P.new_id()), "kind": []},
+    {**env("accept", re=P.new_id()), "v": True},
+    {**env("accept", re=P.new_id()), "payload": []},
+    env("observation", payload={"images": [{"mime": "image/png", "data_b64": "%%%"}]}),
+    env("observation", payload={"poses": [{"name": "b", "frame": "world", "xyz": [float("inf"), 0, 0]}]}),
+    env("request", payload={"task": "t", "args": {"x": float("nan")}}),
+])
+def test_malformed_shapes_and_nonfinite_values_are_protocol_errors(msg):
+    with pytest.raises(P.ProtocolError):
+        P.validate_envelope(msg)
+
+
+def test_hello_rejects_malformed_transform():
+    with pytest.raises(P.ProtocolError, match="base_in_world"):
+        P.validate_hello({"robot_id": "so101-a", "frames": {"base_in_world": [1, 2, 3]}})
+
+
+def test_oversized_integer_pose_and_reach_are_rejected_cleanly():
+    huge = 10 ** 400
+    with pytest.raises(P.ProtocolError):
+        P.validate_pose({"name": "b", "frame": "world", "xyz": [huge, 0, 0]})
+    with pytest.raises(P.ProtocolError):
+        P.validate_hello({"robot_id": "robot-a", "reach": {"max_radius": huge}})

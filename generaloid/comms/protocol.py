@@ -14,6 +14,10 @@ envelope. See docs/comms/SECURITY.md.
 """
 from __future__ import annotations
 
+import base64
+import binascii
+import json
+import math
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -24,8 +28,7 @@ SUPPORTED_VERSIONS = (1,)
 HUB_ID = "hub"                     # "from" of messages the hub itself generates
 BROADCAST = "*"
 
-# Limits. Chosen so a 640x480 JPEG thumbnail fits inline (~60-120 KB base64) with room for poses and notes, and so a
-# misbehaving peer cannot make the hub hold more than a few MB per mailbox.
+# Schema text limits keep prompts bounded; HubConfig separately caps body size and mailbox message count.
 MAX_TEXT = 4000                    # prompt / problem / note / summary characters
 MAX_TASK = 200                     # task name characters
 DEFAULT_TTL_S = 120.0              # a request nobody finishes within 2 min expires (a twist_cap run takes ~60-90 s)
@@ -40,7 +43,7 @@ REPLY_KINDS = frozenset({"accept", "reject", "progress", "result"})  # sent by t
 CANCEL_KINDS = frozenset({"cancel"})                             # sent by the requester, `re` = request id
 INFO_KINDS = frozenset({"observation", "status", "message"})     # fire-and-forget
 CLIENT_KINDS = REQUEST_KINDS | REPLY_KINDS | CANCEL_KINDS | INFO_KINDS
-SYSTEM_KINDS = frozenset({"peer_joined", "peer_left", "expired"})  # only the hub sends these
+SYSTEM_KINDS = frozenset({"peer_joined", "peer_left", "expired", "request_claimed"})  # only the hub sends these
 ALL_KINDS = CLIENT_KINDS | SYSTEM_KINDS | {"hello", "heartbeat"}  # hello = POST /v1/join, heartbeat = POST /v1/heartbeat
 
 # Request lifecycle. Terminal states never change again.
@@ -89,9 +92,18 @@ def _dict(p: dict, key: str):
     _need(p.get(key) is None or isinstance(p[key], dict), f"payload.{key} must be an object")
 
 
+def _finite_number(x):
+    if not isinstance(x, (int, float)) or isinstance(x, bool):
+        return False
+    try:
+        return math.isfinite(x)
+    except OverflowError:
+        return False
+
+
 def _floats(v, n: int, what: str):
-    _need(isinstance(v, list) and len(v) == n and all(isinstance(x, (int, float)) and not isinstance(x, bool)
-                                                       for x in v), f"{what} must be a list of {n} numbers")
+    _need(isinstance(v, list) and len(v) == n and all(_finite_number(x) for x in v),
+          f"{what} must be a list of {n} finite numbers")
 
 
 def validate_pose(pose: dict, where: str = "pose") -> None:
@@ -111,6 +123,10 @@ def validate_image(img: dict, where: str = "image") -> None:
     if "data_b64" in img:
         _need(isinstance(img["data_b64"], str), f"{where}.data_b64 must be a string")
         _need(img.get("mime") in ("image/jpeg", "image/png", "image/webp"), f"{where}.mime must be image/jpeg|png|webp")
+        try:
+            base64.b64decode(img["data_b64"], validate=True)
+        except (ValueError, binascii.Error):
+            raise ProtocolError(f"{where}.data_b64 must be valid base64")
     else:
         _need(isinstance(img["url"], str) and img["url"].startswith(("https://", "http://")), f"{where}.url must be http(s)")
 
@@ -164,12 +180,16 @@ def validate_payload(kind: str, p: dict) -> None:
 def validate_envelope(msg: dict) -> dict:
     """Check a client-sent envelope; return the normalised copy the hub routes. Raises ProtocolError."""
     _need(isinstance(msg, dict), "message must be a JSON object")
+    try:
+        json.dumps(msg, allow_nan=False)
+    except (ValueError, TypeError, RecursionError):
+        raise ProtocolError("message must contain finite JSON values")
     v = msg.get("v", VERSION)
-    _need(v in SUPPORTED_VERSIONS, f"unsupported protocol version {v!r}; this hub speaks {list(SUPPORTED_VERSIONS)}", 426)
+    _need(type(v) is int and v in SUPPORTED_VERSIONS, f"unsupported protocol version {v!r}; this hub speaks {list(SUPPORTED_VERSIONS)}", 426)
     mid = msg.get("id")
     _need(isinstance(mid, str) and ID_RE.match(mid), "id must be 8-64 chars of [A-Za-z0-9_-] (use a uuid4 hex)")
     kind = msg.get("kind")
-    _need(kind in CLIENT_KINDS, f"kind must be one of {sorted(CLIENT_KINDS)}")
+    _need(isinstance(kind, str) and kind in CLIENT_KINDS, f"kind must be one of {sorted(CLIENT_KINDS)}")
     to = msg.get("to")
     _need(isinstance(to, str) and (to == BROADCAST or ROBOT_ID_RE.match(to)), "to must be a robot id or '*'")
     _need(not (kind == "request" and to == BROADCAST), "a request goes to one robot; broadcast a 'help' instead")
@@ -179,7 +199,7 @@ def validate_envelope(msg: dict) -> dict:
         _need(to != BROADCAST or kind == "cancel", f"{kind} goes to one robot")
     else:
         _need(re_ is None or (isinstance(re_, str) and ID_RE.match(re_)), "re must be a message id")
-    payload = msg.get("payload") or {}
+    payload = msg.get("payload", {})
     validate_payload(kind, payload)
     return {"v": VERSION, "id": mid, "kind": kind, "to": to, "re": re_, "payload": payload}
 
@@ -191,7 +211,7 @@ def validate_hello(h: dict) -> dict:
     _need(isinstance(rid, str) and ROBOT_ID_RE.match(rid) and rid != HUB_ID,
           "robot_id must match [a-z0-9][a-z0-9_.-]{1,47} (e.g. 'so101-a', 'elrobot-b')")
     versions = h.get("protocol_versions", [VERSION])
-    _need(isinstance(versions, list) and any(x in SUPPORTED_VERSIONS for x in versions),
+    _need(isinstance(versions, list) and any(type(x) is int and x in SUPPORTED_VERSIONS for x in versions),
           f"no common protocol version (hub: {list(SUPPORTED_VERSIONS)}, peer: {versions})", 426)
     lists = {k: h.get(k) or [] for k in ("capabilities", "skills")}
     for k, v in lists.items():
@@ -199,11 +219,12 @@ def validate_hello(h: dict) -> dict:
     frames = h.get("frames") or {}
     _need(isinstance(frames, dict), "frames must be an object")
     if frames.get("base_in_world") is not None:
+        _need(isinstance(frames["base_in_world"], dict), "frames.base_in_world must be an object")
         validate_pose({"name": "base", **frames["base_in_world"]}, "frames.base_in_world")
     for k in ("connector", "display_name", "agent"):
         _need(h.get(k) is None or (isinstance(h[k], str) and len(h[k]) <= MAX_TASK), f"{k} must be a short string")
     reach = h.get("reach") or {}
-    _need(isinstance(reach, dict) and all(isinstance(v, (int, float)) for v in reach.values()),
+    _need(isinstance(reach, dict) and all(_finite_number(v) for v in reach.values()),
           "reach must be an object of numbers (e.g. max_radius, min_tcp_z, max_tcp_z in metres)")
     return {"robot_id": rid, "connector": h.get("connector") or "unknown", "display_name": h.get("display_name") or rid,
             "agent": h.get("agent") or "", **lists, "frames": frames, "reach": reach, "protocol_version": VERSION}

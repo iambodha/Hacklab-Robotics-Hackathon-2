@@ -49,6 +49,7 @@ class CommsClient:
         self.http = httpx.Client(transport=transport, timeout=timeout, follow_redirects=False,
                                  headers={"User-Agent": f"{P.PROTOCOL}/{P.VERSION}"})
         self.session: str | None = None
+        self.generation = 0  # discard a poll response from a session replaced by a concurrent send/rejoin
         self.cursor = 0                       # last hub seq received (acked on the next poll)
         self.n = 0                            # local message counter, what comms_inbox(since) refers to
         self.messages: deque = deque(maxlen=LOCAL_KEEP)
@@ -83,9 +84,13 @@ class CommsClient:
         if self.session:
             body["resume"] = self.session
         data = self._call("POST", "/v1/join", auth=self.token, json=body)
-        self.session = data["session"]
-        if not data["resumed"]:
-            self.cursor = data["cursor"]
+        with self.cond:
+            self.session = data["session"]
+            self.generation += 1
+            if not data["resumed"]:
+                self.cursor = data["cursor"]
+                self.incoming.clear()
+                self.closed.clear()
         self.peers_cache = data["peers"]
         self.connected, self.last_error = True, ""
         if start_polling and (self.thread is None or not self.thread.is_alive()):
@@ -94,8 +99,10 @@ class CommsClient:
             self.thread.start()
         return data
 
-    def _rejoin(self):
+    def _rejoin(self, failed_session):
         with self.join_lock:
+            if self.stop_ev.is_set() or self.session != failed_session:
+                return
             self.reconnects += 1
             self.join(start_polling=False)
 
@@ -115,11 +122,16 @@ class CommsClient:
     def _poll_loop(self):
         backoff = BACKOFF_MIN_S
         while not self.stop_ev.is_set():
+            with self.cond:
+                session, generation, cursor = self.session, self.generation, self.cursor
             try:
-                data = self._call("GET", "/v1/inbox", params={"since": self.cursor, "wait": self.poll_wait},
+                data = self._call("GET", "/v1/inbox", auth=session, params={"since": cursor, "wait": self.poll_wait},
                                   timeout=self.poll_wait + 15)
-                self._ingest(data["messages"])
-                self.cursor = max(self.cursor, data["cursor"])
+                with self.cond:
+                    if generation != self.generation:
+                        continue
+                    self._ingest(data["messages"])
+                    self.cursor = max(self.cursor, data["cursor"])
                 self.connected, backoff = True, BACKOFF_MIN_S
             except CommsError as e:
                 if self.stop_ev.is_set():
@@ -127,7 +139,7 @@ class CommsClient:
                 self.connected, self.last_error = False, str(e)
                 if e.code == 401:
                     try:
-                        self._rejoin()
+                        self._rejoin(session)
                         continue
                     except (CommsError, httpx.HTTPError) as e2:
                         self.last_error = f"rejoin failed: {e2}"
@@ -154,7 +166,7 @@ class CommsClient:
                 self.messages.append(local)
                 if m["kind"] in P.REQUEST_KINDS:
                     self.incoming[m["id"]] = local
-                elif m["kind"] in ("cancel", "expired") and m.get("re"):
+                elif m["kind"] in ("cancel", "expired", "request_claimed") and m.get("re"):
                     self.closed.add(m["re"])
                 elif m["kind"] == "peer_joined":
                     rid = m["payload"]["peer"]["robot_id"]
@@ -162,6 +174,10 @@ class CommsClient:
                         [{**m["payload"]["peer"], "online": True}]
                 elif m["kind"] == "peer_left":
                     self.peers_cache = [p for p in self.peers_cache if p["robot_id"] != m["payload"]["robot_id"]]
+            # Keep request bookkeeping bounded alongside the replay cache. The hub remains authoritative.
+            while len(self.incoming) > LOCAL_KEEP:
+                self.incoming.pop(next(iter(self.incoming)))
+            self.closed.intersection_update(self.incoming)
             self.cond.notify_all()
 
     def inbox(self, since: int = 0, wait: float = 0.0, kinds: set | None = None) -> list[dict]:
@@ -195,13 +211,14 @@ class CommsClient:
         P.validate_envelope(env)                           # fail fast, locally, with the same rules as the hub
         last: Exception | None = None
         for attempt in range(SEND_RETRIES + 1):
+            session = self.session
             try:
-                return self._call("POST", "/v1/send", json=env)
+                return self._call("POST", "/v1/send", auth=session, json=env)
             except CommsError as e:
                 if e.code != 401 or attempt == SEND_RETRIES:
                     raise
                 last = e
-                self._rejoin()
+                self._rejoin(session)
             except httpx.HTTPError as e:                   # the hub may or may not have it: retry with the same id
                 last = e
                 time.sleep(min(BACKOFF_MAX_S, BACKOFF_MIN_S * 2 ** attempt))
@@ -235,7 +252,8 @@ class CommsClient:
 
     def waiting_for_me(self) -> list[dict]:
         """Incoming requests still waiting for this robot's decision or result."""
-        return [m for rid, m in self.incoming.items() if rid not in self.closed]
+        with self.cond:
+            return [m for rid, m in self.incoming.items() if rid not in self.closed]
 
     def cancel(self, request_id: str, reason: str = "") -> dict:
         return self.send(P.BROADCAST, "cancel", {"reason": reason}, re=request_id)
