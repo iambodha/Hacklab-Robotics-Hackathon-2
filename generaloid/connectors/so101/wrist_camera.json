@@ -1,0 +1,46 @@
+{
+  "frame": "gripper link frame of so101_robot_follower.urdf (metres); child of joint 5",
+  "source": {
+    "urdf": "software/station/clients/station-viewer/public/devices/so101/so101_robot_follower.urdf",
+    "mount": "SO-101 top wrist camera mount + Innomaker-U20CAM-1080p-S1",
+    "calibrated_against_bus": "5A46084639"
+  },
+  "T_link_camera": [
+    [
+      0.999391,
+      -0.009911,
+      0.033457,
+      0.002
+    ],
+    [
+      0.0,
+      -0.95882,
+      -0.284015,
+      0.075
+    ],
+    [
+      0.034899,
+      0.283842,
+      -0.958235,
+      -0.008
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "camera_convention": "OpenCV: x right, y down, z = optical axis",
+  "fovy_deg": 52.0,
+  "image_size": [
+    398,
+    224
+  ],
+  "tcp_m": [
+    0.014,
+    0.0,
+    -0.093
+  ],
+  "tcp_note": "grasp point between fixed jaw (-0.008 x) and open moving jaw (+0.048 x at j6=0.5); approach along -z"
+}

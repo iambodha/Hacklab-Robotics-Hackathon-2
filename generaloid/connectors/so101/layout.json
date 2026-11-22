@@ -1,0 +1,174 @@
+{
+  "_notes": [
+    "SO-101 table twin matching live setup (Innomaker-U20CAM-1080p-S1 398x224 wrist camera, open box on front-right).",
+    "Units: metres and degrees. Origin: joint 1 axis on the table top (z = 0), +y straight ahead, +x arm's right.",
+    "Ported from origin/simulation_s101 sim/layout_so101.json (e8789ec). Built by generaloid/connectors/so101/scene.py into generaloid/.generated/so101/."
+  ],
+  "robot_model": "so101",
+  "table": {
+    "size": [
+      1.0,
+      0.7
+    ],
+    "thickness": 0.03,
+    "height": 0.75,
+    "back_edge_y": -0.1,
+    "rgba": [
+      0.88,
+      0.88,
+      0.87,
+      1
+    ]
+  },
+  "arm_rgba": [
+    0.14,
+    0.14,
+    0.16,
+    1
+  ],
+  "rest_pose": [
+    -0.0868,
+    -1.6709,
+    1.5493,
+    0.958,
+    -1.2755,
+    -0.1354
+  ],
+  "bins": [
+    {
+      "name": "white_box",
+      "pos": [
+        0.15,
+        0.17
+      ],
+      "yaw": -8,
+      "size": [
+        0.15,
+        0.12,
+        0.065
+      ],
+      "wall": 0.004,
+      "rgba": [
+        0.82,
+        0.82,
+        0.84,
+        1
+      ],
+      "inner_rgba": [
+        0.92,
+        0.92,
+        0.9,
+        1
+      ],
+      "flaps": [
+        {
+          "side": "front",
+          "length": 0.06,
+          "angle": 125
+        }
+      ]
+    }
+  ],
+  "objects": [
+    {
+      "name": "black_cube",
+      "pos": [
+        0.0,
+        0.19,
+        0.01
+      ],
+      "yaw": 10,
+      "mass": 0.008,
+      "parts": [
+        {
+          "type": "box",
+          "size": [
+            0.01,
+            0.01,
+            0.01
+          ],
+          "rgba": [
+            0.08,
+            0.08,
+            0.1,
+            1
+          ]
+        }
+      ],
+      "randomize": {
+        "x": [
+          -0.07,
+          0.05
+        ],
+        "y": [
+          0.14,
+          0.23
+        ],
+        "yaw": [
+          -45,
+          45
+        ]
+      }
+    }
+  ],
+  "fixed": [],
+  "cameras": [
+    {
+      "name": "overview_cam",
+      "pos": [
+        0.0,
+        0.52,
+        0.36
+      ],
+      "lookat": [
+        0.02,
+        0.14,
+        0.0
+      ],
+      "fovy": 58
+    },
+    {
+      "name": "top_cam",
+      "pos": [
+        0.02,
+        0.18,
+        0.75
+      ],
+      "lookat": [
+        0.02,
+        0.17,
+        0.0
+      ],
+      "fovy": 52
+    },
+    {
+      "name": "side_cam",
+      "pos": [
+        -0.75,
+        0.25,
+        0.38
+      ],
+      "lookat": [
+        0.04,
+        0.15,
+        0.1
+      ],
+      "fovy": 45
+    }
+  ],
+  "wrist_camera": {
+    "pose_file": "wrist_camera.json",
+    "fovy": 52
+  },
+  "image_size": [
+    398,
+    224
+  ],
+  "reach": {
+    "show_rings": false,
+    "samples": 120000,
+    "top_down_tolerance_deg": 30,
+    "position_tolerance": 0.015,
+    "bin_drop_clearance": 0.05
+  }
+}
