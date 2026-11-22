@@ -294,6 +294,19 @@ def test_preflight_skipped_when_twin_unavailable_or_out_of_time(kin):
 
 
 # --- 2. wipe: executed through the phases, scored by skills/eval ----------------------------------------------------------
+def test_executor_overview_camera_matches_calibration_with_distortion():
+    from executor.evaluator import _camera
+    from executor.perception import camera_info_from_scene
+    from skills.eval import Camera
+    sc = load_scene_calib()
+    ref = Camera.from_scene_calib(sc)
+    info = camera_info_from_scene(sc)["overview"]
+    assert np.allclose(info["dist"][:5], sc["cameras"]["overview"]["dist"][:5])
+    pts = np.array([[x, y, 0.0] for x in (0.15, 0.3, 0.45) for y in (-0.15, 0.0, 0.15)])
+    uv = ref.project(pts)
+    assert np.abs(_camera(info).project(pts) - uv).max() < 1e-6
+
+
 def test_wipe_plan_scored_by_skills_eval(wex):
     from skills.eval import Camera, synth
     from skills.wipe import WipeSkill

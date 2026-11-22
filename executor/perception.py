@@ -98,7 +98,7 @@ class PerceptionLocator(Locator):
             W, H = int(info["width"]), int(info["height"])
             T = np.eye(4)
             T[:3, :3], T[:3, 3] = np.array(info["R_base_cam"], float), np.array(info["t_base_cam"], float)
-            d["cameras"]["overview"].update(image_size=[W, H], dist=[0.0] * 5, T_world_cam=T.tolist(), intrinsics_source=info.get("source"),
+            d["cameras"]["overview"].update(image_size=[W, H], dist=list(info.get("dist") or [0.0] * 5), T_world_cam=T.tolist(), intrinsics_source=info.get("source"),
                                             K_normalized={"fx": info["fx"] / W, "fy": info["fy"] / H, "cx": info["cx"] / W, "cy": info["cy"] / H})
             self._scenes = {key: self.Scene.from_dict(d)}
         return self._scenes[key]
@@ -218,4 +218,5 @@ def camera_info_from_scene(scene: dict | None) -> dict:
     W, H = c["image_size"]
     K = c["K_normalized"]
     return {"overview": {"width": W, "height": H, "fx": K["fx"] * W, "fy": K["fy"] * H, "cx": K["cx"] * W, "cy": K["cy"] * H,
-                         "R_base_cam": T[:3, :3].tolist(), "t_base_cam": T[:3, 3].tolist(), "source": "scene_calib.json"}}
+                         "R_base_cam": T[:3, :3].tolist(), "t_base_cam": T[:3, 3].tolist(), "dist": [float(d) for d in c.get("dist", [0.0] * 5)],
+                         "source": "scene_calib.json"}}

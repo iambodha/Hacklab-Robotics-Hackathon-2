@@ -87,3 +87,22 @@ def test_container_belief_is_not_dragged_by_a_merged_blob(overview):
     big = Detection('o1', 'overview', 90, 120, (40, 60, 140, 150), 9000, 'black', (10, 10, 10), contour, base_u=(40, 140, 150))
     w._associate([big])
     assert np.allclose(w.entities['box'].xyz[:2], [0.24, 0.06]) and not w.entities['box'].visible
+
+
+def test_camera_distortion_roundtrip_matches_opencv_model():
+    from conftest import OVERVIEW
+    from s2.geometry import Camera
+    cam = Camera.from_info({**OVERVIEW, 'dist': [0.0688, -0.0506, 0.001, -0.002, 0.0]})
+    pin = Camera.from_info(OVERVIEW)
+    pts = np.array([[x, y, 0.0] for x in (-0.15, 0.0, 0.15) for y in (0.0, 0.1, 0.25)])
+    uv, _ = cam.project(pts)
+    assert np.abs(uv - pin.project(pts)[0]).max() > 0.5                   # the distortion is really applied
+    k1, k2, p1, p2, k3 = cam.dist                                          # independent OpenCV formula on one point
+    pc = (pts[0] - cam.t) @ cam.R
+    x, y = pc[:2] / pc[2]
+    r2 = x * x + y * y
+    rad = 1 + k1 * r2 + k2 * r2 ** 2 + k3 * r2 ** 3
+    xd, yd = x * rad + 2 * p1 * x * y + p2 * (r2 + 2 * x * x), y * rad + p1 * (r2 + 2 * y * y) + 2 * p2 * x * y
+    assert np.allclose(uv[0], [cam.fx * xd + cam.cx, cam.fy * yd + cam.cy])
+    back = np.array([cam.to_plane(u, v, 0.0) for u, v in uv])
+    assert np.abs(back - pts).max() < 1e-6
