@@ -89,6 +89,38 @@ def camera_axes(pos, lookat):
     return np.r_[x, np.cross(z, x)]
 
 
+# MuJoCo only uses focal/principal when a sensorsize is given; only their ratios matter, so 1 mm "pixels".
+SENSOR_PITCH_M = 1e-3
+
+
+def camera_lens(cam, image_size):
+    """MJCF lens attributes of a layout camera: its calibrated pinhole when it has one (K_normalized: OpenCV,
+    pixel-centre coordinates, normalised by the image width/height), else fovy. fovy alone puts the principal point
+    at the image centre (the overview's is 4 px right of and 6 px below it) with fx = fy. MuJoCo scales the
+    intrinsics to any render size and derives model.cam_fovy from fy; camera_K() returns the matrix it renders with.
+    Lens distortion is not modelled (compare against undistorted real frames)."""
+    k = cam.get('K_normalized')
+    if not k or not image_size:
+        return {'fovy': str(cam['fovy'])}
+    W, H = image_size
+    fx, fy, cx, cy = k['fx'] * W, k['fy'] * H, k['cx'] * W, k['cy'] * H
+    # MuJoCo's principal offset is measured from the image centre ((W-1)/2 in pixel-centre coordinates) and is
+    # positive towards image-left/up (checked by rendering a point with MuJoCo 4.0.1: within 0.1 px at 1x and 2x).
+    return {'resolution': fmt([W, H]), 'sensorsize': fmt([W * SENSOR_PITCH_M, H * SENSOR_PITCH_M]),
+            'focalpixel': fmt([fx, fy]), 'principalpixel': fmt([(W - 1) / 2 - cx, (H - 1) / 2 - cy])}
+
+
+def camera_K(model, cam_id, W, H):
+    """3x3 OpenCV pinhole (pixel-centre coordinates) that MuJoCo renders camera cam_id with at W x H."""
+    sensor = model.cam_sensorsize[cam_id]
+    if sensor[0] > 0 and sensor[1] > 0:
+        fx, fy, px, py = model.cam_intrinsic[cam_id]
+        sx, sy = W / sensor[0], H / sensor[1]
+        return np.array([[fx * sx, 0, (W - 1) / 2 - px * sx], [0, fy * sy, (H - 1) / 2 - py * sy], [0, 0, 1.0]])
+    f = H / 2 / math.tan(math.radians(model.cam_fovy[cam_id]) / 2)
+    return np.array([[f, 0, (W - 1) / 2], [0, f, (H - 1) / 2], [0, 0, 1.0]])
+
+
 def base_arm(out_dir):
     """URDF -> MJCF with position servos; robot self-collision off, contact with the scene on."""
     urdf_path = find_urdf()
@@ -153,7 +185,7 @@ def add_gripper_parts(root, layout):
         T = T.copy(); T[:3, :3] = T[:3, :3] @ np.array([[1, 0, 0], [0, math.cos(a), -math.sin(a)], [0, math.sin(a), math.cos(a)]])
     # OpenCV (x right, y down, z forward) -> MuJoCo camera (x right, y up, looks along -z).
     ET.SubElement(gripper, 'camera', name='wrist_cam', pos=fmt(T[:3, 3]), xyaxes=fmt(np.r_[T[:3, 0], -T[:3, 1]]),
-                  fovy=str(cam['fovy']))
+                  **camera_lens(cam, layout.get('image_size')))
 
 
 def object_quat(spec):
@@ -297,7 +329,8 @@ def build_xml(layout, out_dir):
             pos, axes = T[:3, 3], np.r_[T[:3, 0], -T[:3, 1]]
         else:
             pos, axes = cam['pos'], camera_axes(cam['pos'], cam['lookat'])
-        ET.SubElement(world, 'camera', name=cam['name'], pos=fmt(pos), xyaxes=fmt(axes), fovy=str(cam['fovy']))
+        ET.SubElement(world, 'camera', name=cam['name'], pos=fmt(pos), xyaxes=fmt(axes),
+                      **camera_lens(cam, layout.get('image_size')))
     return root
 
 

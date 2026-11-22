@@ -1,15 +1,17 @@
 """Sim-vs-real check: render the twin's cameras at the real arm's joint state, next to the real Station frames.
 
-  python3 sim/compare_real.py [--layout home] [--frames DIR] [--out sim/real_compare/<timestamp>] [--fit-offsets]
+  python3 sim/compare_real.py [--layout home] [--frames DIR | --capture frames/calib-*] [--out DIR] [--fit-offsets]
 
-Reads one overview + wrist frame and the follower's raw ticks through Station (read-only), sets the twin's joints
-with sim/real_joints.py, renders overview_cam and wrist_cam at the Station resolution and writes:
-  compare.jpg    rows = cameras; columns = real | twin | overlay (real image, real edges green, twin edges magenta,
-                 real marker corners green circles, twin model corners red crosses)
-  metrics.json   per camera: marker corner px error (twin model corners projected vs corners detected in the real
-                 frame; also corners detected in the twin render), table colour error (mean RGB difference of the
-                 table area, and mean per-pixel CIE76 delta E)
-  real_*.jpg, twin_*.png
+Reads one overview + wrist frame and the follower's raw ticks through Station (read-only; or from saved frames),
+sets the twin's joints with sim/real_joints.py, renders overview_cam and wrist_cam at the Station resolution (the
+twin cameras use the calibrated pinhole, build_scene.camera_lens) and writes:
+  compare_<view>.jpg  real (undistorted to the same pinhole) | twin | overlay (real edges green, twin edges magenta,
+                 real marker corners green circles, twin model corners red crosses; overview: arm outlines, real
+                 orange, twin blue). Views: overview, wrist, and wrist_poseNN for a --capture's hand-placed poses.
+  metrics.json   per view: marker corner px error (twin model corners projected vs undistorted corners detected in
+                 the real frame; also corners detected in the twin render), overview arm silhouette (IoU, mean outline
+                 distance real->twin / twin->real), table colour error (mean RGB difference of the table area, and
+                 mean per-pixel CIE76 delta E)
 --fit-offsets instead fits per-joint zero offsets (q = range_fraction + delta) plus the wrist camera mount pitch to
 the same frames (wrist marker corners, wrist jaw edges, overview arm silhouette) and writes offset_fit.{json,jpg}.
 """
@@ -59,31 +61,42 @@ def load_model_from(layout: dict, layout_file: Path):
 
 
 def camera_K(model, cam_id, W, H):
-    f = H / 2 / math.tan(math.radians(model.cam_fovy[cam_id]) / 2)
-    return np.array([[f, 0, W / 2], [0, f, H / 2], [0, 0, 1.0]])
+    return build_scene.camera_K(model, cam_id, W, H)
 
 
 def project(model, data, cam_id, pts, W, H):
-    """World points -> pixels of a MuJoCo camera (pinhole, principal point at the centre)."""
+    """World points -> pixels of a MuJoCo camera (the pinhole it renders with: calibrated K or centred fovy)."""
     R = data.cam_xmat[cam_id].reshape(3, 3) @ build_scene.CV_TO_MJ
     pc = (np.asarray(pts) - data.cam_xpos[cam_id]) @ R
     return (camera_K(model, cam_id, W, H) @ (pc / pc[:, 2:3]).T).T[:, :2], pc[:, 2]
 
 
-def detect(img, dictionary):
-    det = cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(getattr(cv2.aruco, dictionary)),
-                                  cv2.aruco.DetectorParameters())
-    c, ids, _ = det.detectMarkers(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
-    return {} if ids is None else {int(i): cc.reshape(4, 2).astype(float) for i, cc in zip(ids.ravel(), c)}
+def detect(img, dictionary, destripe=()):
+    """Sub-pixel marker corners (perception.aruco: padded, upscaled, edge-refined; destripe for wrist close-ups)."""
+    from perception import aruco
+    return aruco.detect(img, dictionary, destripe=destripe)
+
+
+def _layout_K(cam_layout, W, H):
+    k = cam_layout.get("K_normalized")
+    return None if not k else np.array([[k["fx"] * W, 0, k["cx"] * W], [0, k["fy"] * H, k["cy"] * H], [0, 0, 1.0]])
 
 
 def undistort_px(px, cam_layout, W, H):
     """Real (distorted) pixels -> ideal pinhole pixels with the layout's intrinsics, when it has them."""
-    k, d = cam_layout.get("K_normalized"), cam_layout.get("dist")
-    if not k or not d or not any(d):
+    K, d = _layout_K(cam_layout, W, H), cam_layout.get("dist")
+    if K is None or not d or not any(d):
         return px
-    K = np.array([[k["fx"] * W, 0, k["cx"] * W], [0, k["fy"] * H, k["cy"] * H], [0, 0, 1.0]])
     return cv2.undistortPoints(px.reshape(-1, 1, 2), K, np.array(d, float), P=K).reshape(-1, 2)
+
+
+def undistort_img(img, cam_layout):
+    """Real frame resampled to the ideal pinhole (same K, no distortion): what the twin camera renders."""
+    H, W = img.shape[:2]
+    K, d = _layout_K(cam_layout, W, H), cam_layout.get("dist")
+    if K is None or not d or not any(d):
+        return img
+    return cv2.undistort(img, K, np.array(d, float), None, K)
 
 
 def table_mask(model, renderer, data, cam, layout):
@@ -135,68 +148,194 @@ async def grab_live():
     return {"overview": dec(ov[0]), "wrist": dec(wr[0])}, raw, meta["ranges"]
 
 
-def compare(layout_file, frames, raw, ranges, out: Path) -> dict:
-    model, layout = load_model(layout_file)
+def load_capture(d: Path):
+    """A perception.calib_scene capture (frames/calib-*: overview_*.jpg, wrist_*.jpg, poseNN_wrist_*.jpg, joints.json
+    with Station joints {"j1": {"raw", "lo", "hi"}, ...}) -> per-camera median frames, raw ticks, ranges, and the
+    hand-placed wrist poses [{"name", "wrist", "raw", "ranges"}]. The arm is still while each camera's frames are
+    taken, so the median only removes noise and passers-by."""
+    j = json.loads((d / "joints.json").read_text())
+
+    def ticks(js):
+        return {int(k[1:]): v["raw"] for k, v in js.items()}, {int(k[1:]): (v["lo"], v["hi"]) for k, v in js.items()}
+
+    def median(imgs):
+        return np.median(np.stack(imgs), 0).astype(np.uint8) if imgs else None
+
+    def read(pattern):
+        return [cv2.imread(str(p)) for p in sorted(d.glob(pattern))]
+
+    ov, wr = read("overview_*.jpg"), read("wrist_*.jpg")
+    frames = {"overview": median(ov), "wrist": median(wr), "overview_all": ov, "wrist_all": wr}
+    raw, ranges = ticks(j["joints"])
+    poses = []
+    for k, pj in enumerate(j.get("poses") or []):
+        imgs = read(f"pose{k + 1:02d}_wrist_*.jpg")
+        if imgs:
+            r, rg = ticks(pj)
+            poses.append({"name": f"pose{k + 1:02d}", "wrist": median(imgs), "wrist_all": imgs, "raw": r, "ranges": rg})
+    return frames, raw, ranges, poses
+
+
+# Arm silhouette in the overview: the arm is black plastic on a light table. Real arm pixels are looked for only near
+# the twin's arm (a gross pose error then shows as low IoU, not as a match to the chair behind the table).
+ARM_DARK_GRAY = 80          # gray level below which a pixel is arm (table ~170-200, arm 20-60 in the office frames)
+ARM_ROI_PX = 25             # search band around the twin's arm silhouette
+MARKER_GROW = 1.6           # a marker quad scaled by this covers its white paper border too
+
+
+def arm_geoms(model):
+    root = model.body_rootid[model.site_bodyid[model.site("grasp_tcp").id]]
+    return np.flatnonzero(model.body_rootid[model.geom_bodyid] == root)
+
+
+def segment(renderer, data, cam, opt):
+    renderer.enable_segmentation_rendering()
+    renderer.update_scene(data, camera=cam, scene_option=opt)
+    s = renderer.render()
+    renderer.disable_segmentation_rendering()
+    return np.where(s[..., 1] == int(mujoco.mjtObj.mjOBJ_GEOM), s[..., 0], -1)
+
+
+def silhouette(real, twin_mask, support, real_markers):
+    """-> (real arm mask, metrics): IoU inside the search band and the mean outline distance both ways (px).
+    support: pixels where the twin sees the table or the arm; real dark pixels elsewhere (the chair behind the
+    table's far edge) are not arm candidates."""
+    roi = cv2.dilate(twin_mask.astype(np.uint8), np.ones((2 * ARM_ROI_PX + 1,) * 2, np.uint8)) > 0
+    dark = (cv2.GaussianBlur(cv2.cvtColor(real, cv2.COLOR_BGR2GRAY), (3, 3), 0) < ARM_DARK_GRAY).astype(np.uint8)
+    for pts in real_markers.values():
+        cv2.fillConvexPoly(dark, cv2.convexHull(((pts - pts.mean(0)) * MARKER_GROW + pts.mean(0)).astype(np.int32)), 0)
+    dark = cv2.morphologyEx(dark, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    real_mask = (dark > 0) & roi & support
+    n, lab = cv2.connectedComponents(real_mask.astype(np.uint8))
+    if n > 1:                                   # keep the components that touch the twin arm (drops cable / shadow bits)
+        real_mask = np.isin(lab, [k for k in range(1, n) if (twin_mask & (lab == k)).any()])
+    inter, union = (real_mask & twin_mask).sum(), (real_mask | twin_mask).sum()
+    out = {"iou": round(float(inter / union), 3) if union else None}
+    er, et = _outline(real_mask, 2) & support, _outline(twin_mask, 2) & support
+    if er.any() and et.any():
+        dt_t = cv2.distanceTransform((~et).astype(np.uint8), cv2.DIST_L2, 5)
+        dt_r = cv2.distanceTransform((~er).astype(np.uint8), cv2.DIST_L2, 5)
+        out.update(real_to_twin_px=round(float(dt_t[er].mean()), 2), twin_to_real_px=round(float(dt_r[et].mean()), 2))
+    return real_mask, out
+
+
+def silhouette_panel(real, real_mask, twin_mask, scale=2):
+    """Darkened real frame; arm pixels only real = orange, only twin = blue, both = white."""
+    out = (real * 0.45).astype(np.uint8)
+    out[real_mask & ~twin_mask] = (0, 160, 255)
+    out[twin_mask & ~real_mask] = (255, 120, 0)
+    out[real_mask & twin_mask] = (235, 235, 235)
+    return cv2.resize(out, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
+
+
+def arm_support(seg, model, geoms):
+    names = ("table_top", "table_skin")
+    table = [model.geom(n).id for n in names if mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, n) >= 0]
+    return np.isin(seg, np.r_[table, geoms])
+
+
+def compare_model(model, layout, frames, raw, ranges, out: Path, poses=(), undistort=True, tag="") -> dict:
+    """Render the twin at the real joints (and at every wrist pose), compare with the real frames; writes
+    compare_overview.jpg, compare_wrist.jpg, compare_wrist_<pose>.jpg and metrics.json into out."""
     data = mujoco.MjData(model)
     W, H = layout["image_size"]
-    q = real_joints.to_q(raw, ranges, *model.actuator_ctrlrange.T, real_joints.load_mapping(layout))
-    real_joints.set_arm_q(model, data, q)
+    mapping = real_joints.load_mapping(layout)
     mk = layout.get("markers") or {}
     dictionary = mk.get("dictionary", "DICT_4X4_50")
-    metrics = {"layout": str(layout_file), "time": time.strftime("%Y-%m-%dT%H:%M:%S"), "raw_ticks": raw,
-               "q_rad": np.round(q, 4).tolist(), "joint_mapping": real_joints.load_mapping(layout),
+    q = real_joints.to_q(raw, ranges, *model.actuator_ctrlrange.T, mapping)
+    metrics = {"time": time.strftime("%Y-%m-%dT%H:%M:%S"), "raw_ticks": raw, "q_rad": np.round(q, 4).tolist(),
+               "joint_mapping": mapping, "undistorted_real": undistort,
                "sources": {"table": layout["table"].get("src"), "markers": sorted({i.get("src") for i in mk.get("items", [])} - {None}),
                            "overview_cam": next((c.get("src") for c in layout["cameras"] if c["name"] == "overview_cam"), None),
                            "wrist_camera": layout["wrist_camera"].get("src")}}
-    rows = []
+    views = [("overview", "overview", frames.get("overview"), frames.get("overview_all"), raw, ranges),
+             ("wrist", "wrist", frames.get("wrist"), frames.get("wrist_all"), raw, ranges)]
+    views += [(f"wrist_{p['name']}", "wrist", p["wrist"], p.get("wrist_all"), p["raw"], p["ranges"]) for p in poses]
     opt = mujoco.MjvOption(); opt.geomgroup[1] = 0
+    geoms = arm_geoms(model)
     with mujoco.Renderer(model, H, W) as r:
-        for name, cam in CAMS.items():
+        for key, name, real, real_all, rw, rg in views:
+            if real is None:
+                continue
+            cam = CAMS[name]
+            qv = real_joints.to_q(rw, rg, *model.actuator_ctrlrange.T, mapping)
+            real_joints.set_arm_q(model, data, qv)
             cid = model.camera(cam).id
             r.update_scene(data, camera=cam, scene_option=opt)
             twin = cv2.cvtColor(r.render(), cv2.COLOR_RGB2BGR)
-            real = frames[name]
             if real.shape[:2] != (H, W):
                 real = cv2.resize(real, (W, H))
             cam_layout = layout["wrist_camera"] if name == "wrist" else next(c for c in layout["cameras"] if c["name"] == cam)
-            real_c = detect(real, dictionary)
+            real_c = real_corners(real, real_all, name, dictionary)
+            real_u = {i: undistort_px(real_c[i], cam_layout, W, H) for i in real_c}
+            shown = undistort_img(real, cam_layout) if undistort else real
             twin_det = detect(twin, dictionary)
             model_c = {}
             for it in mk.get("items", []):
-                sites = [f"aruco_{it['id']}_c{k}" for k in range(4)]
-                pts = np.array([data.site_xpos[model.site(s).id] for s in sites])
+                pts = np.array([data.site_xpos[model.site(f"aruco_{it['id']}_c{k}").id] for k in range(4)])
                 px, z = project(model, data, cid, pts, W, H)
                 if (z > 0).all() and (px > -20).all() and (px < [W + 20, H + 20]).all():
                     model_c[it["id"]] = px
             common = sorted(set(real_c) & set(model_c))
-            real_u = {i: undistort_px(real_c[i], cam_layout, W, H) for i in real_c}
-            per = {i: float(np.linalg.norm(real_u[i] - model_c[i], axis=1).mean()) for i in common}
+            per = {i: np.linalg.norm(real_u[i] - model_c[i], axis=1) for i in common}
             per_det = {i: float(np.linalg.norm(real_u[i] - twin_det[i], axis=1).mean()) for i in sorted(set(real_c) & set(twin_det))}
             m8 = table_mask(model, r, data, cam, layout).astype(np.uint8)
-            for pts in real_c.values():                      # drop the real markers and their paper from the sample
-                grown = (pts - pts.mean(0)) * 1.6 + pts.mean(0)
-                cv2.fillConvexPoly(m8, cv2.convexHull(grown.astype(np.int32)), 0)
-            mask = m8 > 0
-            metrics[name] = {
-                "markers_real": sorted(real_c), "markers_twin_render": sorted(twin_det), "markers_model_in_view": sorted(model_c),
-                "corner_px_error_mean": round(float(np.mean(list(per.values()))), 2) if per else None,
-                "corner_px_error_per_marker": {i: round(v, 2) for i, v in per.items()},
-                "corner_px_error_render_detection": {i: round(v, 2) for i, v in per_det.items()},
-                "table_colour": colour_error(real, twin, mask)}
-            cv2.imwrite(str(out / f"real_{name}.jpg"), real)
-            cv2.imwrite(str(out / f"twin_{name}.png"), twin)
+            for pts in real_u.values():
+                cv2.fillConvexPoly(m8, cv2.convexHull(((pts - pts.mean(0)) * MARKER_GROW + pts.mean(0)).astype(np.int32)), 0)
+            v = {"markers_real": sorted(real_c), "markers_twin_render": sorted(twin_det), "markers_model_in_view": sorted(model_c),
+                 "corner_px_error_mean": round(float(np.mean([e.mean() for e in per.values()])), 2) if per else None,
+                 "corner_px_error_max": round(float(max(e.max() for e in per.values())), 2) if per else None,
+                 "corner_px_error_per_marker": {i: round(float(e.mean()), 2) for i, e in per.items()},
+                 "centre_px_offset_per_marker": {i: np.round(model_c[i].mean(0) - real_u[i].mean(0), 2).tolist() for i in common},
+                 "corner_px_error_render_detection": {i: round(v_, 2) for i, v_ in per_det.items()},
+                 "table_colour": colour_error(shown, twin, m8 > 0)}
+            if name == "wrist":
+                v["q_rad"] = np.round(qv, 4).tolist()
+            sil = None
+            if name == "overview":
+                seg = segment(r, data, cam, opt)
+                twin_mask = np.isin(seg, geoms)
+                real_mask, v["arm_silhouette"] = silhouette(shown, twin_mask, arm_support(seg, model, geoms), real_u)
+                sil = (real_mask, twin_mask)
+            metrics[key] = v
             big = lambda im: cv2.resize(im, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-            ov = overlay(real, twin, real_u, model_c)
-            row = np.hstack([big(real), big(twin), ov])
-            e = metrics[name]["corner_px_error_mean"]; c = metrics[name]["table_colour"]
-            label = f"{name}: corner err {e if e is not None else '-'} px ({len(common)} markers)  table colour err " + \
-                    (f"{c['mean_rgb_error']} rgb / dE {c['mean_delta_e']}" if c else "-")
-            cv2.rectangle(row, (0, 0), (row.shape[1], 22), (0, 0, 0), -1)
-            cv2.putText(row, label + "    [real | twin | overlay: real edges green, twin magenta]", (6, 16), 0, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-            rows.append(row)
-    cv2.imwrite(str(out / "compare.jpg"), np.vstack(rows), [cv2.IMWRITE_JPEG_QUALITY, 88])
+            tiles = [big(shown), big(twin), overlay(shown, twin, real_u, model_c)]
+            if sil is not None:
+                tiles.append(silhouette_panel(shown, *sil))
+            row = np.hstack(tiles)
+            e = v["corner_px_error_mean"]
+            label = f"{tag}{key}: marker corners twin-real {e if e is not None else '-'} px mean, {v['corner_px_error_max'] or '-'} max " \
+                    f"({len(common)} markers)"
+            if sil is not None:
+                s_ = v["arm_silhouette"]
+                label += f"; arm IoU {s_['iou']}, outline {s_.get('real_to_twin_px')}/{s_.get('twin_to_real_px')} px"
+            legend = "real" + (" (undistorted)" if undistort else "") + " | twin | overlay: real edges green, twin magenta, " \
+                     "real corners o, twin x" + (" | arm: real only orange, twin only blue, both white" if sil is not None else "")
+            cv2.rectangle(row, (0, 0), (row.shape[1], 40), (0, 0, 0), -1)
+            cv2.putText(row, label, (6, 16), 0, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+            cv2.putText(row, legend, (6, 34), 0, 0.45, (200, 200, 200), 1, cv2.LINE_AA)
+            cv2.imwrite(str(out / f"compare_{key}.jpg"), row, [cv2.IMWRITE_JPEG_QUALITY, 85])
     (out / "metrics.json").write_text(json.dumps(metrics, indent=1))
     return metrics
+
+
+def real_corners(real, real_all, name, dictionary):
+    """Marker corners in a real view: the per-corner median over the individual frames when there are several (as
+    perception.calib_scene measures them; a far marker can fail to decode in the median image), else the frame's."""
+    from perception import aruco
+    destripe = aruco.DESTRIPE_WRIST_PX if name == "wrist" else aruco.DESTRIPE_OVERVIEW_PX
+    if real_all and len(real_all) > 1:
+        from perception.calib_scene import OVERVIEW_MIN_FRAC
+        return aruco.average_corners(real_all, dictionary, min_frac=OVERVIEW_MIN_FRAC, destripe=destripe)[0]
+    return detect(real, dictionary, destripe)
+
+
+def compare(layout_file, frames, raw, ranges, out: Path, poses=(), undistort=True) -> dict:
+    model, layout = load_model(layout_file)
+    m = compare_model(model, layout, frames, raw, ranges, out, poses, undistort)
+    m["layout"] = str(layout_file)
+    (out / "metrics.json").write_text(json.dumps(m, indent=1))
+    return m
 
 
 # --- joint zero offsets: render-and-compare least squares --------------------------------------------------------
@@ -414,13 +553,21 @@ def fit_offsets(layout_file, frames, raw, ranges, out: Path | None = None) -> di
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--layout", default="home")
-    ap.add_argument("--frames", type=Path, help="DIR with overview.jpg, wrist.jpg, joints.json instead of Station")
+    ap.add_argument("--layout", help="layout name/path (default: SIM_LAYOUT, else the selected SITE's)")
+    src = ap.add_mutually_exclusive_group()
+    src.add_argument("--frames", type=Path, help="DIR with overview.jpg, wrist.jpg, joints.json instead of Station")
+    src.add_argument("--capture", type=Path, help="a perception.calib_scene capture dir (frames/calib-*): median "
+                                                  "frames at the capture pose plus every hand-placed wrist pose")
+    ap.add_argument("--no-undistort", action="store_true", help="show/segment the raw real frames (corner errors "
+                                                                 "always use undistorted real corners)")
     ap.add_argument("--out", type=Path)
     ap.add_argument("--fit-offsets", action="store_true", help="fit joint zero offsets (+ wrist mount pitch) instead")
     a = ap.parse_args()
     layout_file = build_scene.layout_path(a.layout)
-    if a.frames:
+    poses = []
+    if a.capture:
+        frames, raw, ranges, poses = load_capture(a.capture)
+    elif a.frames:
         frames = {k: cv2.imread(str(a.frames / f"{k}.jpg")) for k in CAMS}
         j = json.loads((a.frames / "joints.json").read_text())
         raw, ranges = {int(k): v for k, v in j["raw"].items()}, {int(k): tuple(v) for k, v in j["ranges"].items()}
@@ -432,12 +579,15 @@ def main():
         print(json.dumps(fit_offsets(layout_file, frames, raw, ranges, out), indent=1))
         print("wrote", out)
         return
-    m = compare(layout_file, frames, raw, ranges, out)
-    for name in CAMS:
-        c = m[name]["table_colour"]
-        print(f"{name:9s} markers real {m[name]['markers_real']} twin {m[name]['markers_twin_render']}  "
-              f"corner px error {m[name]['corner_px_error_mean']} {m[name]['corner_px_error_per_marker']}  "
-              f"table colour error {c and c['mean_rgb_error']} rgb, dE {c and c['mean_delta_e']}")
+    m = compare(layout_file, frames, raw, ranges, out, poses, undistort=not a.no_undistort)
+    for key, v in m.items():
+        if not isinstance(v, dict) or "corner_px_error_mean" not in v:
+            continue
+        c = v["table_colour"]
+        print(f"{key:14s} markers real {v['markers_real']} model {v['markers_model_in_view']}  corner px error mean "
+              f"{v['corner_px_error_mean']} max {v['corner_px_error_max']} {v['corner_px_error_per_marker']}"
+              + (f"  arm {v['arm_silhouette']}" if "arm_silhouette" in v else "")
+              + f"  table colour error {c and c['mean_rgb_error']} rgb, dE {c and c['mean_delta_e']}")
     print("wrote", out)
 
 
