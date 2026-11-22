@@ -6,12 +6,18 @@ and scripts all use the same API:
   GET  /api/state  /api/live  /api/skills  /api/scene  /api/advisor  /api/timeline?since=N  /api/executions
   GET  /api/status/<execution_id>?wait=S   /api/cam/<role>.jpg   /api/frame/<obs_id>/<role>.jpg   /api/recordings
   POST /api/observe  /api/submit  /api/cancel/<execution_id|current>  /api/evaluate/<execution_id>
-  POST /api/task/start {prompt, advisor, model}  /api/task/stop  /api/backend {name}  /api/arm {enabled}  /api/tool {tool}
+  GET  /api/health (status pills)  /api/overlay (projected world grid, estimates, planned path)  /api/estimates
+  POST /api/task/start {prompt, advisor, backend?, model}  /api/task/stop  /api/backend {name}  /api/arm {enabled}  /api/tool {tool}
+
+Advisors: claude | gemini | scripted (executor/console/scripted.py) | none (manual proposals from the console).
 """
 from __future__ import annotations
 
+import collections
 import json
 import os
+import shutil
+import socket
 import threading
 import time
 import urllib.request
@@ -28,6 +34,32 @@ from ..recording import LOCAL_ROOT, SERVICE_URL, RecorderLink, service_up
 
 HERE = Path(__file__).resolve().parent
 STATE_DIR = HERE.parent / "logs"
+STATION_ADDR = ("127.0.0.1", int(os.environ.get("STATION_TCP_PORT", 8888)))
+TWIN_MIRROR_URL = os.environ.get("TWIN_MIRROR_URL", "http://127.0.0.1:8892")
+ADVISORS = ("scripted", "claude", "gemini", "none")
+BACKENDS = ("fake", "sim", "real")
+
+
+def _get_json(url: str, timeout: float = 0.6):
+    with urllib.request.urlopen(url, timeout=timeout) as r:
+        return json.loads(r.read() or b"{}")
+
+
+def _port_open(addr, timeout: float = 0.3) -> bool:
+    try:
+        with socket.create_connection(addr, timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _one_render_thread(backend) -> None:
+    """The twin's mujoco.Renderer (and its GL context) belongs to the thread that first rendered; rendering from the
+    HTTP server's per-request threads hangs. Route every frames() call of this backend through one thread."""
+    from concurrent.futures import ThreadPoolExecutor
+    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sim-render")
+    render = backend.frames
+    backend.frames = lambda: pool.submit(render).result(timeout=10)
 
 
 class ApiError(Exception):
@@ -47,10 +79,15 @@ class Console:
         self.task = {"state": "idle"}
         self.lock = threading.RLock()
         self._cam_cache: dict[str, tuple[float, bytes]] = {}
+        self._frames: dict = {}                                   # newest FrameSample per role (from cam())
+        self._cam_seq: dict[str, collections.deque] = {}          # role -> (t, seq) for the fps pill
+        self._est: tuple[float, list] = (0.0, [])
+        self._probes: dict = {}
         self.local_rec_port = local_rec_port
         self._start_local_recorder()
         self.switch(backend)
         threading.Thread(target=self._sampler, daemon=True, name="sampler").start()
+        threading.Thread(target=self._prober, daemon=True, name="prober").start()
 
     # --- backends -------------------------------------------------------------------------
     def _start_local_recorder(self):
@@ -75,13 +112,21 @@ class Console:
                     self.ex.backend.enable_motion(False)
             b = self.backends.get(name)
             if b is None:
-                b = make_backend(name, kin=self.kin, **({"realtime": True} if name == "fake" else {}))
+                # fake: real-time clock and jaws that stop on an object part-way, so a pick can succeed
+                b = make_backend(name, kin=self.kin, **({"realtime": True, "object_norm": 0.3} if name == "fake" else {}))
+                if name == "sim":
+                    _one_render_thread(b)
                 if name in ("sim", "real"):     # one twin / one Station capture per process
                     self.backends[name] = b
             mode = "service" if name == "real" and service_up() else "local"
             layout = getattr(b, "layout_name", "default")
-            self.ex = Executor(b, self.kin, recorder=RecorderLink(mode), events=self.events, layout=layout,
+            locator = None
+            if name == "fake":
+                from .demo_scene import DemoScene
+                locator = DemoScene()
+            self.ex = Executor(b, self.kin, recorder=RecorderLink(mode), events=self.events, layout=layout, locator=locator,
                                table_memory_path=STATE_DIR / "table_memory.json")
+            self._frames, self._cam_cache, self._cam_seq, self._est = {}, {}, {}, (0.0, [])
             self.events.add("backend", name=name, recorder=mode, setup_id=self.ex.setup_id(), describe=b.describe())
 
     def _sampler(self):
@@ -91,6 +136,9 @@ class Console:
             time.sleep(0.1)
             ex = self.ex
             try:
+                if ex and hasattr(ex.locator, "tick"):
+                    m = ex.backend.read_state().motors
+                    ex.locator.tick({i: m[i]["norm"] for i in ex.kin.ids}, ex.kin)
                 if ex and ex.rec.active and ex.rec.mode == "local":
                     frames = None
                     if time.monotonic() - last_frames > 0.5:
@@ -99,21 +147,48 @@ class Console:
             except Exception:  # noqa: BLE001
                 pass
 
+    def _prober(self):
+        """Slow checks for the header pills, off the request path: Station, recorder service, twin mirror."""
+        while True:
+            p = {"station": _port_open(STATION_ADDR)}
+            try:
+                p["recorder"] = _get_json(SERVICE_URL + "/health")
+            except (OSError, ValueError):
+                p["recorder"] = None
+            try:
+                _get_json(TWIN_MIRROR_URL + "/state.json", 0.4)
+                p["mirror"] = True
+            except (OSError, ValueError):
+                p["mirror"] = False
+            self._probes = p
+            time.sleep(2.0)
+
     # --- task / advisor -------------------------------------------------------------------------
-    def start_task(self, prompt: str, advisor: str, model: str | None) -> dict:
+    def start_task(self, prompt: str, advisor: str, model: str | None, backend: str | None = None) -> dict:
         with self.lock:
             if self.advisor and self.advisor.running:
                 raise ApiError(409, "a task is already running")
+            if advisor not in ADVISORS:
+                raise ApiError(400, f"advisor must be one of {', '.join(ADVISORS)}")
+            if backend and backend != self.ex.backend.name:
+                self.switch(backend)
             if advisor == "gemini":
                 from ..advisor.gemini_er import enabled
                 if not enabled():
                     raise ApiError(400, "Gemini ER needs GEMINI_API_KEY in the executor's environment")
+            if advisor == "claude" and not shutil.which("claude"):
+                raise ApiError(400, "the Claude advisor needs the `claude` CLI on PATH")
             rid = self.ex.start_task(advisor, prompt=prompt, advisor=advisor)
             kw = {"model": model or "sonnet"} if advisor == "claude" else {}
-            self.advisor = make_advisor(advisor, self.api_url, self.events, {k: s.describe() for k, s in self.ex.skills.items()},
-                                        self.scene(), executor=self.ex, on_done=self._advisor_done, **kw)
+            skills = {k: s.describe() for k, s in self.ex.skills.items()}
+            if advisor == "scripted":
+                from .scripted import ScriptedAdvisor
+                self.advisor = ScriptedAdvisor(self.api_url, self.events, skills, self.scene(), executor=self.ex, on_done=self._advisor_done)
+            else:
+                self.advisor = make_advisor(advisor, self.api_url, self.events, skills, self.scene(), executor=self.ex,
+                                            on_done=self._advisor_done, **kw)
             self.task = {"state": "running", "prompt": prompt, "advisor": advisor, "model": kw.get("model"), "recording_id": rid,
-                         "viewer": self.ex.rec.viewer_url(rid), "started": time.time()}
+                         "viewer": self.ex.rec.viewer_url(rid), "started": time.time(), "backend": self.ex.backend.name}
             self.advisor.start(prompt)
             return self.task
 
@@ -168,10 +243,75 @@ class Console:
         if hit and time.monotonic() - hit[0] < 0.15:
             return hit[1]
         frames = self.ex.backend.frames()
+        now = time.monotonic()
         for r, f in frames.items():
             if f.jpeg:
-                self._cam_cache[r] = (time.monotonic(), f.jpeg)
+                self._cam_cache[r] = (now, f.jpeg)
+            self._frames[r] = f
+            dq = self._cam_seq.setdefault(r, collections.deque(maxlen=60))
+            if not dq or dq[-1][1] != f.seq:
+                dq.append((now, f.seq))
+            while len(dq) > 2 and now - dq[0][0] > 4.0:
+                dq.popleft()
         return frames[role].jpeg if role in frames else None
+
+    def cam_stats(self) -> dict:
+        """Per camera: frames/s as they arrive here (source sequence numbers) and age of the newest frame."""
+        out, now = {}, time.monotonic()
+        for r, dq in self._cam_seq.items():
+            fps = None
+            if len(dq) >= 2 and dq[-1][0] > dq[0][0]:
+                fps = round((dq[-1][1] - dq[0][1]) / (dq[-1][0] - dq[0][0]), 1)
+            f = self._frames.get(r)
+            out[r] = {"fps": fps, "age_s": round(self.ex.now() - f.t_capture, 2) if f else None,
+                      "seen_s": round(now - dq[-1][0], 2) if dq else None}
+        return out
+
+    def estimates(self) -> list:
+        """Perception's estimates on the newest frames, at most once a second (for the overlay; not an observation)."""
+        t, objs = self._est
+        ex = self.ex
+        if time.monotonic() - t < 1.0:
+            return objs
+        try:
+            frames = {r: f for r, f in (self._frames or ex.backend.frames()).items() if f.jpeg}
+            m = ex.backend.read_state().motors
+            objs = ex.locator.locate(frames, {i: m[i]["norm"] for i in ex.kin.ids}, ex.kin, ex.camera_info())
+        except Exception as e:  # noqa: BLE001  (keep the last estimates; report the first failure only)
+            if not t:
+                self.events.add("error", text=f"overlay perception failed: {type(e).__name__}: {e}")
+        if ex is self.ex:                      # the backend may have been switched meanwhile
+            self._est = (time.monotonic(), objs)
+        return objs
+
+    def health(self) -> dict:
+        ex, p = self.ex, self._probes
+        try:
+            m = ex.backend.read_state().motors
+            arm = {"torque_on": sum(1 for s in m.values() if s["torque"]), "motors": len(m),
+                   "calibrated": all(s["hi"] > s["lo"] for s in m.values()), "in_range": all(s["in_range"] for s in m.values()),
+                   "faults": [ex.kin.name_of.get(i, i) for i, s in m.items() if s["status"]]}
+        except Exception as e:  # noqa: BLE001
+            arm = {"error": str(e)}
+        rec = p.get("recorder")
+        adv = self.advisor
+        return {"station": {"ok": p.get("station"), "addr": "%s:%d" % STATION_ADDR,
+                            "via_recorder": rec.get("station_reachable") if rec else None},
+                "recorder": {"ok": bool(rec and rec.get("ok")), "url": SERVICE_URL, "recording": (rec or {}).get("recording"),
+                             "cameras": {c.get("role"): c.get("fps") for c in (rec or {}).get("cameras", [])},
+                             "local_viewer": f"http://127.0.0.1:{self.local_rec_port}", "mode": ex.rec.mode, "active": ex.rec.id},
+                "cameras": self.cam_stats(), "arm": arm,
+                "backend": {"name": ex.backend.name, "can_move": ex.backend.can_move,
+                            "needs_enable": hasattr(ex.backend, "enable_motion")},
+                "advisor": {"name": adv.name if adv else None, "running": bool(adv and adv.running),
+                            "available": {"scripted": True, "none": True, "claude": bool(shutil.which("claude")),
+                                          "gemini": bool(os.environ.get("GEMINI_API_KEY"))}},
+                "setup_id": ex.setup_id(), "locator": ex.locator.name,
+                "mirror": {"ok": p.get("mirror"), "url": TWIN_MIRROR_URL}}
+
+    def overlay(self) -> dict:
+        from .overlay import build
+        return build(self)
 
     def executions(self) -> list[dict]:
         ex = self.ex
@@ -263,6 +403,12 @@ def make_handler(c: Console):
                     return self._json(c.state())
                 if r == ["live"]:
                     return self._json(c.live())
+                if r == ["health"]:
+                    return self._json(c.health())
+                if r == ["overlay"]:
+                    return self._json(c.overlay())
+                if r == ["estimates"]:
+                    return self._json({"objects": to_dict(c.estimates()), "locator": ex.locator.name})
                 if r == ["skills"]:
                     return self._json({k: s.describe() for k, s in ex.skills.items()})
                 if r == ["scene"]:
@@ -309,7 +455,7 @@ def make_handler(c: Console):
                     prompt = (b.get("prompt") or "").strip()
                     if not prompt:
                         raise ApiError(400, "type a task first")
-                    return self._json(c.start_task(prompt, b.get("advisor", "none"), b.get("model")))
+                    return self._json(c.start_task(prompt, b.get("advisor", "scripted"), b.get("model"), b.get("backend")))
                 if r == ["task", "stop"]:
                     return self._json(c.stop_task())
                 if r == ["backend"]:
