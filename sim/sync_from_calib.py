@@ -190,7 +190,7 @@ def main():
     layout["_synced_from"] = layout["_synced_from"][-3:]
     a.layout.write_text(dumps(layout) + "\n")
     print("\n".join(changes) or "nothing changed")
-    print(f"wrote {a.layout}; rebuild: SIM_LAYOUT={a.layout.stem} python3 sim/build_scene.py")
+    print(f"wrote {a.layout}; rebuild: SITE={get_site().name} python3 sim/build_scene.py   (or: python3 sim/build_scene.py --layout {a.layout})")
 
 
 if __name__ == "__main__":
