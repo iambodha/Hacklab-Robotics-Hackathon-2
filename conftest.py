@@ -9,3 +9,5 @@ import os
 
 if os.environ.get("ROBOT_LIVE_TESTS") != "1":
     os.environ["STATION_HOST"] = "station-disabled-in-tests.invalid"
+    os.environ["EXECUTOR_REAL_MOTION"] = "0"                                   # executor's real-motion gate: off
+    os.environ["ROBOT_CAM_URL"] = "http://camera-relay-disabled-in-tests.invalid:8890"
