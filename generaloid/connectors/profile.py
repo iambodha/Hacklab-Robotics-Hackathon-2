@@ -53,7 +53,7 @@ class ProfileConnector(Connector):
         return SafetyEnvelope(min_tcp_z=float(w.min_tcp_z), max_tcp_z=float(w.max_tcp_z), max_radius=float(w.max_radius),
                               max_joint_delta=float(os.environ.get("ROBOT_MAX_DELTA", DEFAULT_MAX_DELTA)),
                               track_tol_ticks=int(os.environ.get("ROBOT_TRACK_TOL", DEFAULT_TRACK_TOL)),
-                              load_abort=int(self.profile.motion.load_abort))
+                              load_abort=int(self.profile.motion.load_abort), travel_height=float(w.travel_height))
 
     @property
     def frame_text(self) -> str:

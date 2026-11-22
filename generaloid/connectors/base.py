@@ -70,6 +70,7 @@ class SafetyEnvelope:
     max_joint_delta: float    # largest normalized step per move_to call (ROBOT_MAX_DELTA)
     track_tol_ticks: int      # |goal - present| that aborts a move
     load_abort: int           # servo present load (0..1000) that counts as contact / aborts
+    travel_height: float      # m, TCP height for sideways travel before descending
 
 
 @dataclass(frozen=True)
@@ -139,6 +140,11 @@ class Connector(ABC):
 
     @abstractmethod
     def kinematics(self) -> Kinematics: ...
+
+    def make_ik(self, model) -> Kinematics:
+        """IK on a MuJoCo model of this arm (the generic twin builds one on its own model). Override for tuning."""
+        from generaloid.twin.ik import GenericIK
+        return GenericIK(model, n_arm=len(self.arm_joints))
 
     def reach_probe(self) -> tuple[float, float, float]:
         """A TCP point (base frame, m) the arm reaches jaws-down: the contract test checks fk(ik(p)) == p there."""
