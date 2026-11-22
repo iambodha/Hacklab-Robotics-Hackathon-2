@@ -114,7 +114,7 @@ def _mean(xs):
 def summarise(rows: list[dict]) -> dict:
     by = lambda k: [r for r in rows if r["kind"] == k and not r["metrics"].get("error")]  # noqa: E731
     calls = [c for r in rows for c in r.get("calls", [])]
-    lat = [c.get("latency_s") for c in calls]
+    lat = [c.get("latency_s") for c in calls if not c.get("error")]          # failed calls (429s) return at once
     cost = [c.get("cost_usd") for c in calls if c.get("cost_usd") is not None]
     out = {"items": len(rows), "errors": sum(1 for r in rows if r.get("error")), "calls": len(calls),
            "latency_p50_s": _pct(lat, 0.5), "latency_p95_s": _pct(lat, 0.95),

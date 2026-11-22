@@ -46,7 +46,8 @@ def images_of(it: dict) -> list[Image]:
 def _call_info(er: GeminiER) -> dict:
     c = er.last
     return {"latency_s": c.latency_s, "cost_usd": c.cost_usd, "prompt_tokens": c.prompt_tokens,
-            "output_tokens": c.output_tokens, "thinking_tokens": c.thinking_tokens, "call_id": c.call_id}
+            "output_tokens": c.output_tokens, "thinking_tokens": c.thinking_tokens, "call_id": c.call_id,
+            "error": bool(c.error)}
 
 
 def run_item(er: GeminiER, it: dict) -> dict:
@@ -136,11 +137,21 @@ def main():
     ap.add_argument("--kinds", nargs="*")
     ap.add_argument("--limit", type=int)
     ap.add_argument("--thinking", default="low")
+    ap.add_argument("--wait-429", type=float, default=300.0,
+                    help="gemini: seconds of total back-off allowed per call on 429 (free tier is 5 requests/min)")
+    ap.add_argument("--retry-errors", action="store_true",
+                    help="keep the rows of results/<name>.jsonl that succeeded, re-run only the failed items")
     a = ap.parse_args()
     items = load_items(a.kinds or (["stain"] if a.advisor == "cv" else None))[: a.limit]
+    name = a.advisor + (f"-{a.model}" if a.model else "")
+    kept = {}
+    if a.retry_errors and (RESULTS / f"{name}.jsonl").exists():
+        kept = {r["item"]: r for r in map(json.loads, (RESULTS / f"{name}.jsonl").read_text().splitlines()) if not r["error"]}
     ctx = {"current": None}
     if a.advisor == "gemini":
-        er = GeminiER(a.model or DEFAULT_MODEL, thinking_level=a.thinking, source_tag="bench")
+        from models.gemini_er import GenAITransport
+        er = GeminiER(a.model or DEFAULT_MODEL, transport=GenAITransport(wait_429_s=a.wait_429),
+                      thinking_level=a.thinking, source_tag="bench")
     elif a.advisor == "claude":
         from models.claude_cli import ClaudeCLITransport
         er = GeminiER(a.model or "claude", transport=ClaudeCLITransport(), source_tag="bench")
@@ -150,6 +161,11 @@ def main():
     rows = []
     for it in items:
         ctx["current"] = it
+        if it["id"] in kept:
+            row = kept[it["id"]]
+            row["metrics"] = score.item_metrics(it, row)
+            rows.append(row)
+            continue
         row = cv_stain(it) if a.advisor == "cv" else run_item(er, it)
         row["advisor"], row["model"] = a.advisor, (a.model or (er.model if a.advisor != "cv" else "hsv-threshold"))
         rows.append(row)
@@ -157,7 +173,6 @@ def main():
         if row["error"] and "no GEMINI_API_KEY" in row["error"]:
             print("stopping: no Gemini key")
             break
-    name = a.advisor + (f"-{a.model}" if a.model else "")
     with open(RESULTS / f"{name}.jsonl", "w") as f:
         for r in rows:
             f.write(json.dumps(r) + "\n")
