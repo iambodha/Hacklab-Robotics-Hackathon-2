@@ -23,7 +23,6 @@ The bus serials and camera queue hashes below are specific to this hardware.
 
 On the machine this log was written on:
 
-
 - Station v0.1.0-beta.10 (macOS ARM64) in `station-bin/`; config, data and log in `station-run/`.
 - Start it with `scripts/run-station.sh` (loopback only; add `--lan` to expose it).
 - Web UI http://localhost:8889, TCP API `localhost:8888`.
@@ -53,6 +52,14 @@ On the machine this log was written on:
 | `scripts/calibrate_manual.py [BUS]` | Guided manual calibration: reset (with retries), you sweep by hand, freeze, compare spans. Defaults to the leader |
 | `scripts/scene_cam.py [camera_id] [port]` | Live browser view of a camera at http://127.0.0.1:8890, relayed from Station |
 | `scripts/run-station.sh [--lan]` | Starts Station |
+| `scripts/grasp.py step J DEG [J DEG ...]` | **Main control tool.** Moves joints by degrees (servo direction), closed loop, aborts on contact; prints where the object moved in the gripper camera |
+| `scripts/grasp.py goto J STEPS [J STEPS ...]` | Same, to absolute servo positions |
+| `scripts/grasp.py probe J DEG ...` | Moves, reports the object's image shift, moves back |
+| `scripts/arm.py pose \| hold \| grip 0..1 \| relax` | Read pose; hold current position with torque on; set gripper opening; torque off (arm drops!) |
+| `scripts/vision.py` | Finds dark blobs (the object) in the gripper camera; prints centre, area, bbox |
+| `scripts/replay.py DATASET.parquet` | Replays an exported dataset through `vision.py` offline (run via `uv ... --with pyarrow`, see below) |
+| `scripts/history_index.py [HH:MM:SS ...]` | Finds Station history frame pointers for given times, for dataset export |
+| `scripts/record_demo.py [secs] [name]` | Records a teleop demo: follower joints at 10 Hz + both cameras at 2 Hz into `demos/<name>/` |
 
 ### `scripts/camera.py` — how camera frames come out of Station
 
@@ -115,8 +122,121 @@ Calibrated ranges after the manual sweep (steps):
 - Move a joint: `st3215.Command(target_bus_serial=..., write=ST3215WriteCommand(motor_id, address=0x2A, value=<2 bytes LE>))`, wrapped in a `DriverCommand` of type `STC_ST3215_COMMAND`, sent with `send_commands`. Clamp to the calibrated range first.
 - Mirroring and calibration use the same `send_commands` path (see the scripts).
 
+## Direct control — what we learned (afternoon, 21 Nov)
+
+- **Teleop must be off** (`teleop.py stop`) before scripts move the follower, or mirroring fights them. Then `arm.py hold` so it doesn't drop.
+- **Plain goal writes stop short.** The follower servos run P-only (P=16, I=0, D=0), so a joint commanded 45 steps away settles about 30 short. `grasp.py` closes the loop: it keeps nudging the goal until the measured position arrives. Use it, not raw writes.
+- **Contact abort:** `CUR_LIMIT = 260` mA in `arm.py`. Any joint 1–7 above that stops the move and holds position. A "did not fully arrive" note with a joint stuck short usually means something is touching the table.
+- **The URDF model is not trustworthy for this arm.** `arm.py`'s FK/IK (`pose` tip xyz, `move`, `fwd`) uses `norma-core`'s `elrobot_follower.urdf`, but its joint directions don't match what the cameras show. Ignore the tip xyz; don't use `move`/`fwd`. Steer by camera with `grasp.py` instead.
+- **Joint directions observed in the top-down grasp pose** (servo steps):
+  - j1 (base) decrease → object moves left in the gripper image (about 5 px per degree at grasp height). j1 decrease also turns the arm towards the white box.
+  - j2 (shoulder) increase → gripper goes **down**. Hover 1778, grasp height 1919, clearance 1640.
+  - j3 (elbow) decrease → reaches further out.
+- **Gripper:** `arm.py grip 0.8` opens. Close by writing goal `range_min + 40` to motor 8. Holding the object shows ~20–40 mA on motor 8; an empty close shows 0–2 mA and ends at ~0.03 opening.
+
+### The grasp that worked
+
+Approaching at a slant failed six times: the jaws closed just above the object every time.
+A teleop demonstration (`demos/grasp1/`, gitignored, local only) showed the grasp is top-down,
+with j4 bent to ~1220 instead of ~2160. Replaying that pose then worked first time:
+
+1. `teleop.py stop`, `arm.py hold`
+2. Fold into the top-down pose with the arm raised (the fold was done at j2 ≈ 1030, arm up; folding j4 with the arm low is untested): `grasp.py goto 2 1030`, then `grasp.py goto 4 1240 3 3166 6 2632`, then `grasp.py goto 2 1700`, then `grasp.py goto 1 2226 5 2116 7 1680 6 2551 3 3084`
+3. `arm.py grip 0.8`, `grasp.py goto 2 1778` (hover)
+4. Centre the object between the jaws in the gripper camera with small j1 steps (`grasp.py step 1 -1.2` etc.; `vision.py` gives the pixel centre; jaws' centre is x≈150 in a 299 px frame)
+5. `grasp.py goto 2 1919` (descend), close the gripper, check motor 8 current > 15 mA
+6. `grasp.py goto 2 1780` (lift)
+
+Demo grasp moment: t≈111–118 s in `demos/grasp1/states.jsonl` (gripper 0.76 → 0.22).
+
+### Placing on the white box
+
+From the lifted grasp pose: `goto 2 1640` (clearance), base j1 decreased ~29° in steps
+(`step 1 -12`, `step 1 -8 3 -10`, `step 1 -6 2 12`), lowered with j2 (`step 2 10`, `step 2 8 1 -3`)
+until the box filled the gripper view, `arm.py grip 0.85`, then `step 2 -14` to lift clear.
+The object landed on the open cardboard box near its edge closest to the arm.
+
+## Dataset export from Station history (works)
+
+Station keeps every frame and motor reading in `station-run/station_data/` (5.1 GB by 12:51).
+Exporting a time window as a training dataset took about 3 seconds:
+
+```bash
+python3 scripts/history_index.py 12:31:50 12:48:00        # -> frame pointers for those times
+./station-bin/dataset-generator -no-tui -robot localhost -from 7086000 -to 8712000 \
+  -episode.duration 20 -episode.min-commands 20 \
+  -task "pick up the small black object and place it on the white box" \
+  -output datasets/pick-place-2026-11-21
+./station-bin/dataset-mp4 -input datasets/pick-place-2026-11-21.parquet \
+  -output datasets/pick-place-2026-11-21.mp4 -render-state=false -grid-cols 2 -grid-rows 1
+```
+
+Result (first try, 21 Nov 13:47): 6 episodes, 2168 frames, 59 MB Parquet; 144 s mp4 showing both
+cameras side by side with every joint's position, goal and current. Files are in `datasets/` in
+the project root, outside git (size, and the footage shows people).
+
+Caveats:
+- Episodes are cut by command activity, not by task, so they include idle and setup stretches. 9 of 15 were dropped for too few commands; one ~3-minute stretch was dropped for a 172 s frame gap (possibly the teleop demo; not checked).
+- The last two episodes show the table rearranged with other objects (snack wrappers, a black box), so they don't match the task label.
+- For a clean dataset, tag the start and end of each pick-and-place run in the web UI (see `norma-core/docs/datasets/export-parquet/datasets-export.md`).
+
+## Iterating scripts offline with `replay.py`
+
+`uv run --no-project --with pyarrow python scripts/replay.py datasets/<x>.parquet --every 4`
+runs `vision.py` over recorded gripper frames and prints gripper opening/current per frame
+(542 frames in 14 s). Open-loop only: tests what scripts see and judge, not motion.
+
+First findings (21 Nov, on `pick-place-2026-11-21.parquet`):
+- In the dataset, image 0 is the gripper camera and frames are 224x224 (not 299x224 as live).
+- The object was detected in 442 of 542 frames; misses are mostly while the arm swings during teleop.
+- **The export does not contain the successful scripted grasp** (12:36–12:41): no episode has a close with more than 6 mA. The teleop demo is episode 1 (closes at 28 s, 45 s, 47 s).
+- Holding under teleop looks different from holding under a script: teleop closes stopped at 0.22–0.29 opening with 1–5 mA, because mirroring copies the leader's position instead of squeezing. The scripted grasp showed 0.06 opening and 39 mA; empty scripted closes 0.03 and 0–2 mA. So `verify()` for a grasp should check "commanded closed, but stopped above ~0.05" or "current above ~15 mA", not current alone.
+- After a successful close the object is hidden by the jaws, so "no blob" right after closing is consistent with holding.
+
+## MCP servers (branch `MCP`, tested 21 Nov ~14:15)
+
+Two MCP servers live on the `MCP` branch (checked out at `../mcp-branch/`):
+`robot_mcp` (task-level skills) and `arm_mcp` (joint-level, fresh cameras). Both are served
+over HTTP with a shared bearer token, so any MCP client or model can connect by URL.
+
+Run on this laptop (from `mcp-branch/`; the camera relay is on branch `calculate-camera-position`):
+
+```bash
+NORMA_CORE_REPO=$PWD/norma-core python3 scripts/cam_stream.py --data-dir ../station-run   # :8890, needed by arm_mcp
+uv run --no-project --with 'mcp>=1.12,<2' --with pillow python -m robot_mcp --http        # :8765/mcp
+ROBOT_CAM_URL=http://localhost:8890 uv run --no-project --with 'mcp>=1.12,<2' --with pillow \
+  python -m robot_mcp.http_server --target arm_mcp.server:server --port 8766              # :8766/mcp
+```
+
+Add `--lan` to expose a server to other laptops. Token: top of the server's startup output, or
+`mcp-branch/robot_mcp/data/http_token.local.json`.
+
+Test results through the MCP tools over HTTP (Python MCP client, token auth):
+- `arm_mcp`: `look` returned fresh images from both cameras; `set_torque(true)` held the pose with no jump;
+  `move_to` j1 +/-0.03 (about 5 deg) reached within 2-3 ticks; `gripper` 0.85 and back reached within 4 ticks.
+- `robot_mcp`: `move_joints` j1 +/-0.02 worked. Its `observe` returned byte-identical images 3 s apart showing
+  an older table layout: stale whenever torque is off. Use `arm_mcp` `look` instead.
+- Not tested on hardware: `robot_mcp` skills (`home`, `pick`, `place`). Their poses and gripper thresholds
+  are from last year's arm; `pick` closes only to 0.18, while today's object was held at about 0.06.
+- Both servers can command the same arm, and each one's motion lock only covers itself. Use one at a time.
+- Calibration writes an offset into each servo (register 0x1F), so calibrating on one laptop invalidates
+  the ranges another laptop's Station stored. One machine should own the arm, or recalibrate after switching.
+
+## Current state when this session ended (21 Nov, ~13:00)
+
+- Station running (`scripts/run-station.sh`), both arms calibrated and frozen.
+- **Teleop OFF.** Follower torque ON, holding just above the white box, gripper open (0.85).
+  Pose: j1 1828, j2 1820, j3 2974, j4 1222, j5 2113, j6 2548, j7 1682, j8 2604.
+- The black object is on the white box.
+- To hand control back to the leader: `python3 scripts/teleop.py start` (the follower will jump to the leader's pose, so put the leader in a similar pose first).
+- **Update 12:51:** both arms and both cameras were unplugged from the laptop. Station kept running and
+  hot-plugs devices, so plugging back in should be enough. After replugging, check with
+  `python3 scripts/arm_state.py` (both buses, ranges still frozen) and `python3 scripts/camera.py`.
+  Teleop and torque state after replugging are unknown; run `teleop.py stop` + `arm.py hold` before scripted moves.
+
 ## Open items
 
-- Build the Claude bridge (MCP server): get camera frame, read joints, move joints within range.
-- No direct joint move from a script has been tested yet; only mirroring and calibration.
-- Third camera not detected; camera resolution stuck at 320x240.
+- Build the Claude bridge (MCP server) around `grasp.py` + `vision.py` + `camera.py`: get frame, find object, step joints, grip.
+- Automate the grasp recipe above into one script (centre with j1 from `vision.py`, descend, close, verify by current).
+- Fix or replace the kinematic model so moves can be planned in centimetres (ArUco markers + OpenCV for camera height was proposed).
+- Third camera not detected; frames are 299x224 (`resize_target: 224`).

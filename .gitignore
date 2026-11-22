@@ -39,3 +39,4 @@ generaloid/.generated/
 *.ply
 ._*
 graphify-out/
+demos
