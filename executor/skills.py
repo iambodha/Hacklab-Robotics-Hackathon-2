@@ -521,8 +521,12 @@ def resolve_object(ctx, query: str | None, color: str | None = None, pixel=None,
 
 
 class PickAt(Pick):
-    """Pick an object located by perception: by name or colour hint (resolve_object), a pixel, or xyz_world."""
-    name, version = "pick_at", "1"
+    """Pick an object located by perception: by name or colour hint (resolve_object), a pixel, or xyz_world.
+    An advisor's observation may be seconds old by the time its answer arrives (Gemini ~3-10 s): pick_at accepts
+    observations up to `freshness_s`, and if the proposal's observation is older than `relocalise_after`, the object is
+    localised again on a FRESH observation; moved more than max(20 mm, 3 sigma) since the proposal = rejected."""
+    name, version, freshness_s = "pick_at", "1", 20.0
+    relocalise_after = 1.5
     params_doc = {"object": "name or colour hint, e.g. 'blue' / 'blue object' (from the observation's estimates or "
                             "perception.locate on its overview frame)",
                   "xyz_world": "optional [x, y, z] metres, world: skips localisation",
@@ -534,13 +538,33 @@ class PickAt(Pick):
            "close with touch, lift. Rejected if the estimate is not visible, stale or too uncertain.")
 
     def plan(self, ctx, params):
+        from .perception import colour_in
+        given = None
         if params.get("xyz_world") is not None and not params.get("needs_localisation"):
             from .contracts import ObjectEstimate
-            est, how = ObjectEstimate(params.get("object") or "given point", list(_vec(params["xyz_world"])), None, None,
-                                      params.get("sigma_mm"), params.get("source", "proposal xyz_world")), "proposal xyz_world"
-        else:
+            given = ObjectEstimate(params.get("object") or "given point", list(_vec(params["xyz_world"])), None, None,
+                                   params.get("sigma_mm"), params.get("source", "proposal xyz_world"))
+        relocal = None
+        if ctx.obs is not None and ctx.ex.now() - ctx.obs.t_mono > self.relocalise_after:
+            old = ctx.obs.obs_id
+            ctx.obs = ctx.ex.observe()                     # read-only: a fresh look before planning, nothing moves
+            relocal = {"from_obs": old, "to_obs": ctx.obs.obs_id}
+        if given is None:
             est, how = resolve_object(ctx, params.get("object"), params.get("color"), params.get("pixel"),
                                       params.get("camera", "overview"), params.get("object_height"))
+            if relocal:
+                how += f" (re-localised: {relocal['from_obs']} was older than {self.relocalise_after} s)"
+        elif relocal and (params.get("color") or colour_in(params.get("object"))):
+            est, how = resolve_object(ctx, params.get("object"), params.get("color"), None, "overview", params.get("object_height"))
+            moved = float(np.linalg.norm(np.array(est.xyz_world[:2]) - np.array(given.xyz_world[:2]))) * 1000
+            tol = max(20.0, 3 * float(given.uncertainty_mm or 0))
+            relocal.update(moved_mm=round(moved, 1), tol_mm=round(tol, 1))
+            if moved > tol:
+                raise PlanError(f"{given.name} moved {moved:.0f} mm since the proposal's observation (> {tol:.0f} mm): propose again",
+                                {"perception": {"result": "fail", "object": _est_dict(est), "relocalised": relocal}})
+            how = f"re-localised on {ctx.obs.obs_id} ({moved:.0f} mm from the proposal's xyz_world)"
+        else:
+            est, how = given, "proposal xyz_world"
         limit = float(params.get("max_uncertainty_mm", 25.0))
         if est.uncertainty_mm is not None and est.uncertainty_mm > limit:
             raise PlanError(f"{est.name} position too uncertain: {est.uncertainty_mm} mm > {limit} mm",
@@ -552,7 +576,8 @@ class PickAt(Pick):
             yaw = (np.degrees(est.yaw) + 90 + 90) % 180 - 90       # jaws close across the short side
         plan = super().plan(ctx, {"xyz_world": est.xyz_world, "object_height": h, "yaw_deg": yaw,
                                   "grip_force": params.get("grip_force")})
-        plan.checks["perception"] = {"result": "pass", "how": how, "object": _est_dict(est), "limit_mm": limit}
+        plan.checks["perception"] = {"result": "pass", "how": how, "object": _est_dict(est), "limit_mm": limit,
+                                     **({"relocalised": relocal} if relocal else {})}
         plan.target["object"] = _est_dict(est)
         return plan
 

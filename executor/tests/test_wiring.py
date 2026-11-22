@@ -116,6 +116,24 @@ def test_models_gemini_proposal_accepted_unchanged(wex, tmp_path):
     assert r.status == Status.SUCCEEDED and r.achieved["holding"] is True, r.termination
 
 
+@pytest.mark.parametrize("moved", [0.0, 0.06])
+def test_slow_advisor_answer_is_relocalised(wex, tmp_path, moved):
+    ex, fake = wex(images={"overview": render_overview([(CAP, 0.016, 0.02, BLUE)])}, object_norm=0.35)
+    adv = _gemini(ex, [json.dumps({"action": "pick", "args": {"object": "blue cap", "point": _yx([*CAP, 0.0]), "camera": "overview"}})],
+                  tmp_path)
+    obs = ex.observe()
+    (p,) = adv.propose(obs, "pick the blue cap")
+    fake.advance(5.0)                                             # the model took 5 s; meanwhile the cap may have moved
+    fake.set_image("overview", render_overview([((CAP[0], CAP[1] + moved), 0.016, 0.02, BLUE)]))
+    r = ex.status(ex.submit(p))
+    per = r.validation.checks["perception"]
+    assert per["relocalised"]["from_obs"] == obs.obs_id and per["relocalised"]["moved_mm"] == pytest.approx(moved * 1000, abs=6)
+    if moved:
+        assert r.status == Status.REJECTED and "moved" in r.termination and fake.motion_writes() == []
+    else:
+        assert r.validation.ok and ex.wait(r.execution_id, 300).status == Status.SUCCEEDED
+
+
 # --- 4. Gemini advisor -------------------------------------------------------------------------------------------------
 def _gemini_advisor(ex, adv=None, **kw):
     from executor.advisor import make_advisor
