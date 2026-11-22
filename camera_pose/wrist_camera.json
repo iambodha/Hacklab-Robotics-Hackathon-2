@@ -64,7 +64,14 @@
     "applied": false,
     "source": "r2-twinfix sim/compare_real.py --fit-offsets, 22 Nov, one folded pose (wrist jaw outline 14.6 -> 5.0 px)",
     "about": "T_link_camera = T_link_camera_cad when applied is false, else T_link_camera_cad @ Rx(pitch_deg). Switch with camera_pose/wrist_mount.py apply|revert, then rerun perception.calib_scene and sim/sync_from_calib.py.",
-    "why_not_applied": "r3-calfix offline check (frames/calib-20261122-013512 + calibration/wrist_pose_0122): the mount alone moves the wrist-FK arm base from 57 mm to 347 mm off the foot; it only helps together with pitch-chain offsets (j2+j3+j4+j6 = +6.9 +- 1.4 deg), whose split over joints one pose cannot determine (full twinfix set 35 mm, an arbitrary j2/j6 split 16 mm; fitted on the same pose). Needs the 5-6 hand-moved wrist poses before it is applied."
+    "why_not_applied": "22 Nov multi-pose check (camera_pose/fit_wrist_chain.py on frames/calib-20261122-022246, 5 hand poses + calibration/wrist_pose_0122; camera_pose/wrist_chain_fit_20261122.json): with the base free the data want pitch -2.6 +- 1.4 deg, not +9.3; no mount/offset model beats the CAD chain in leave-one-pose-out (CAD 30.8 px, pitch only 35.3, mount3 32.0, twinfix pitch+offsets 29.5, full 13-param 35.8 while fitting 6.4). Earlier single-pose check: the mount alone moved the wrist-FK base from 57 to 347 mm off the foot.",
+    "multi_pose_fit": {
+      "pitch_deg": -2.61,
+      "sigma_deg": 1.36,
+      "loo_rms_px": 35.32,
+      "cad_loo_rms_px": 30.77,
+      "source": "camera_pose/wrist_chain_fit_20261122.json model 'B pitch'"
+    }
   },
   "camera_convention": "OpenCV: x right, y down, z = optical axis",
   "optical_centre_m": [

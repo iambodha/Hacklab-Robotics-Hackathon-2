@@ -57,6 +57,10 @@ class Kinematics:
         self.names = [self.name_of[m] for m in self.ids]
         self.na = len(self.arm_ids)
         self.low, self.high = self.kin.low, self.kin.high
+        off = getattr(P, "raw", {}).get("kinematics", {}).get("joint_offsets_deg") or {}
+        if P.kinematics.arm_mapping != "range_fraction":      # the offsets calibrate the range_fraction zero only
+            off = {}
+        self.offsets = np.radians([float(off.get(f"j{i + 1}", 0.0)) for i in range(len(self.ids))])
         if T_world_base is None:
             sc = load_scene_calib()
             T_world_base = (sc or {}).get("arm", {}).get("T_world_base", DEFAULT_T_WORLD_BASE)
@@ -73,22 +77,23 @@ class Kinematics:
 
     # --- joint mapping (profile) ---------------------------------------------------------
     def q_from_norm(self, norm: dict[int, float], raw: dict[int, int] | None = None) -> np.ndarray:
-        P, lo, hi = self.P, self.low, self.high
+        """Profile mapping; range_fraction adds kinematics.joint_offsets_deg (as sim/real_joints.to_q)."""
+        P, lo, hi, off = self.P, self.low, self.high, self.offsets
         n = [norm[m] for m in self.ids]
         if P.kinematics.arm_mapping == "range_fraction":
-            arm = [lo[i] + n[i] * (hi[i] - lo[i]) for i in range(self.na)]
+            arm = [lo[i] + n[i] * (hi[i] - lo[i]) + off[i] for i in range(self.na)]
         else:   # ticks_centered
             z, sg, tick = P.kinematics.zero_ticks, P.kinematics.signs, 2 * np.pi / P.motors.ticks_per_turn
             arm = [sg[i] * (raw[self.arm_ids[i]] - z[i]) * tick for i in range(self.na)]
         g = n[self.na]
         grip = hi[self.na] * (1 - g) if P.kinematics.gripper_mapping == "upper_times_one_minus_norm" else lo[self.na] + g * (hi[self.na] - lo[self.na])
-        return np.array(arm + [grip])
+        return np.array(arm + [grip + off[self.na]])
 
     def norm_from_q(self, q, ranges: dict[int, tuple[int, int]] | None = None) -> dict[int, float]:
         """Arm joint angles -> normalized targets per arm motor id."""
-        P, lo, hi = self.P, self.low, self.high
+        P, lo, hi, off = self.P, self.low, self.high, self.offsets
         if P.kinematics.arm_mapping == "range_fraction":
-            return {self.arm_ids[i]: float((q[i] - lo[i]) / (hi[i] - lo[i])) for i in range(self.na)}
+            return {self.arm_ids[i]: float((q[i] - off[i] - lo[i]) / (hi[i] - lo[i])) for i in range(self.na)}
         z, sg, tick = P.kinematics.zero_ticks, P.kinematics.signs, 2 * np.pi / P.motors.ticks_per_turn
         out = {}
         for i, m in enumerate(self.arm_ids):

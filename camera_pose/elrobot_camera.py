@@ -50,6 +50,15 @@ MIN_RANGE_TICKS = 200              # narrower calibrated range = missing/reset c
 MODES = ("range_fraction", "ticks")
 
 
+def profile_joint_offsets_deg() -> dict:
+    """kinematics.joint_offsets_deg of the robot profile ({"j1": deg, ...}), read by sim/real_joints.py so the
+    twin, the executor and this FK share one source."""
+    if str(REPO / "sim") not in sys.path:
+        sys.path.append(str(REPO / "sim"))
+    import real_joints
+    return real_joints.profile_offsets_deg()
+
+
 def profile_arm_mapping() -> str:
     """kinematics.arm_mapping of the robot profile, loaded like sim/robot_profile.load (ROBOT_PROFILE path or
     name in sim/robots/, else elrobot). Read from the JSON directly when robot_profile can't be imported
@@ -122,11 +131,13 @@ class WristCamera:
     # ---- joints -------------------------------------------------------------------------
     def joints_to_q(self, state: dict, mapping: dict | None = None) -> dict:
         """state: {"j1": {"raw", "lo", "hi"} | norm float, ...} -> {rev_motor_0i: radians}.
-        Norm floats (0..1 through the calibrated range) use the range_fraction mapping."""
+        Norm floats (0..1 through the calibrated range) use the range_fraction mapping, which adds the robot
+        profile's joint_offsets_deg (mapping "offsets_deg" overrides them; {} = none)."""
         m = {**DEFAULT_MAPPING, **(mapping or {})}
         if m["mode"] not in MODES:
             raise ValueError(f"unknown joint mapping {m['mode']!r}; one of {MODES}")
         sign = {**DEFAULT_MAPPING["sign"], **m.get("sign", {})}
+        off = m["offsets_deg"] if "offsets_deg" in m else profile_joint_offsets_deg()
         q = {}
         for j, name in JOINT_OF.items():
             if j not in state:
@@ -140,7 +151,7 @@ class WristCamera:
             else:
                 n = v if not isinstance(v, dict) else (v["raw"] - v["lo"]) / (v["hi"] - v["lo"])
                 n = n if s > 0 else 1 - n
-                q[name] = lo_q + n * (hi_q - lo_q)
+                q[name] = lo_q + n * (hi_q - lo_q) + math.radians(float(off.get(j, 0.0)))
         return q
 
     # ---- poses --------------------------------------------------------------------------
