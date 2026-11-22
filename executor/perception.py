@@ -126,11 +126,12 @@ class PerceptionLocator(Locator):
         s_h = float(r.get("centre_shift_mm_per_cm_height") or 0.0) * hint.height_sigma_m * 100
         sigma = math.hypot(float(r["sigma_centre_mm"]), s_h)
         (cx, cy), (l, w) = r["centre_xy"], r["size_m"]
+        intr = str(loc.sc.d["cameras"]["overview"].get("intrinsics_source") or "scene_calib").split(" (")[0]
         return ObjectEstimate(
             name=hint.name, xyz_world=[round(cx, 4), round(cy, 4), round(hint.height_m / 2, 4)],
             size=[l, w, hint.height_m], yaw=round(math.radians(r["yaw_deg"]), 4), uncertainty_mm=round(sigma, 1),
-            source=f"perception.locate overview colour {hint.color} ({r['method']}, {r['silhouette_px']} px"
-                   + (f", seq {seq}" if seq is not None else "") + f", {loc.sc.d['cameras']['overview'].get('intrinsics_source') or 'scene_calib'})",
+            source=f"perception.locate overview colour {hint.color} ({r['silhouette_px']} px"
+                   + (f", seq {seq}" if seq is not None else "") + f"; intrinsics: {intr})",
             visible=True, t_seen=t_seen), "ok"
 
     def locate(self, frames, joints_norm, kin, camera_info):

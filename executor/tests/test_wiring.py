@@ -116,6 +116,57 @@ def test_models_gemini_proposal_accepted_unchanged(wex, tmp_path):
     assert r.status == Status.SUCCEEDED and r.achieved["holding"] is True, r.termination
 
 
+# --- 4. Gemini advisor -------------------------------------------------------------------------------------------------
+def _gemini_advisor(ex, adv=None, **kw):
+    from executor.advisor import make_advisor
+    from executor.core import EventLog
+    ev = EventLog()
+    a = make_advisor("gemini", "http://127.0.0.1:0", ev, {k: s.describe() for k, s in ex.skills.items()}, {}, executor=ex,
+                     advisor=adv, **kw)
+    a.task = "take the blue object and put it in the bin"
+    return a, ev
+
+
+def test_gemini_advisor_proposes_through_the_executor_and_judges(wex, tmp_path):
+    ex, fake = wex(images={"overview": render_overview([(CAP, 0.016, 0.02, BLUE)])}, object_norm=0.35)
+    adv = _gemini(ex, [json.dumps({"action": "pick", "args": {"object": "blue cap", "point": _yx([*CAP, 0.0]), "camera": "overview"},
+                                   "rationale": "grasp the cap first"}),
+                       json.dumps({"done": True, "confidence": 0.9, "evidence": "cap between the jaws"})], tmp_path)
+    a, ev = _gemini_advisor(ex, adv)
+    why = a.run()
+    assert why.startswith("done"), why
+    kinds = [e["kind"] for e in ev.since(0)]
+    assert "advisor_tool_result" in kinds and "advisor_outcome" in kinds
+    (r,) = [ex.status(e) for e in ex.results]
+    assert r.skill == "pick_at" and r.status == Status.SUCCEEDED and ex.proposals[r.execution_id].source == "gemini-er"
+
+
+def test_gemini_advisor_without_key_reports_and_ends(wex, monkeypatch, tmp_path):
+    ex, fake = wex()
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setenv("MODELS_SECRETS_FILE", str(tmp_path / "none.env"))
+    a, ev = _gemini_advisor(ex)
+    why = a.run()
+    assert why == "disabled (no GEMINI_API_KEY)"
+    msgs = [e["text"] for e in ev.since(0) if e["kind"] == "advisor_message"]
+    assert msgs and "GEMINI_API_KEY" in msgs[0] and fake.motion_writes() == []
+
+
+def test_gemini_advisor_with_rejected_key_reports_and_ends(wex, tmp_path):
+    from models import advisor_gemini as ag
+    from models.gemini_er import GeminiER, GeminiError
+    ex, fake = wex()
+
+    def reject(model, parts, config):
+        raise GeminiError("ClientError: 400 INVALID_ARGUMENT. API key not valid. Please pass a valid API key.")
+    adv = ag.GeminiAdvisor(er=GeminiER(transport=reject, log_dir=tmp_path / "gem"), frame_loader=lambda ref, role: ex.frame_jpeg(ref.split("/")[3], role))
+    a, ev = _gemini_advisor(ex, adv)
+    assert a.run() == "disabled (key rejected)"
+    assert any("rejected the API key" in e.get("text", "") for e in ev.since(0)) and fake.motion_writes() == []
+    assert "API key not valid" in a.last_error
+
+
 # --- 3. perception -> observations ------------------------------------------------------------------------------------
 def test_observation_has_blue_object_from_perception(wex):
     ex, fake = wex(images={"overview": render_overview([(CAP, 0.016, 0.02, BLUE)])})
