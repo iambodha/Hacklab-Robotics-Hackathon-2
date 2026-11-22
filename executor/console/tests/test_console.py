@@ -146,6 +146,10 @@ def test_cli_against_the_console(console_url, monkeypatch, capsys):
     assert "pick (v" in capsys.readouterr().out
     cli.main(["cancel"])
     assert "nothing is moving" in capsys.readouterr().out
+    # The Gemini refusal path needs "no key": hide any real key (env or the hackathon secrets.env).
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setenv("MODELS_SECRETS_FILE", "/nonexistent/secrets.env")
     with pytest.raises(SystemExit) as e:
         cli.main(["task", "x", "--advisor", "gemini", "--no-follow"])
     assert "GEMINI_API_KEY" in str(e.value) or "console refused" in str(e.value)
