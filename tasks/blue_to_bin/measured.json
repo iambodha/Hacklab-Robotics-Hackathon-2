@@ -1,23 +1,23 @@
 {
- "created": "2026-11-22T01:23:51+0100",
+ "created": "2026-11-22T02:44:55+0100",
  "frame": "world (scene-contract), metres",
- "source": "median of Station's 10 newest stored overview entries (usbvideo/9ea4cacd..., ids up to 150339 = last frame before Station's 00:58 restart; video not streaming since). Re-run with --live 10 when video is back.",
- "scene_calib": "2026-11-22T00:40:02+01:00",
+ "source": "tasks/tests/data/real_overview_on_table.jpg = the median of Station's 10 newest stored overview entries before its 00:58 restart, the frame r2-task measured on (same 246 px lid silhouette, same picked tub pixels). Re-measured offline, no live frame (the table now holds another demo's bottle).",
+ "scene_calib": "2026-11-22T01:50:55+01:00",
  "blue_cap": {
   "ok": true,
   "method": "colour blue inside the table extent silhouette -> upright cylinder fit to its extreme pixels",
   "centre_xy": [
-   0.2619,
-   -0.1298
+   0.2836,
+   -0.1409
   ],
-  "diameter_m": 0.062,
-  "height_m": 0.0264,
+  "diameter_m": 0.0601,
+  "height_m": 0.0289,
   "sigma_mm": {
-   "centre_pixel": 5.0,
-   "calibration": 7.6,
-   "centre": 9.0,
-   "diameter": 4.6,
-   "height": 6.8
+   "centre_pixel": 5.2,
+   "calibration": 2.0,
+   "centre": 5.5,
+   "diameter": 4.7,
+   "height": 6.5
   },
   "silhouette_px": 246,
   "silhouette_bbox_px": [
@@ -31,27 +31,27 @@
    107.67479674796748
   ],
   "fit_rms_px": 0.0,
-  "model_iou": 0.856
+  "model_iou": 0.866
  },
  "bin": {
   "ok": true,
   "method": "tapered upright cylinder fitted to picked rim/base pixels (transparent tub, no colour)",
   "centre_xy": [
-   0.2545,
-   0.1234
+   0.2916,
+   0.1112
   ],
-  "rim_diameter_m": 0.1094,
-  "rim_height_m": 0.0779,
-  "base_diameter_m": 0.0875,
+  "rim_diameter_m": 0.1087,
+  "rim_height_m": 0.0768,
+  "base_diameter_m": 0.0857,
   "sigma_mm": {
    "centre_pixel": 4.1,
-   "calibration": 7.6,
-   "centre": 8.6,
+   "calibration": 2.0,
+   "centre": 4.6,
    "rim_diameter": 2.9,
-   "rim_height": 3.5,
+   "rim_height": 3.3,
    "base_diameter": 3.7
   },
-  "fit_rms_px": 1.04,
+  "fit_rms_px": 0.8,
   "pixels": {
    "rim_left": [
     179.0,
@@ -85,15 +85,40 @@
  },
  "notes": [
   "read only: no command was sent",
-  "calibration sigma = perception's held-out marker error (median)"
+  "calibration sigma = perception's held-out marker error (median)",
+  "re-measured with the 01:50 calibration by r3-taskfix: python -m tasks.blue_to_bin.measure --frames tasks/tests/data/real_overview_on_table.jpg"
  ],
- "twin_check": {
-  "compare": "tasks/blue_to_bin/twin_compare.jpg (sim/compare_real.py --layout home on the same frame)",
-  "blue_silhouette_iou_real_vs_twin": 0.923,
-  "blue_centroid_px_diff": [
-   0.15,
-   0.32
-  ],
-  "marker_corner_px_error": 3.09
+ "scene_calib_id": "calibration/scene_calib.json created 2026-11-22T01:50:55+01:00 (r2-percfix final 4-marker calibration, commit 193f00d)",
+ "previous": {
+  "scene_calib": "2026-11-22T00:40:02+01:00",
+  "created": "2026-11-22T01:23:51+0100",
+  "blue_cap": {
+   "centre_xy": [
+    0.2619,
+    -0.1298
+   ],
+   "diameter_m": 0.062,
+   "height_m": 0.0264
+  },
+  "bin": {
+   "centre_xy": [
+    0.2545,
+    0.1234
+   ],
+   "rim_diameter_m": 0.1094,
+   "rim_height_m": 0.0779,
+   "base_diameter_m": 0.0875
+  },
+  "shift_mm": {
+   "blue_cap": [
+    21.7,
+    -11.1
+   ],
+   "bin": [
+    37.1,
+    -12.2
+   ]
+  },
+  "why": "same pixels, new camera model: overview camera position moved (+29, -12, -25) mm, fx/fy -3 %, principal point +4.5 / +6.4 px, radial distortion k1 0.069 k2 -0.051 added (was none)"
  }
 }

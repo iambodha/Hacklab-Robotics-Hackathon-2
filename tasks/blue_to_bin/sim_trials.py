@@ -56,7 +56,7 @@ def apply_pad_fix(inward_m: float = PAD_FIX_M, out_dir: Path | None = None) -> P
     return out
 
 
-def make_sim_executor(rec_root: Path, spec=None, pad_fix: bool = False):
+def make_sim_executor(rec_root: Path, spec=None, pad_fix: bool = False, layout: str = "home"):
     """Executor on the home twin with this task's locator and adapter skill (what the integrator would wire)."""
     if pad_fix:
         apply_pad_fix()
@@ -70,9 +70,9 @@ def make_sim_executor(rec_root: Path, spec=None, pad_fix: bool = False):
     from .task import Spec
     spec = spec or Spec.load()
     kin = Kinematics()
-    b = SimBackend(layout="home")
+    b = SimBackend(layout=layout)
     # max_frame_age 2 s: twin renders are slow on a loaded laptop (the real backend keeps the executor default)
-    ex = Executor(b, kin, recorder=RecorderLink("local", root=rec_root), locator=BlueLocator(spec), layout="home",
+    ex = Executor(b, kin, recorder=RecorderLink("local", root=rec_root), locator=BlueLocator(spec), layout=layout,
                   table_memory_path=rec_root / "table_memory.json", max_frame_age=2.0)
     install(ex)
     return ex, b, kin, spec
@@ -116,12 +116,14 @@ def main():
     ap.add_argument("--twin-pad-fix", action="store_true", help="apply the proposed fingertip-pad change (see apply_pad_fix)")
     ap.add_argument("--frames-dir", help="save overview + wrist frames after the key steps of every trial here")
     ap.add_argument("--out", default=str(RESULTS / "sim_scripted.json"))
+    ap.add_argument("--layout", default="home", help="twin layout name or file (its overview camera must match scene_calib)")
     a = ap.parse_args()
     import tempfile
     rec_root = Path(tempfile.mkdtemp(prefix="blue_to_bin_rec_"))
-    ex, b, kin, spec = make_sim_executor(rec_root, pad_fix=a.twin_pad_fix)
+    ex, b, kin, spec = make_sim_executor(rec_root, pad_fix=a.twin_pad_fix, layout=a.layout)
     from .plan import Runner
-    from .task import truth_in_bin
+    from .task import MEASURED, truth_in_bin
+    cap0 = json.loads(MEASURED.read_text())["blue_cap"]["centre_xy"]
     trials = []
     for k in range(1, a.trials + 1):
         b.arm.rng = np.random.default_rng(a.seed * 1000 + k)
@@ -150,7 +152,7 @@ def main():
         t1 = truth_world(b, kin)
         ok = truth_in_bin(spec, t1["blue_cap"], t1["bin_tub"])
         bin_moved = 1000 * float(np.linalg.norm(np.subtract(t1["bin_tub"][:2], t0["bin_tub"][:2])))
-        row = {"trial": k, "start_cap_world": t0["blue_cap"], "offset_mm": np.round(1000 * (np.array(t0["blue_cap"][:2]) - [0.2619, -0.1298]), 1).tolist(),
+        row = {"trial": k, "start_cap_world": t0["blue_cap"], "offset_mm": np.round(1000 * (np.array(t0["blue_cap"][:2]) - cap0), 1).tolist(),
                "perturbed": k in a.perturb, "predicate_success": rep["success"], "truth_in_bin": ok, "end_truth": t1,
                "bin_moved_mm": round(bin_moved, 1), "attempts": rep["attempts"], "seconds": rep["seconds"],
                "proposals": rep["proposals"], "why": rep["why"], "mode": classify(rep, ok, bin_moved), "report": rep}
@@ -165,7 +167,7 @@ def main():
                "attempts_hist": {n: sum(1 for t in trials if t["attempts"] == n) for n in range(1, spec.max_attempts + 1)},
                "modes": {m: sum(1 for t in trials if t["mode"] == m) for m in sorted({t["mode"] for t in trials})},
                "step_seconds_median": step_medians(trials), "spec": spec.to_dict(), "seed": a.seed,
-               "twin_pad_fix_m": PAD_FIX_M if a.twin_pad_fix else 0.0}
+               "twin_pad_fix_m": PAD_FIX_M if a.twin_pad_fix else 0.0, "layout": a.layout}
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"summary": summary, "trials": trials}, indent=1, default=str))
