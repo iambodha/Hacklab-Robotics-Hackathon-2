@@ -6,6 +6,8 @@
 OPERATOR_TEMPLATE.md holds the text with <<NAME>> placeholders; the values come from the robot profile
 (sim/robots/<name>.json, chosen with ROBOT_PROFILE). Stdlib only, so the shell scripts can call it with plain python3.
 """
+from __future__ import annotations
+
 import json
 import os
 import re
