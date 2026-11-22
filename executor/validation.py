@@ -8,10 +8,44 @@ from .contracts import ActionProposal, Observation, ValidationResult
 from .skills import Plan, PlanError, Skill
 
 
-def validate_in_sim(proposal: ActionProposal, plan: Plan | None) -> dict:
-    """Twin preflight hook: run the plan in the MuJoCo twin and report collisions. No-op until the twin
-    branch lands (then: set Executor.preflight to a function with this signature)."""
-    return {"result": "skipped", "why": "twin preflight not wired yet"}
+_DEFAULT_TWIN = None
+
+
+def validate_in_sim(proposal: ActionProposal, plan: Plan | None = None, ex=None, obs: Observation | None = None,
+                    q0=None) -> dict:
+    """Twin preflight (executor/twin.py) of the proposal's WHOLE planned path: collisions with table, markers, bin(s),
+    camera stand; twin reachability. -> {"result": pass|fail|skipped, "why", "seconds", ...numbers}, < 2 s.
+    With an Executor `ex` and no plan, the skill is planned first from the measured joints (nothing moves)."""
+    global _DEFAULT_TWIN
+    try:
+        if ex is not None:
+            obs = obs or ex.observation(proposal.based_on_obs)
+            if plan is None:
+                skill = ex.skills.get(proposal.skill)
+                if skill is None:
+                    return {"result": "skipped", "why": f"unknown skill {proposal.skill!r}"}
+                q0 = ex.motion.q_now() if q0 is None else q0
+                plan = skill.plan(ex.ctx(q0=q0, obs=obs), proposal.params)
+            pf = ex.twin
+        else:
+            if _DEFAULT_TWIN is None:
+                from .kinematics import Kinematics
+                from .twin import TwinPreflight
+                _DEFAULT_TWIN = TwinPreflight(Kinematics(), warm=False)
+            pf = _DEFAULT_TWIN
+    except PlanError as e:
+        return {"result": "fail", "why": f"no plan: {e.reason}", "checks": e.checks}
+    except ImportError as e:
+        return {"result": "skipped", "why": f"MuJoCo / twin not available: {e}"}
+    if pf is None:
+        return {"result": "skipped", "why": "twin preflight disabled (EXECUTOR_TWIN_PREFLIGHT=0)"}
+    return pf(proposal, plan, obs, q0)
+
+
+def executor_version(v: str) -> bool:
+    """A numeric skill_version ("1", "2.1") names the executor's skill version and must match it. Anything else is the
+    proposer's own version tag (skills: "wipe-3f2a9c1d", models: "gemini-advisor/0.1"): recorded, not enforced."""
+    return bool(v) and v.replace(".", "").isdigit()
 
 
 def validate(ex, p: ActionProposal, busy: bool) -> tuple[ValidationResult, Plan | None, float]:
@@ -31,10 +65,11 @@ def validate(ex, p: ActionProposal, busy: bool) -> tuple[ValidationResult, Plan 
     if skill is None:
         fail("skill", f"unknown skill {p.skill!r}", known=sorted(ex.skills))
         return ValidationResult(False, reasons, checks), None, time.monotonic() - t0
-    if p.skill_version and p.skill_version != skill.version:
+    if executor_version(p.skill_version) and p.skill_version != skill.version:
         fail("skill", f"skill {p.skill} version {p.skill_version} != executor's {skill.version}", version=skill.version)
     else:
-        ok("skill", version=skill.version)
+        ok("skill", version=skill.version, **({"proposer_version": p.skill_version} if p.skill_version and
+                                              p.skill_version != skill.version else {}))
 
     now = ex.now()
     left = p.expires_at - now
@@ -79,7 +114,7 @@ def validate(ex, p: ActionProposal, busy: bool) -> tuple[ValidationResult, Plan 
         (ok("motion_enabled", backend=ex.backend.name) if ex.backend.can_move else
          fail("motion_enabled", f"motion disabled on backend {ex.backend.name} (arm-enabled toggle off)", backend=ex.backend.name))
 
-    plan = None
+    plan, q0 = None, None
     try:
         st = ex.backend.read_state().motors
         bad = [ex.kin.name_of[m] for m in ex.kin.ids if not st[m]["in_range"] or st[m]["torque"] == 0 or st[m]["status"]]
@@ -95,7 +130,8 @@ def validate(ex, p: ActionProposal, busy: bool) -> tuple[ValidationResult, Plan 
         return ValidationResult(False, reasons, checks), None, time.monotonic() - t0
 
     try:
-        plan = skill.plan(ex.ctx(q0=ex.motion.q_now(st)), p.params)
+        q0 = ex.motion.q_now(st)
+        plan = skill.plan(ex.ctx(q0=q0, obs=obs), p.params)
         checks.update({k: v for k, v in plan.checks.items()})
         checks.setdefault("reachability", {"result": "pass"})
         checks.setdefault("workspace", {"result": "pass"})
@@ -106,7 +142,7 @@ def validate(ex, p: ActionProposal, busy: bool) -> tuple[ValidationResult, Plan 
     except (KeyError, TypeError, ValueError) as e:
         fail("params", f"bad params for {p.skill}: {e}", params_doc=skill.params_doc)
 
-    checks["twin_preflight"] = ex.preflight(p, plan) if plan is not None else {"result": "skipped"}
+    checks["twin_preflight"] = ex.preflight(p, plan, ex, obs, q0) if plan is not None else {"result": "skipped"}
     if checks["twin_preflight"].get("result") == "fail":
         reasons.append("twin preflight: " + checks["twin_preflight"].get("why", "collision"))
 

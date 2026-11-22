@@ -240,7 +240,8 @@ class Pick(Skill):
                     {"reachability": {"result": "pass", "waypoints": len(approach) + len(free) + len(steps) + 2, "max_lean_deg": lean},
                      "table": {"result": "pass", "table_tcp_z": round(table, 4), "felt": ctx.memory_hit(x, y) is not None,
                                "goal_z": round(goal_z, 4), "flat": flat}},
-                    {"xy": [x, y], "goal_z": goal_z, "flat": flat, "force": params.get("grip_force")})
+                    {"xy": [x, y], "goal_z": goal_z, "flat": flat, "force": params.get("grip_force")},
+                    {"preflight_from": {"back": "descent" if steps else "free" if free else "approach"}})
 
     def execute(self, ctx, plan, run):
         m = ctx.motion

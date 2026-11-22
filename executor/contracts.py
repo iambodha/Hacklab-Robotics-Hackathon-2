@@ -148,7 +148,7 @@ def to_dict(obj) -> dict:
     def conv(x):
         if isinstance(x, Enum):
             return x.value
-        if dataclasses.is_dataclass(x):
+        if dataclasses.is_dataclass(x) and not isinstance(x, type):
             return {f.name: conv(getattr(x, f.name)) for f in dataclasses.fields(x)}
         if isinstance(x, dict):
             return {str(k): conv(v) for k, v in x.items()}

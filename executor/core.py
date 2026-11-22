@@ -8,6 +8,7 @@ observe() and submit() proposals; they never send motor commands and never block
 """
 from __future__ import annotations
 
+import os
 import threading
 import time
 import traceback
@@ -91,13 +92,22 @@ class Run:
 
 
 class Ctx:
-    """What a skill sees: kinematics, motion, profile, seed joints, table memory for THIS setup."""
+    """What a skill sees: kinematics, motion, profile, seed joints, table memory for THIS setup, and the observation
+    the proposal was based on (with its frames and object estimates) for skills that localise from it."""
 
-    def __init__(self, ex: "Executor", q0):
+    def __init__(self, ex: "Executor", q0, obs: Observation | None = None):
         self.ex, self.kin, self.motion, self.P = ex, ex.kin, ex.motion, ex.kin.P
         self.q0 = np.asarray(q0, float)
         self.setup_id = ex.setup_id()
         self.min_z = ex.min_z
+        self.obs = obs
+        self.locator = ex.locator
+
+    def frame(self, role: str = "overview") -> bytes | None:
+        return self.ex.frame_jpeg(self.obs.obs_id, role) if self.obs else None
+
+    def camera_info(self) -> dict:
+        return self.ex.camera_info()
 
     def memory_hit(self, x, y):
         return self.ex.memory.lookup(self.setup_id, x, y)
@@ -115,7 +125,8 @@ class Ctx:
 class Executor:
     def __init__(self, backend: Backend, kin: Kinematics | None = None, recorder: RecorderLink | None = None,
                  locator: Locator | None = None, layout: str = "default", tool: str = "none",
-                 table_memory_path: Path | None = None, max_frame_age: float = 1.0, events: EventLog | None = None):
+                 table_memory_path: Path | None = None, max_frame_age: float = 1.0, events: EventLog | None = None,
+                 twin: bool | str | None = None):
         self.backend = backend
         self.kin = kin or Kinematics()
         self.skills = dict(SKILLS)
@@ -128,7 +139,16 @@ class Executor:
         self.max_frame_age = max_frame_age
         self.min_z = float(self.kin.P.workspace.min_tcp_z)
         self.memory = TableMemory(table_memory_path, self.kin.P.touch)
-        self.preflight = validate_in_sim
+        self.preflight = validate_in_sim          # (proposal, plan, executor, obs, q0) -> check dict
+        self.twin = None
+        if twin is None:
+            twin = os.environ.get("EXECUTOR_TWIN_PREFLIGHT", "1") != "0"
+        if twin:
+            try:
+                from .twin import TwinPreflight
+                self.twin = TwinPreflight(self.kin, None if twin is True else str(twin))
+            except ImportError:
+                self.twin = None
         self.cancel_ev = threading.Event()
         self.motion = Motion(backend, self.kin, self.cancel_ev, log=lambda *a, **k: self.events.add("motion_log", text=" ".join(map(str, a)), **k))
         self.lock = threading.Lock()
@@ -163,8 +183,8 @@ class Executor:
         self.tool = tool or "none"
         return self.setup_id()
 
-    def ctx(self, q0=None) -> Ctx:
-        return Ctx(self, self.motion.q_now() if q0 is None else q0)
+    def ctx(self, q0=None, obs: Observation | None = None) -> Ctx:
+        return Ctx(self, self.motion.q_now() if q0 is None else q0, obs)
 
     def camera_info(self) -> dict:
         if hasattr(self.backend, "camera_info"):
@@ -269,7 +289,7 @@ class Executor:
         res0 = self.results[eid]
         run = Run(eid, p, list(res0.phases), markers=list(res0.markers), ex=self)
         self.backend.tag = eid
-        ctx = self.ctx()
+        ctx = self.ctx(obs=self.observation(p.based_on_obs))
         ph = run.phase_start("execute")
         try:
             res = skill.execute(ctx, plan, run)
@@ -347,6 +367,10 @@ class Executor:
     def busy(self) -> bool:
         return self.current is not None
 
+    def validate_in_sim(self, p: ActionProposal) -> dict:
+        """Twin preflight of a proposal's whole planned path, without submitting it (nothing moves)."""
+        return validate_in_sim(p, ex=self)
+
     # --- evaluate ------------------------------------------------------------------------------
     def evaluate(self, eid: str) -> Outcome:
         from .evaluator import evaluate
@@ -373,5 +397,6 @@ class Executor:
 
     def describe(self) -> dict:
         return {"backend": self.backend.describe(), "skills": {k: s.describe() for k, s in self.skills.items()},
-                "locator": self.locator.name, "scene_calib": str(scene_calib_path()) if scene_calib_path() else None,
-                "tool": self.tool, "layout": self.layout, "profile": self.kin.P.name}
+                "locator": self.locator.name, "perception": self.locator.describe(), "scene_calib": str(scene_calib_path()) if scene_calib_path() else None,
+                "tool": self.tool, "layout": self.layout, "profile": self.kin.P.name,
+                "twin_preflight": self.twin.describe() if self.twin else None}

@@ -6,6 +6,7 @@ Time only advances in sleep() (and advance()), so a test is fast and repeatable.
   frozen={"wrist"}             that camera keeps delivering the same frame (same seq, old t_capture)
   table_z=0.01                 with kin: arm joints stop when the TCP would go below this world height (contact)
   object_norm=0.3              gripper closing stops at this opening (something between the jaws)
+  images={"overview": jpeg}    camera content (bytes, or a callable returning bytes per frame); set_image() swaps it
 Every write is logged in `log` as (t, kind, goals, tag) so tests can prove "zero motion" or "nothing after cancel".
 """
 from __future__ import annotations
@@ -27,7 +28,7 @@ class FakeBackend(Backend):
     def __init__(self, start_norm: dict[int, float] | None = None, kin=None, speed: float = 0.6, fps: float = 30.0,
                  stall: dict | None = None, fault_after: dict | None = None, frozen: set | None = None,
                  table_z: float | None = None, object_norm: float | None = None, step_delay: float = 0.0,
-                 ranges: dict | None = None, realtime: bool = False):
+                 ranges: dict | None = None, realtime: bool = False, images: dict | None = None):
         self.ranges = dict(ranges or RANGES)
         self.pos = {m: 0.5 for m in self.motor_ids}
         self.pos[8] = 0.9
@@ -48,7 +49,12 @@ class FakeBackend(Backend):
         self.lock = threading.RLock()
         self._frozen_at: dict[str, tuple[int, float]] = {}
         self._jpeg = {r: placeholder_jpeg(f"fake {r}") for r in self.cameras}
+        self._jpeg.update(images or {})
         self.torque_limit: dict[int, float] = {}
+
+    def set_image(self, role: str, jpeg) -> None:
+        with self.lock:
+            self._jpeg[role] = jpeg
 
     # --- clock -------------------------------------------------------------------
     def now(self) -> float:
@@ -125,7 +131,8 @@ class FakeBackend(Backend):
                 seq, t = int(now * self.fps), int(now * self.fps) / self.fps
                 if r in self.frozen:
                     seq, t = self._frozen_at.setdefault(r, (seq, t))
-                out[r] = FrameSample(r, f"fake/{r}", seq, t, self._jpeg[r], joints)
+                img = self._jpeg[r]
+                out[r] = FrameSample(r, f"fake/{r}", seq, t, img() if callable(img) else img, joints)
             return out
 
     def write_goals(self, goals: dict[int, float]) -> None:

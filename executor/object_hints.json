@@ -1,0 +1,3 @@
+[
+  {"name": "blue object", "color": "blue", "height_m": 0.02, "height_sigma_m": 0.01, "min_px": 6, "role": "object"}
+]
