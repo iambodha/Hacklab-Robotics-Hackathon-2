@@ -12,6 +12,9 @@ for cand in (os.environ.get("NORMA_CORE_REPO"), ROOT / "norma-core", ROOT.parent
         os.environ["NORMA_CORE_REPO"] = str(cand)
         break
 os.environ.setdefault("MUJOCO_GL", "cgl" if sys.platform == "darwin" else "egl")
+if "SKILLCFG_DIR" not in os.environ or "skillcfg-tests-" not in os.environ["SKILLCFG_DIR"]:
+    import tempfile
+    os.environ["SKILLCFG_DIR"] = tempfile.mkdtemp(prefix="skillcfg-tests-")   # never the live logs/skillcfg
 
 mujoco = pytest.importorskip("mujoco")
 
