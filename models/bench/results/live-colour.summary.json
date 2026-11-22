@@ -1,0 +1,23 @@
+{
+ "frames": 4,
+ "gemini_errors": 0,
+ "colour/blue cap": {
+  "n": 4,
+  "err_mm_p50": 1872.8,
+  "err_mm_max": 1879.5,
+  "err_px_p50": 123.505,
+  "hit_rate": 0.25,
+  "locate_err_mm_p50": 2073.1
+ },
+ "colour_table/blue cap": {
+  "n": 4,
+  "err_mm_p50": 12.7,
+  "err_mm_max": 22.7,
+  "err_px_p50": 2.925,
+  "hit_rate": 1.0,
+  "locate_err_mm_p50": 14.7
+ },
+ "calls": 0,
+ "latency_p50_s": null,
+ "cost_total_usd": 0
+}
