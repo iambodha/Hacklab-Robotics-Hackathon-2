@@ -10,9 +10,17 @@ Targets: "real" (the real arm: a version only after a human approves, `python -m
 set_target(), else env SKILLCFG_TARGET, else "real" (so a server that forgets to choose never runs unapproved values).
 
 Keys have a class: "strategy" (changeable within the key's envelope) or "safety" (listed, never changeable here).
-Values not in the file are the code defaults: with no file every reader behaves exactly as before. Reads go through an
-mtime cache (as sim/real_joints.py), so a running server sees a new version on its next call. Pure standard library:
-the real-arm MCP server and episodes.py import it.
+
+Where a value comes from, lowest layer first (docs/learning/PROFILES.md):
+    baseline   the code value of the key (the registry below; each key names its origin). SKILL_PROFILES=none
+               runs on these alone: the behaviour before anything was learned.
+    profile    learning/profiles/<skill>.json: what a skill learned, git-versioned, each value with its provenance
+               (attempts, evidence, date). The profile values are the DEFAULTS of the keys.
+    version    SKILLCFG_DIR/<target>.json: runtime changes through proposals (versioned, reversible; revert to 0 =
+               the profile).
+Values not in the version file are the defaults (profile, else baseline). Reads go through an mtime cache (as
+sim/real_joints.py), so a running server sees a new version or an edited profile on its next call. Pure standard
+library: the real-arm MCP server and episodes.py import it.
 """
 from __future__ import annotations
 
@@ -28,11 +36,17 @@ from pathlib import Path
 
 DEFAULT_DIR = Path("/Users/bodha/Documents/b0dha/Robotics-Hackathon/logs/skillcfg")
 REPO = Path(__file__).resolve().parents[1]
+PROFILE_DIR = REPO / "learning" / "profiles"
 TARGETS = ("real", "twin")
 SEARCHES = ("least_lean", "near_first")
+ONOFF = ("on", "off")
+# The operator's MCP client gives up on a tool call after this long (the brief of r5-skills; attempt 10's 24 slow
+# strokes were lost to it). Upper envelope of twist.time_budget_s. Note: attempt 12's call took 122 s and returned.
+MCP_CLIENT_TIMEOUT_S = 120.0
 _target: str | None = None
 
-# Code defaults of the twist_cap strategy (learning/twist.py takes its module constants from here).
+# Code baseline of the twist_cap strategy (learning/twist.py takes its module constants from here). These are the
+# values the r3/r4 code ran with; learning/profiles/bottle_cap.json holds what the real arm learned on top.
 TWIST_DEFAULTS = {
     "twist.approach": "auto",
     "twist.side_lean_deg": 90.0,      # a grasp pose leaning more than this is approached from the side, not from above.
@@ -43,6 +57,54 @@ TWIST_DEFAULTS = {
     "twist.max_lean_deg": 75.0,       # deg from vertical: steeper poses are not used for the cap
     "twist.grasp_below_top_m": 0.010,  # nominal TCP height below the cap top (approach_z_offset_mm is added)
     "twist.release_open": 0.25,       # how much the jaws open (norm) to release the cap between strokes
+    # --- moved out of learning/twist.py module constants in r5 (same values) ---
+    "twist.step_deg.slow": 3.0,       # twist per control step at twist_speed=slow (r3 STEP_DEG)
+    "twist.step_deg.medium": 6.0,     # ... at medium (= SAFETY.max_step_deg)
+    "twist.step_dt.slow": 0.15,       # s per control step at slow (r3 STEP_DT)
+    "twist.step_dt.medium": 0.10,     # ... at medium
+    "twist.side_back_m": 0.04,        # side approach: start this far back along the jaws' approach axis (r3)
+    "twist.side_step_m": 0.005,       # ... advance in steps of this
+    "twist.side_contact_m": 0.006,    # ... a step that ends this far short = contact
+    "twist.guard_above_m": 0.02,      # the descent feels for contact from this far above the cap top (r3)
+    "twist.contact_ok_m": 0.004,      # a touch this close to the grasp height counts as arrival (r3)
+    "twist.lag_stall_deg": 15.0,      # achieved rotation this far behind the command = the cap does not turn (r3)
+    "twist.retreat_up_m": 0.04,       # straight up after an abort (r3)
+    "twist.ik_tilts_deg": [4, -4, 8, -8, 12, -12],   # IK fallback tilts for jaws-down poses at a wrist limit (r3)
+    # --- r5: stop when the cap is free, fit the call into the client's timeout (baseline = off = r4 behaviour) ---
+    "twist.stop_on_free": "off",
+    "twist.free_load_ratio": 0.70,
+    "twist.free_ref_strokes": 2,
+    "twist.free_confirm_strokes": 2,
+    "twist.free_min_rotation_deg": 280.0,
+    "twist.time_budget_s": 0.0,       # 0 = no budget (r4 behaviour)
+    "twist.cycle_s.slow": 10.1,       # prior for the first budget decision; measured cycles replace it at once
+    "twist.cycle_s.medium": 8.5,
+    "twist.resume_tol_m": 0.01,       # twist_cap at a cap the jaws already hold (this close): resume, no re-approach
+}
+
+# Code baseline of the lifts that judge whether the cap came free (check_cap, extract_cap).
+LIFT_DEFAULTS = {
+    "check.lift_m": 0.015,            # check_cap's short lift (r3 CHECK_LIFT)
+    "extract.lift_m": 0.015,          # extract_cap's lift: baseline = the only lift r3/r4 had; the profile: 6 cm
+    "lift.step_m": 0.003,             # lift in steps of this (r3: 15 mm in 5 steps)
+    "lift.step_dt_s": 0.15,           # s per lift step (r3)
+    "lift.follow_fraction": 0.5,      # the gripper rose less than this x the commanded lift = held back (r3 rule)
+    "lift.judge_after_m": 0.015,      # judge 'held back' only from this commanded height on (servo lag before)
+    "lift.free_rise_fraction": 0.6,   # free = still holding after rising at least this x the lift (r3 rule)
+}
+
+# Code baseline of the learning rule (learning/rules.py): how big a step it proposes.
+LEARN_DEFAULTS = {
+    "learn.auto_propose": "on",       # episode_end runs the rules and records their proposals (pending: nothing applies)
+    "learn.auto_apply": "off",        # twin only: apply the rules' proposals at once (the real arm: always a human)
+    "learn.strokes_step": 4,
+    "learn.strokes_margin": 0,
+    "learn.z_step_mm": 1.0,
+    "learn.lift_step_m": 0.015,
+    "learn.lift_clear_m": 0.04,
+    "learn.lift_per_turn_mm": 1.0,
+    "learn.grip_step": 0.1,
+    "learn.reply_margin_s": 10.0,
 }
 
 
@@ -75,13 +137,189 @@ PARAM_ENVELOPE = {
 }
 
 
-def _key(kind, default, about, readers, cls="strategy", lo=None, hi=None, choices=None, item=None, length=None):
-    return {"kind": kind, "default": default, "about": about, "readers": readers, "class": cls, "lo": lo, "hi": hi,
-            "choices": choices, "item": item, "length": length}
+def _key(kind, default, about, readers, cls="strategy", lo=None, hi=None, choices=None, item=None, length=None,
+         origin=None):
+    return {"kind": kind, "default": default, "baseline": default, "about": about, "readers": readers, "class": cls,
+            "lo": lo, "hi": hi, "choices": choices, "item": item, "length": length, "origin": origin, "learned": None}
+
+
+def _skill_keys(E) -> dict:
+    """The r5 keys of the bottle skill: twist details, stop-on-free, time budget, the judging lifts, the learning
+    rule's steps, and the episode params' defaults (params.default.<name>). Baselines = today's code values."""
+    T, L, R, S = TWIST_DEFAULTS, LIFT_DEFAULTS, LEARN_DEFAULTS, E.SAFETY
+    tw = "learning/twist.py"
+    reg = {
+        "twist.step_deg.slow": _key("float", T["twist.step_deg.slow"], "twist per control step at twist_speed=slow (deg)",
+                                    tw, lo=0.5, hi=float(S["max_step_deg"]), origin="r3 twist skill (STEP_DEG)"),
+        "twist.step_deg.medium": _key("float", T["twist.step_deg.medium"], "twist per control step at medium (deg)", tw,
+                                      lo=0.5, hi=float(S["max_step_deg"]), origin="r3 twist skill (STEP_DEG)"),
+        "twist.step_dt.slow": _key("float", T["twist.step_dt.slow"], "seconds per control step at slow", tw,
+                                   lo=float(S["min_step_dt"]), hi=1.0, origin="r3 twist skill (STEP_DT)"),
+        "twist.step_dt.medium": _key("float", T["twist.step_dt.medium"], "seconds per control step at medium", tw,
+                                     lo=float(S["min_step_dt"]), hi=1.0, origin="r3 twist skill (STEP_DT)"),
+        "twist.side_back_m": _key("float", T["twist.side_back_m"], "side approach: start this far back along the jaws",
+                                  tw, lo=0.01, hi=0.08, origin="r3 side approach (SIDE_BACK)"),
+        "twist.side_step_m": _key("float", T["twist.side_step_m"], "side approach: advance in steps of this", tw,
+                                  lo=0.002, hi=0.02, origin="r3 side approach (SIDE_STEP)"),
+        "twist.side_contact_m": _key("float", T["twist.side_contact_m"], "side approach: a step ending this far short "
+                                     "is contact", tw, lo=0.002, hi=0.02, origin="r3 side approach (SIDE_CONTACT)"),
+        "twist.guard_above_m": _key("float", T["twist.guard_above_m"], "the descent feels for contact from this far "
+                                    "above the cap top (fingertips ~1 cm below the TCP)", tw, lo=0.005, hi=0.05,
+                                    origin="r3 top approach (GUARD_ABOVE)"),
+        "twist.contact_ok_m": _key("float", T["twist.contact_ok_m"], "a touch this close above the grasp height counts "
+                                   "as arrival", tw, lo=0.0, hi=0.01, origin="r3 top approach (CONTACT_OK)"),
+        "twist.lag_stall_deg": _key("float", T["twist.lag_stall_deg"], "achieved rotation this far behind the command "
+                                    "ends the stroke (the cap does not turn)", tw, lo=3.0, hi=45.0,
+                                    origin="r3 twist skill (LAG_STALL_DEG)"),
+        "twist.retreat_up_m": _key("float", T["twist.retreat_up_m"], "straight up after an abort", tw, lo=0.01, hi=0.10,
+                                   origin="r3 twist skill (RETREAT_UP)"),
+        "twist.ik_tilts_deg": _key("list", list(T["twist.ik_tilts_deg"]), "IK fallback: gripper tilts tried where the "
+                                   "jaws-down pose is just out of reach", tw, item=("int", -20, 20), length=(0, 12),
+                                   origin="r3 twist skill (TILTS_DEG)"),
+        "twist.stop_on_free": _key("enum", T["twist.stop_on_free"], "end the strokes early when the wrist-roll (j7) load "
+                                   "says the thread let go (learning/capfree.py)", tw + ", learning/capfree.py",
+                                   choices=ONOFF, origin="r5 (new; off = r4 behaviour)"),
+        "twist.free_load_ratio": _key("float", T["twist.free_load_ratio"], "free when a stroke's mean j7 load is at most "
+                                      "this x the reference (the largest mean of the first strokes)", "learning/capfree.py",
+                                      lo=0.2, hi=0.95, origin="fitted on attempts 1-12 (docs/learning/CAP_FREE.md)"),
+        "twist.free_ref_strokes": _key("int", T["twist.free_ref_strokes"], "the reference load = the largest mean j7 "
+                                       "load of this many first strokes (the break-away)", "learning/capfree.py",
+                                       lo=1, hi=6, origin="fitted on attempts 1-12"),
+        "twist.free_confirm_strokes": _key("int", T["twist.free_confirm_strokes"], "this many strokes in a row under "
+                                           "the threshold = free", "learning/capfree.py", lo=1, hi=6,
+                                           origin="fitted on attempts 1-12"),
+        "twist.free_min_rotation_deg": _key("float", T["twist.free_min_rotation_deg"], "never call the cap free before "
+                                            "this much rotation in the attempt", "learning/capfree.py", lo=0.0, hi=1440.0,
+                                            origin="0.8 x the ~350 deg a closed cap needed (attempts 10, 12)"),
+        "twist.time_budget_s": _key("float", T["twist.time_budget_s"], "a twist_cap call ends (cap still gripped, "
+                                    "resumable) before this many seconds; 0 = no budget", tw, lo=0.0,
+                                    hi=MCP_CLIENT_TIMEOUT_S, origin="r5 (new; 0 = r4 behaviour)"),
+        "twist.cycle_s.slow": _key("float", T["twist.cycle_s.slow"], "expected seconds per stroke cycle at slow, before "
+                                   "one is measured (budget prior)", tw, lo=1.0, hi=60.0,
+                                   origin="attempt 10: 23 slow 32 deg cycles in 233 s"),
+        "twist.cycle_s.medium": _key("float", T["twist.cycle_s.medium"], "expected seconds per stroke cycle at medium "
+                                     "(budget prior)", tw, lo=1.0, hi=60.0,
+                                     origin="attempt 12: 11 medium 32 deg cycles in 85 s"),
+        "twist.resume_tol_m": _key("float", T["twist.resume_tol_m"], "twist_cap with the jaws already holding the cap "
+                                   "this close to the grasp point resumes the strokes (no re-approach)", tw, lo=0.0,
+                                   hi=0.03, origin="r5 (new)"),
+        "check.lift_m": _key("float", L["check.lift_m"], "check_cap: how far it lifts the gripped cap", tw, lo=0.005,
+                             hi=0.10, origin="r3 check_cap (CHECK_LIFT)"),
+        "extract.lift_m": _key("float", L["extract.lift_m"], "extract_cap: how far it lifts the gripped cap (guarded: "
+                               "stops and lets go if the thread holds it back)", tw, lo=0.005, hi=0.10,
+                               origin="baseline = the r3 check lift"),
+        "lift.step_m": _key("float", L["lift.step_m"], "the judging lifts rise in steps of this", tw, lo=0.001, hi=0.01,
+                            origin="r3 check_cap (15 mm in 5 steps)"),
+        "lift.step_dt_s": _key("float", L["lift.step_dt_s"], "seconds per lift step", tw, lo=0.08, hi=1.0,
+                               origin="r3 check_cap"),
+        "lift.follow_fraction": _key("float", L["lift.follow_fraction"], "held back = the gripper rose less than this x "
+                                     "the commanded lift", tw, lo=0.1, hi=0.95, origin="r3 check_cap 'resisted' rule"),
+        "lift.judge_after_m": _key("float", L["lift.judge_after_m"], "judge 'held back' only once this much lift was "
+                                   "commanded (servo lag before that)", tw, lo=0.003, hi=0.05,
+                                   origin="r3 check_cap judged at 15 mm"),
+        "lift.free_rise_fraction": _key("float", L["lift.free_rise_fraction"], "free = still holding after rising at "
+                                        "least this x the lift", tw, lo=0.3, hi=1.0, origin="r3 check_cap 'free' rule"),
+        "learn.auto_propose": _key("enum", R["learn.auto_propose"], "episode_end runs the learning rules and records "
+                                   "their proposals (pending)", "learning/rules.py, learning/tools.py", choices=ONOFF,
+                                   origin="r5 (new)"),
+        "learn.auto_apply": _key("enum", R["learn.auto_apply"], "twin only: apply the rules' proposals at once (real arm: "
+                                 "always a human)", "learning/tools.py", choices=ONOFF, origin="r5 (new)"),
+        "learn.strokes_step": _key("int", R["learn.strokes_step"], "rule more_rotation: strokes += this", "learning/rules.py",
+                                   lo=1, hi=12, origin="the operator's 4 -> 8 (attempts 1 -> 2)"),
+        "learn.strokes_margin": _key("int", R["learn.strokes_margin"], "rule trim_strokes: strokes = the stroke the "
+                                     "free signal began + this", "learning/rules.py", lo=0, hi=6,
+                                     origin="attempt 10 free from stroke 11; attempt 12 opened with 11"),
+        "learn.z_step_mm": _key("float", R["learn.z_step_mm"], "rule grip_deeper: approach_z_offset_mm -= this (never "
+                                "past the safety floor)", "learning/rules.py", lo=0.25, hi=5.0,
+                                origin="the operator's -5.5 -> -6.5 (attempts 8 -> 9)"),
+        "learn.lift_step_m": _key("float", R["learn.lift_step_m"], "rule lift_higher: a lift that was already longer "
+                                  "than the decisive length and still unclear grows by this", "learning/rules.py",
+                                  lo=0.005, hi=0.05, origin="one r3 check lift per step"),
+        "learn.lift_clear_m": _key("float", R["learn.lift_clear_m"], "rule lift_higher: the decisive lift = what the "
+                                   "jaws hold of the cap + this visible gap", "learning/rules.py", lo=0.01, hi=0.08,
+                                   origin="attempt 9: a ~35 mm air gap over the open bottle was obvious on camera"),
+        "learn.reply_margin_s": _key("float", R["learn.reply_margin_s"], "rule fit_the_call: time budget = the client "
+                                     "timeout minus this (the reply, its two camera images)", "learning/rules.py",
+                                     lo=2.0, hi=60.0, origin="r5 estimate: a reply with two JPEGs takes a few s"),
+        "learn.lift_per_turn_mm": _key("float", R["learn.lift_per_turn_mm"], "rule follow_thread_gently: lift_per_turn_mm "
+                                       "is lowered to this", "learning/rules.py", lo=0.0, hi=4.0,
+                                       origin="attempts 10, 12 (1 mm/turn, opened)"),
+        "learn.grip_step": _key("float", R["learn.grip_step"], "rules gripper_overload / grip_slid: grip_torque_limit "
+                                "-/+ this", "learning/rules.py", lo=0.02, hi=0.2,
+                                origin="the operator's 0.6 -> 0.5 (attempts 5 -> 7)"),
+    }
+    for name, (kind, lo, hi, dflt, about) in E.PARAMS.items():
+        k = f"params.default.{name}"
+        if kind == "enum":
+            reg[k] = _key("enum", dflt, f"episode_begin default of {name}: {about}", "learning/episodes.defaults",
+                          choices=tuple(lo), origin="learning/episodes.PARAMS")
+        else:
+            elo, ehi = PARAM_ENVELOPE[name]
+            reg[k] = _key(kind, dflt, f"episode_begin default of {name}: {about}", "learning/episodes.defaults",
+                          lo=elo, hi=S[ehi] if isinstance(ehi, str) else ehi, origin="learning/episodes.PARAMS")
+    return reg
+
+
+# --- learned profiles -------------------------------------------------------------------------------------------
+def profile_paths() -> list[Path]:
+    """SKILL_PROFILES: unset = every learning/profiles/*.json; "none" or "" = no profile (the code baseline);
+    else a comma list of names (in learning/profiles/) or paths."""
+    sel = os.environ.get("SKILL_PROFILES")
+    if sel is None:
+        return sorted(PROFILE_DIR.glob("*.json"))
+    out = []
+    for s in (x.strip() for x in sel.split(",")):
+        if s and s.lower() != "none":
+            p = Path(s)
+            out.append(p if p.suffix == ".json" and p.exists() else PROFILE_DIR / (s if s.endswith(".json") else s + ".json"))
+    return out
+
+
+def _profiles_key() -> tuple:
+    return tuple((str(p), p.stat().st_mtime_ns if p.exists() else 0) for p in profile_paths())
+
+
+@functools.lru_cache(maxsize=8)
+def _read_profiles(key: tuple) -> tuple:
+    out = []
+    for path, _ in key:
+        try:
+            out.append(json.loads(Path(path).read_text()))
+        except (OSError, ValueError) as e:
+            print(f"skillcfg: cannot read profile {path} ({e}); ignored", file=sys.stderr)
+    return tuple(json.dumps(p) for p in out)
+
+
+def profiles() -> list[dict]:
+    """The learned profiles in force (learning/profiles/*.json, see docs/learning/PROFILES.md)."""
+    return [json.loads(p) for p in _read_profiles(_profiles_key())]
+
+
+def profile_label() -> str:
+    """'bottle_cap v1' (+ more, comma separated); 'baseline' without a profile."""
+    return ", ".join(f"{p.get('profile')} v{p.get('version')}" for p in profiles()) or "baseline"
 
 
 @functools.lru_cache(maxsize=4)
-def _registry(profile_key: str) -> dict:
+def _registry(profile_key: str, profiles_key: tuple = ()) -> dict:
+    reg = _base_registry(profile_key)
+    reg = {k: dict(v) for k, v in reg.items()}
+    for prof in (json.loads(p) for p in _read_profiles(profiles_key)):
+        label = f"{prof.get('profile')} v{prof.get('version')}"
+        for k, e in (prof.get("entries") or {}).items():
+            if k not in reg or reg[k]["class"] != "strategy":
+                print(f"skillcfg: profile {label}: {k!r} is not a strategy key; ignored", file=sys.stderr)
+                continue
+            v, err = _check_value(reg[k], e.get("value"))
+            if err:
+                print(f"skillcfg: profile {label}: {k} {err}; ignored", file=sys.stderr)
+                continue
+            reg[k].update(default=v, learned={"profile": label, **{x: e[x] for x in e if x != "value"}})
+    return reg
+
+
+@functools.lru_cache(maxsize=4)
+def _base_registry(profile_key: str) -> dict:
     from . import episodes as E
     T = TWIST_DEFAULTS
     ik = _profile_ik()
@@ -115,6 +353,7 @@ def _registry(profile_key: str) -> dict:
         "twist.release_open": _key("float", T["twist.release_open"], "how far the jaws open (norm) to release the cap "
                                    "between strokes", "learning/twist.py", lo=0.05, hi=0.6),
     }
+    reg.update(_skill_keys(E))
     for name, spec in E.PARAMS.items():
         kind, lo, hi = spec[:3]
         if kind == "enum":
@@ -145,11 +384,17 @@ def _profile_raw() -> dict:
 
 
 def registry() -> dict:
-    return _registry(os.environ.get("ROBOT_PROFILE") or "elrobot")
+    return _registry(os.environ.get("ROBOT_PROFILE") or "elrobot", _profiles_key())
 
 
 def defaults() -> dict:
+    """The defaults in force: the learned profiles' values, else the code baseline."""
     return {k: s["default"] for k, s in registry().items()}
+
+
+def baseline() -> dict:
+    """The code values (no profile): the behaviour before anything was learned."""
+    return {k: s["baseline"] for k, s in registry().items()}
 
 
 def _check_value(spec: dict, v):
@@ -187,7 +432,7 @@ def _check_value(spec: dict, v):
 
 def validate(changes: dict, base: dict | None = None) -> tuple[dict, list[str]]:
     """(the full config after the changes, errors). Errors: unknown key, safety key, type, envelope, and the
-    cross-key rules (a bound pair lo <= hi containing the parameter's default)."""
+    cross-key rules (a bound pair lo <= hi containing the parameter's default params.default.<name>)."""
     reg = registry()
     full, errors = dict(base if base is not None else defaults()), []
     for k, v in (changes or {}).items():
@@ -204,10 +449,11 @@ def validate(changes: dict, base: dict | None = None) -> tuple[dict, list[str]]:
         lo, hi = full.get(f"params.bounds.{name}.lo"), full.get(f"params.bounds.{name}.hi")
         if lo is None:
             continue
+        d = full.get(f"params.default.{name}", spec[3])
         if lo > hi:
             errors.append(f"params.bounds.{name}: lo {lo} > hi {hi}")
-        elif not lo <= spec[3] <= hi:
-            errors.append(f"params.bounds.{name}: {lo}..{hi} must contain the default {spec[3]}")
+        elif not lo <= d <= hi:
+            errors.append(f"params.bounds.{name}: {lo}..{hi} must contain the default {d} (params.default.{name})")
     return full, errors
 
 
@@ -270,9 +516,9 @@ def version(t: str | None = None) -> int:
 
 
 def stamp(t: str | None = None) -> dict:
-    """What an attempt record carries: which config it ran with."""
+    """What an attempt record carries: which config it ran with (version, its overrides, the learned profiles)."""
     a = active(t)
-    return {"target": a["target"], "version": a["version"], "overrides": a["overrides"]}
+    return {"target": a["target"], "version": a["version"], "overrides": a["overrides"], "profile": profile_label()}
 
 
 @contextlib.contextmanager
@@ -521,14 +767,20 @@ def proposal_text(p: dict) -> str:
 
 def config_text(t: str | None = None, history: int = 5) -> str:
     a, reg = active(t), registry()
-    lines = [f"skill config: target {a['target']}, version {a['version']}"
-             + (f" (changed vs code defaults: {', '.join(a['overrides'])})" if a["overrides"] else " (code defaults)"),
-             "", "strategy keys (propose_skill_change may change them inside the envelope; * = not the code default):"]
+    lines = [f"skill config: target {a['target']}, version {a['version']}, learned profile {profile_label()}"
+             + (f" (changed vs the defaults: {', '.join(a['overrides'])})" if a["overrides"] else " (the defaults)"),
+             "", "strategy keys (propose_skill_change may change them inside the envelope; * = not the default; "
+             "L = learned: the default comes from the profile, with its provenance):"]
     for k, s in reg.items():
         if s["class"] == "strategy":
             star = " *" if k in a["overrides"] else ""
             dflt = f"; default {_short(s['default'])}" if star else ""
-            lines.append(f"  {k}{star} = {_short(a['values'][k])}   [{envelope_text(s)}{dflt}] {s['about']}")
+            learned = ""
+            if s.get("learned"):
+                ev = s["learned"]
+                att = f" attempts {ev['attempts']}" if ev.get("attempts") else ""
+                learned = f" L(code {_short(s['baseline'])};{att})"
+            lines.append(f"  {k}{star} = {_short(a['values'][k])}{learned}   [{envelope_text(s)}{dflt}] {s['about']}")
     lines += ["", "safety keys (read-only, never changeable here): "
               + ", ".join(f"{k}={_short(s['default'])}" for k, s in reg.items() if s["class"] == "safety")]
     if a["ignored"]:
