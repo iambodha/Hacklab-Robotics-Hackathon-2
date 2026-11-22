@@ -350,6 +350,48 @@
       "hi": 0.02,
       "origin": "r4 strategy baseline, named in r5 without behavior change",
       "about": "Default stir radius"
+    },
+    "sim.stir.height_m": {
+      "value": 0.04,
+      "lo": 0.015,
+      "hi": 0.08,
+      "origin": "r5 stir-skill: the sim/stir_skill.py code value, named (no behaviour change) (tip0 z 0.04)",
+      "about": "Bowl centre height above the table while stirring (m): lower = deeper in the drink, too low drags on the bottom"
+    },
+    "sim.stir.step_dt_s": {
+      "value": 0.05,
+      "lo": 0.02,
+      "hi": 0.2,
+      "origin": "r5 stir-skill: the sim/stir_skill.py code value, named (no behaviour change) (follow dt 0.05)",
+      "about": "Seconds per streamed joint target on the stirring circle: the stirring speed"
+    },
+    "sim.stir.ring_points": {
+      "value": 16,
+      "lo": 8,
+      "hi": 32,
+      "origin": "r5 stir-skill: the sim/stir_skill.py code value, named (no behaviour change) (_plan_ring n=16)",
+      "about": "IK points per stirring circle"
+    },
+    "sim.stir.wall_margin_m": {
+      "value": 0.006,
+      "lo": 0.002,
+      "hi": 0.02,
+      "origin": "r5 stir-skill: the sim/stir_skill.py code value, named (no behaviour change) (inner_radius - 0.006)",
+      "about": "The handle stays this far inside the rim: caps the stirring radius"
+    },
+    "sim.stir.lean_extra_deg": {
+      "value": 0.0,
+      "lo": 0.0,
+      "hi": 20.0,
+      "origin": "r5 stir-skill: the sim/stir_skill.py code value, named (no behaviour change) (lean steps start at 0)",
+      "about": "Lean added to the straightened spoon before stirring (deg)"
+    },
+    "sim.stir.grasp_from_top_m": {
+      "value": 0.035,
+      "lo": 0.015,
+      "hi": 0.06,
+      "origin": "r5 stir-skill: the sim/stir_skill.py code value, named (no behaviour change) (grasp_from_top=0.035)",
+      "about": "Where the jaws take the spoon handle: this far below its top end (m)"
     }
   }
 }

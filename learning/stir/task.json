@@ -96,5 +96,38 @@
    "fovy": 50,
    "_about": "side view of the mug for the human side (docs images); the agent never gets it"
   }
- ]
+ ],
+ "judge": {
+  "_about": "learning/stir/judge.py: what counts as a good stir, from the twin's ground truth (sim/sim_arm_mcp._track_stir). Gates first (any failed gate = not stirred), then a quality score in [0, 1] that the practice loop maximises.",
+  "loops_min": 3.0,
+  "_loops_min_about": "the operator brief's 'at least 3 full turns' (sim/OPERATOR_STIR.md)",
+  "loop_min_radius_m": 0.003,
+  "_loop_min_radius_about": "a bowl path tighter than this around its own centre is a wiggle, not a loop: its loops are not counted",
+  "cup_moved_max_m": 0.005,
+  "_cup_moved_about": "the mug may not slide more than 5 mm (a drink would slosh; on the real table the overview camera resolves ~5 mm)",
+  "cup_tilt_max_deg": 5.0,
+  "_cup_tilt_about": "a mug tilted more than 5 deg is rocking on its base edge: spill risk",
+  "wall_contact_max_frac": 0.05,
+  "_wall_contact_about": "the spoon may touch the mug wall/rim for at most 5 % of the stirring time (a scrape, a clink, a pushed mug)",
+  "arm_cup_max_s": 0.05,
+  "_arm_cup_about": "jaws or links touching the mug: allowed only as a brushing contact under 50 ms",
+  "slip_max_m": 0.01,
+  "_slip_about": "the spoon may move at most 1 cm in the jaws during the stir; more = it is slipping out (a drop on hardware)",
+  "immersion_min_frac": 0.9,
+  "_immersion_about": "the bowl centre must be under the drink's surface for 90 % of the stirring time, else it stirs air",
+  "bowl_half_width_m": 0.012,
+  "_bowl_half_width_about": "spoon bowl half-width (task spoon.bowl[0] / 2): the usable stirring radius is inner_radius minus this",
+  "target_pace_loops_per_s": 0.5,
+  "_pace_about": "one loop every 2 s scores full pace (a person stirs faster, ~1-2 Hz; the servos stream at 20 Hz)",
+  "weights": {
+   "coverage": 0.35,
+   "depth": 0.15,
+   "pace": 0.2,
+   "immersion": 0.1,
+   "clean": 0.2
+  },
+  "_weights_about": "coverage: mean bowl radius / usable radius (more of the drink moves); depth: how low in the drink the bowl circles (what settles at the bottom gets mixed); pace: loops per second / target; immersion: share of the stir under the surface; clean: 1 - wall and bottom contact shares",
+  "gate_penalty": 0.5,
+  "_gate_penalty_about": "score = quality - 0.5 per failed gate (floored at 0): a failed stir always ranks below a clean one"
+ }
 }

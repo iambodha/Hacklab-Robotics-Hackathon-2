@@ -60,6 +60,8 @@ SKILLS = os.environ.get('ROBOT_SIM_SKILLS', '1') == '1'          # task skills (
 NAMES = [f'j{i}' for i in range(1, 9)]
 TICKS_PER_RAD = 4096 / (2 * np.pi)
 # Hashes of the real Station camera queues (camera_pose/HANDOFF.md), so prompts carry over.
+# stir ground truth (layout 'stir'): cumulative counters, so a phase's share is a difference of two bookmarks
+STIR_COUNTERS = ('signed_rad', 'abs_rad', 'path_m', 'inside_s', 'immersed_s', 'wall_s', 'bottom_s', 'arm_cup_s')
 CAMERAS = [('wrist_cam', '322ab5514b8e14014c3743c1abfd4a07', 'sim-wrist-uvc'),
            ('overview_cam', '8c697f6e0c79a3d2fab2a4ea977ee738', 'sim-overview')]
 
@@ -123,6 +125,7 @@ class SimArm:
         self.status = np.zeros(m.nu, int)
         self.saturated_s = np.zeros(m.nu)
         self.lock = threading.RLock()
+        self._stir_ids = None
         self.rng = np.random.default_rng(int(os.environ['ROBOT_SIM_SEED']) if 'ROBOT_SIM_SEED' in os.environ else None)
         self.reset(randomize=os.environ.get('ROBOT_SIM_RANDOMIZE') == '1')
         self.viewer = None
@@ -175,33 +178,74 @@ class SimArm:
                 self.data.ctrl[i] = self.data.qpos[self.qids[i]]
                 self.status[i] = 0; self._set_torque(i, True)
 
+    def _stir_geoms(self, cfg):
+        """Geom id sets the stir judge watches: cup walls (rim), cup bottom, the tool, the arm (every robot geom)."""
+        m = self.model
+        cup, tool = m.body(cfg['cup']).id, m.body(cfg.get('tool', cfg['tool_tip'].rsplit('_', 1)[0])).id
+        objects = {m.body(o['name']).id for o in self.layout['objects']}
+        solid = [g for g in range(m.ngeom) if m.geom_contype[g] or m.geom_conaffinity[g]]
+        cup_g = [g for g in solid if m.geom_bodyid[g] == cup]
+        bottom = {min(cup_g)}                     # build_scene.shape_parts 'cup': part 0 is the bottom disc
+        hinged = {int(m.jnt_bodyid[j]) for j in range(m.njnt) if m.jnt_type[j] == mujoco.mjtJoint.mjJNT_HINGE}
+        arm_bodies = {b for b in range(1, m.nbody) if b not in objects and hinged & set(self._ancestors(b))}
+        return {'walls': np.array(sorted(set(cup_g) - bottom)), 'bottom': np.array(sorted(bottom)),
+                'cup': np.array(cup_g), 'tool': np.array([g for g in solid if m.geom_bodyid[g] == tool]),
+                'arm': np.array([g for g in solid if m.geom_bodyid[g] in arm_bodies])}
+
+    def _ancestors(self, b):
+        out = []
+        while b > 0:
+            out.append(b)
+            b = self.model.body_parentid[b]
+        return out
+
     def _track_stir(self, dt):
         """Ground truth for the judge (layout 'stir'): how far the tool tip travels around the cup axis while it is
-        inside the cup. Never shown to the agent."""
+        inside the cup, how long it is under the drink, what touches what (tool on the cup walls / bottom, the arm on
+        the cup), the cup's largest tilt. Never shown to the agent."""
         cfg = self.layout.get('stir')
         if not cfg:
             return
-        cup = self.data.body(cfg['cup'])
-        tip = self.data.site(cfg['tool_tip']).xpos
+        d = self.data
+        cup = d.body(cfg['cup'])
+        tip = d.site(cfg['tool_tip']).xpos
         rel = tip - cup.xpos
         axis = cup.xmat.reshape(3, 3)[:, 2]
         st = self.stir
         st['cup_tilt_deg'] = float(np.degrees(np.arccos(np.clip(axis[2], -1, 1))))
-        inside = np.hypot(rel[0], rel[1]) < cfg['inner_radius'] + 0.004 and rel[2] < cfg['rim_height'] / 2
+        st['tilt_max_deg'] = max(st['tilt_max_deg'], st['cup_tilt_deg'])
+        if d.ncon:
+            if self._stir_ids is None:
+                self._stir_ids = self._stir_geoms(cfg)
+            ids = self._stir_ids
+            g1, g2 = d.contact.geom1[:d.ncon], d.contact.geom2[:d.ncon]
+
+            def touching(a, b):
+                return bool(np.any((np.isin(g1, a) & np.isin(g2, b)) | (np.isin(g1, b) & np.isin(g2, a))))
+            if touching(ids['tool'], ids['walls']):
+                st['wall_s'] += dt
+            if touching(ids['tool'], ids['bottom']):
+                st['bottom_s'] += dt
+            if touching(ids['arm'], ids['cup']):
+                st['arm_cup_s'] += dt
+        h = cfg['rim_height']
+        inside = np.hypot(rel[0], rel[1]) < cfg['inner_radius'] + 0.004 and rel[2] < h / 2
         if not inside:
             st['last'] = None
             return
         ang = float(np.arctan2(rel[1], rel[0]))
         st['inside_s'] += dt
+        if rel[2] < -h / 2 + cfg.get('liquid_level', 0.6) * h:     # the bowl centre under the drink's surface
+            st['immersed_s'] += dt
         if st['last'] is not None:
-            d = (ang - st['last'][0] + np.pi) % (2 * np.pi) - np.pi
-            st['signed_rad'] += d
-            st['abs_rad'] += abs(d)
+            dd = (ang - st['last'][0] + np.pi) % (2 * np.pi) - np.pi
+            st['signed_rad'] += dd
+            st['abs_rad'] += abs(dd)
             st['path_m'] += float(np.linalg.norm(tip - st['last'][1]))
         st['last'] = (ang, tip.copy())
         st['n'] += 1
         if st['n'] % 20 == 0 and len(st['pts']) < 20000:   # bowl path inside the cup, every 40 ms (cup frame)
-            st['pts'].append(rel[:2].copy())
+            st['pts'].append(rel[:3].copy())
 
     def _track_screw(self):
         """Once the cap has turned turns_to_free turns, the thread lets go: no coupling, no friction, free to lift."""
@@ -216,17 +260,34 @@ class SimArm:
                 'lift_mm': round(float(d.qpos[self.cap_slide.qposadr[0]]) * 1000, 1),
                 'free': not bool(d.eq_active[self.cap_eq])}
 
-    def stir_summary(self):
-        st = self.stir
+    def stir_mark(self):
+        """A bookmark of the stir counters: stir_summary(since=mark) covers only what happened after it."""
+        with self.lock:
+            st = self.stir
+            return {**{k: st[k] for k in STIR_COUNTERS}, 'n_pts': len(st['pts']), 'sim_t': float(self.data.time),
+                    'wall_t': time.monotonic()}
+
+    def stir_summary(self, since=None):
+        with self.lock:
+            st = {**self.stir, 'pts': list(self.stir['pts'])}
+            now = float(self.data.time)
+        base = since or {k: 0.0 for k in STIR_COUNTERS} | {'n_pts': 0, 'sim_t': 0.0, 'wall_t': None}
+        pts = np.array(st['pts'][base['n_pts']:])
         loops = 0.0
-        if len(st['pts']) > 10:   # loops of the bowl around the centre of its own path (stirring off the cup axis counts)
-            pts = np.array(st['pts'])
-            a = np.unwrap(np.arctan2(*(pts - pts.mean(0)).T[::-1]))
+        if len(pts) > 10:   # loops of the bowl around the centre of its own path (stirring off the cup axis counts)
+            a = np.unwrap(np.arctan2(*(pts[:, :2] - pts[:, :2].mean(0)).T[::-1]))
             loops = float(np.abs(np.diff(a)).sum() / (2 * np.pi))
+        dv = {k: st[k] - base[k] for k in STIR_COUNTERS}
         return {'loops': round(loops, 2),
-                'net_turns': round(st['signed_rad'] / (2 * np.pi), 2), 'total_turns': round(st['abs_rad'] / (2 * np.pi), 2),
-                'tip_path_in_cup_m': round(st['path_m'], 3), 'tip_inside_s': round(st['inside_s'], 1),
-                'cup_tilt_deg': round(st['cup_tilt_deg'], 1)}
+                'net_turns': round(dv['signed_rad'] / (2 * np.pi), 2), 'total_turns': round(dv['abs_rad'] / (2 * np.pi), 2),
+                'tip_path_in_cup_m': round(dv['path_m'], 3), 'tip_inside_s': round(dv['inside_s'], 1),
+                'cup_tilt_deg': round(st['cup_tilt_deg'], 1), 'cup_tilt_max_deg': round(st['tilt_max_deg'], 1),
+                'tip_immersed_s': round(dv['immersed_s'], 2), 'tool_wall_s': round(dv['wall_s'], 2),
+                'tool_bottom_s': round(dv['bottom_s'], 2), 'arm_cup_s': round(dv['arm_cup_s'], 2),
+                'sim_s': round(now - base['sim_t'], 3),
+                'real_time_factor': (round((now - base['sim_t']) / max(1e-6, time.monotonic() - base['wall_t']), 3)
+                                     if base.get('wall_t') else None),
+                'pts': [[round(float(v), 4) for v in p] for p in pts]}
 
     def _set_torque(self, i, on):
         self.torque[i] = on
@@ -322,7 +383,7 @@ class SimArm:
                 self.model.jnt_range[self.cap_slide.id] = [0.0, 0.012]
             for i in range(self.model.nu): self._set_torque(i, True)
             self.status[:] = 0; self.saturated_s[:] = 0
-            self.stir = {'signed_rad': 0.0, 'abs_rad': 0.0, 'path_m': 0.0, 'inside_s': 0.0, 'cup_tilt_deg': 0.0,
+            self.stir = {**{k: 0.0 for k in STIR_COUNTERS}, 'cup_tilt_deg': 0.0, 'tilt_max_deg': 0.0,
                          'last': None, 'n': 0, 'pts': []}
             if randomize:
                 for spec in self.layout['objects']:
@@ -366,7 +427,7 @@ class SimArm:
                 out[spec['name']] = {'xyz': [round(float(v), 4) for v in p], 'yaw_deg': round(yaw, 1), 'in_bin': inside}
             res = {'sim_time': round(float(self.data.time), 2), 'objects': out}
             if self.layout.get('stir'):
-                res['stir'] = self.stir_summary()
+                res['stir'] = {k: v for k, v in self.stir_summary().items() if k != 'pts'}
             if self.screw:
                 res['screw_cap'] = self.screw_state()
             return res
@@ -625,6 +686,13 @@ async def gripper(open_fraction: float) -> str:
     return await _move({GRIPPER: open_fraction}, 0.05, 0.1, 4096)
 
 
+def stir_motion(strategy) -> dict:
+    """The stir skill's motion settings from the skill config (learned profile learning/profiles/stir_cup.json)."""
+    return {'grasp_from_top': strategy('sim.stir.grasp_from_top_m'), 'stir_height': strategy('sim.stir.height_m'),
+            'step_dt': strategy('sim.stir.step_dt_s'), 'ring_points': int(strategy('sim.stir.ring_points')),
+            'wall_margin': strategy('sim.stir.wall_margin_m'), 'lean_extra_deg': strategy('sim.stir.lean_extra_deg')}
+
+
 async def stir_spoon(cup_x: float, cup_y: float, handle_azimuth_deg: float | None = None, rim_height: float | None = None,
                      inner_radius: float | None = None, spoon_length: float | None = None, turns: int | None = None,
                      radius: float | None = None) -> list:
@@ -645,7 +713,7 @@ async def stir_spoon(cup_x: float, cup_y: float, handle_azimuth_deg: float | Non
     import stir_skill
     status, log = await stir_skill.StirSkill(arm, move_tcp, gripper).run(
         cup_x, cup_y, handle_azimuth_deg, rim_height, inner_radius, spoon_length, int(min(max(turns, 1), 10)),
-        float(min(max(radius, 0.003), 0.02)))
+        float(min(max(radius, 0.003), 0.02)), **stir_motion(strategy))
     return [status + chr(10) + chr(10).join(log)] + (await look())[:4]
 
 

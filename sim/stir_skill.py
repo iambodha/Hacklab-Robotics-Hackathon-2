@@ -24,6 +24,14 @@ import time
 import numpy as np
 
 UP = np.array([0.0, 0.0, 1.0])
+# Code baseline of the stir motion (the r4 values; learning/stir/practice.py learns better ones in the twin and the
+# profile learning/profiles/stir_cup.json carries them, read through the skill config keys sim.stir.*)
+STIR_HEIGHT = 0.04      # bowl centre height while stirring: 2 cm above the r4 mug's bottom, under its drink
+STEP_DT = 0.05          # s per streamed joint target on the circle (the follow() default)
+RING_POINTS = 16        # IK points per stirring circle
+WALL_MARGIN = 0.006     # the handle stays this far inside the rim; caps the stirring radius
+MIN_RADIUS = 0.004      # never stir a smaller circle than this, whatever the cap says
+LEAN_STEPS_DEG = (0, 4, 8, 12)   # extra lean tried when the circle does not fit (IK)
 
 
 def _rot(s, j_hint):
@@ -167,7 +175,7 @@ class StirSkill:
                 return q
         return ik.solve_rot(xyz, R, seeds[-1], 3)
 
-    def _plan_ring(self, cx, cy, z, r, L, s, Rk, n=16):
+    def _plan_ring(self, cx, cy, z, r, L, s, Rk, n=RING_POINTS):
         q_prev, lead, ring = self.arm.measured_q(), [], []
         for k in range(n + 1):
             a = 2 * np.pi * k / n
@@ -197,11 +205,22 @@ class StirSkill:
 
     # --- the skill ----------------------------------------------------------------------
     async def run(self, cup_x, cup_y, handle_azimuth_deg=None, rim_height=0.09, inner_radius=0.03,
-                  spoon_length=0.145, turns=3, radius=0.009, grasp_from_top=0.035):
+                  spoon_length=0.145, turns=3, radius=0.009, grasp_from_top=0.035, stir_height=STIR_HEIGHT,
+                  step_dt=STEP_DT, ring_points=RING_POINTS, wall_margin=WALL_MARGIN, lean_extra_deg=0.0,
+                  on_phase=None):
+        """stir_height: bowl centre height above the table while stirring (m); step_dt: seconds per streamed joint
+        target on the stirring circle (speed); ring_points: IK points per circle; wall_margin: the handle stays this
+        far inside the rim (it caps the radius); lean_extra_deg: lean added to the straightened spoon before stirring.
+        on_phase(phase, status, info): called at the end of every phase (locate, grasp, straighten, stir, release)."""
         arm, ik, log, t0 = self.arm, self.arm.ik, [], time.monotonic()
+
+        def phase(name, status='ok', **info):
+            if on_phase is not None:
+                on_phase(name, status, {'t_s': round(time.monotonic() - t0, 2), **info})
         cup, note = self.refine_cup(np.array([cup_x, cup_y], float), rim_height, inner_radius + 0.004)
         cup_x, cup_y = float(cup[0]), float(cup[1])
         log.append(f'{note} -> cup centre [{cup_x:.3f}, {cup_y:.3f}]')
+        phase('locate', cup_xy=[round(cup_x, 4), round(cup_y, 4)], note=note)
         az0 = (np.radians(handle_azimuth_deg) if handle_azimuth_deg is not None
                else float(np.arctan2(-cup[1], -cup[0])))           # default: handle towards the arm base
         await self._open()
@@ -234,7 +253,9 @@ class StirSkill:
             await self._open()
             await self.follow(self.interp(arm.measured_q(), q_pre))
         if not holding:
+            phase('grasp', 'fail', tries=k + 1)
             return 'STIR stopped: could not get hold of the spoon handle.', log
+        phase('grasp', tries=k + 1, grasp_below_top_m=round(float(g_off), 4), j8=st['norm'], load=st['load'])
         log.append(f'[t={time.monotonic() - t0:.0f}s]')
         # the spoon is rigid in the jaws from now on: steer its bowl
         # the spoon is held along the approach axis: steer it from where it actually is in the jaws
@@ -246,7 +267,7 @@ class StirSkill:
         tip_now = tcp + L * s_now
         # stir 2 cm above the bottom: the spoon is held by its edges and hinges about the jaw axis, so any drag on
         # the bottom or the wall pulls the bowl off its circle
-        tip0 = np.array([cup_x, cup_y, 0.04])
+        tip0 = np.array([cup_x, cup_y, float(stir_height)])
         # 2. straighten: bowl to the cup centre while the handle swings towards vertical
         path, q_prev, theta_ok = [], arm.measured_q(), None
         lift = await asyncio.to_thread(ik.solve_rot, tcp - 0.015 * s_now, Rg, q_prev, 0)   # bowl off the bottom first
@@ -266,28 +287,38 @@ class StirSkill:
             path.extend(self.interp(q_prev, q, 0.01))
             q_prev, theta_ok = q, th
         if theta_ok is None:
+            phase('straighten', 'fail', reason='IK')
             return 'STIR stopped: cannot move the held spoon at all (IK).', log
         res = await self.follow(path)
         if res:
+            phase('straighten', 'abort', reason=res)
             return f'STIR stopped while straightening the spoon: {res}', log
+        phase('straighten', lean_deg=round(float(np.degrees(theta_ok)), 1), from_deg=round(float(np.degrees(theta0)), 1))
         # 3. stir circles with the bowl, the spoon translating rigidly; lean more if the circle does not fit
         ring_plan = None
-        for extra in (0, 4, 8, 12):
-            th = theta_ok + np.radians(extra)
+        for extra in LEAN_STEPS_DEG:
+            th = theta_ok + np.radians(lean_extra_deg + extra)
             offset_at_rim = (rim_height - tip0[2]) * np.tan(th)
-            r = float(min(radius, max(0.004, inner_radius - 0.006 - offset_at_rim)))
+            r = float(min(radius, max(MIN_RADIUS, inner_radius - wall_margin - offset_at_rim)))
             s = _lean_dir(th, az)
             Rk = _rot(s, j_axis)
-            ring_plan = await asyncio.to_thread(self._plan_ring, cup_x, cup_y, tip0[2], r, L, s, Rk)
+            ring_plan = await asyncio.to_thread(self._plan_ring, cup_x, cup_y, tip0[2], r, L, s, Rk, int(ring_points))
             if ring_plan is not None:
                 break
         if ring_plan is None:
+            phase('stir', 'fail', reason='no circle fits (IK)')
             return 'STIR stopped: no stirring circle fits inside the cup at this position (IK).', log
         lead, ring = ring_plan
         log.append(f'straightened from {np.degrees(theta0):.0f} to {np.degrees(th):.0f} deg from vertical; '
                    f'stir radius {r * 100:.1f} cm')
-        res = await self.follow(lead + ring * int(turns))
+        res = await self.follow(lead)
+        if not res:
+            phase('lead_in', lean_deg=round(float(np.degrees(th)), 1))
+            res = await self.follow(ring * int(turns), dt=float(step_dt))
         log.append(f'stirred {int(turns)} turns' if not res else f'stir interrupted: {res}')
+        phase('stir', 'abort' if res else 'ok', radius_m=round(r, 4), radius_asked_m=round(float(radius), 4),
+              lean_deg=round(float(np.degrees(th)), 1), turns=int(turns), points_per_turn=len(ring),
+              reason=res or '')
         # release and retreat along the handle, then up
         await self._open()
         q_back = await asyncio.to_thread(ik.solve_rot, tip0 - (L + 0.06) * s, Rk, arm.measured_q(), 2)
@@ -295,4 +326,5 @@ class StirSkill:
             await self.follow(self.interp(arm.measured_q(), q_back))
         out = await self.move_tcp(x=float(cup_x), y=float(cup_y) - 0.06, z=0.22, top_down=True)
         log.append(f'released and retreated: {_first_line(out)} [t={time.monotonic() - t0:.0f}s]')
+        phase('release')
         return ('DONE stirring' if not res else 'STIR partly done'), log
