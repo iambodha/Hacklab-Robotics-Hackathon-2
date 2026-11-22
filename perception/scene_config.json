@@ -5,9 +5,7 @@
   "arm_base": {
     "source": "auto",
     "base_z_m": 0.0,
-    "measured_dist_to_base_marker_centres_m": null,
-    "measured_yaw_deg_from_perpendicular": 0.0,
-    "overview_px_check": null
+    "tape_mm": {"A": null, "B": null, "C": null, "D": null}
   },
   "table_extent_xy": null,
   "measured_marker_distances_m": {}

@@ -75,14 +75,18 @@ def planar_of(T: np.ndarray) -> tuple[float, float, float]:
 
 
 def solve_base_from_wrist(obs, T_table_marker: dict[int, np.ndarray], T_base_cam, size: float, W: int, H: int,
-                          intr: dict | None = None, base_z: float = 0.0, f_scan_hfov=range(40, 131, 5)):
+                          intr: dict | None = None, base_z: float = 0.0, f_scan_hfov=range(40, 131, 5),
+                          point_priors=(), sigma_px: float | None = None):
     """Arm base pose on the table from markers seen by the wrist camera, from one or several arm poses.
 
     obs / T_base_cam: one view ({id: corners}, 4x4) or lists of them (one per arm pose).
     Unknowns: base (x, y, yaw) in the table frame (the base stands flat on the table, z = base_z) and,
     if intr is None, the wrist focal length f (fx = fy, centred principal point, no distortion).
     Known: each marker's pose on the table (from the overview fit), T_base_cam from FK + CAD.
-    -> dict(T_table_base, intr, rms_px, sigma_mm, sigma_yaw_deg, sigma_f_rel)."""
+    point_priors: [(p_base_xy, observed_table_xy, sigma_m or 2x2 covariance m^2)], independent observations of base points on the
+    table (e.g. the foot's front edge seen by the overview). With priors, pixel residuals are weighted by
+    sigma_px and the covariance is a priori (sigma 1 on the normalised residuals).
+    -> dict(T_table_base, intr, rms_px, sigma_mm, sigma_yaw_deg, sigma_f_rel, cov_xyyaw)."""
     if isinstance(obs, dict):
         obs, T_base_cam = [obs], [T_base_cam]
     obj = marker_object_points(size)
@@ -99,11 +103,21 @@ def solve_base_from_wrist(obs, T_table_marker: dict[int, np.ndarray], T_base_cam
     def T_tb(x):
         return g.T_from(g.rot_z(x[2]), [x[0], x[1], base_z])
 
-    def residuals(x, f=None):
+    def pix_residuals(x, f=None):
         it = intr_of(x, f)
         Tb = T_tb(x)
         r = [(g.project(Tb @ Tc, it, W, H, g.apply(T_table_marker[i], obj))[0] - c).ravel() for i, c, Tc in views]
         return np.concatenate(r)
+
+    whiten = [np.linalg.inv(np.linalg.cholesky(np.asarray(s, float) if np.ndim(s) == 2 else np.eye(2) * float(s) ** 2))
+              for _, _, s in point_priors]
+
+    def residuals(x, f=None):
+        if not point_priors:
+            return pix_residuals(x, f)
+        Tb = T_tb(x)
+        pri = [Wh @ (g.apply(Tb, [[p[0], p[1], 0.0]])[0, :2] - np.asarray(o)) for (p, o, _), Wh in zip(point_priors, whiten)]
+        return np.concatenate([pix_residuals(x, f) / sigma_px, *pri])
 
     def init(f=None):
         it = intr_of([], f)
@@ -123,10 +137,14 @@ def solve_base_from_wrist(obs, T_table_marker: dict[int, np.ndarray], T_base_cam
     else:
         x, r, J = g.levmar(residuals, init())
     it = intr_of(x)
-    s = np.sqrt(np.maximum(np.diag(g.covariance(J, r)), 0))
-    out = {"T_table_base": T_tb(x), "intr": it, "rms_px": float(np.sqrt(np.mean(r.reshape(-1, 2) ** 2) * 2)),
+    cov = g.covariance(J, r, 1.0 if point_priors else None)
+    if point_priors:                     # observations disagree more than their sigmas say: inflate (never shrink)
+        cov *= max(1.0, float(r @ r) / max(1, len(r) - J.shape[1]))
+    s = np.sqrt(np.maximum(np.diag(cov), 0))
+    rp = pix_residuals(x)
+    out = {"T_table_base": T_tb(x), "intr": it, "rms_px": float(np.sqrt(np.mean(rp.reshape(-1, 2) ** 2) * 2)),
            "sigma_mm": float(np.hypot(s[0], s[1]) * 1000), "sigma_yaw_deg": float(math.degrees(s[2])),
-           "markers": ids, "n_obs": int(len(r)), "n_poses": len(obs)}
+           "cov_xyyaw": cov[:3, :3], "markers": ids, "n_obs": int(len(rp)), "n_poses": len(obs)}
     if intr is None:
         out["sigma_f_rel"] = float(s[3] / x[3])
     return out

@@ -7,8 +7,10 @@ Steps
  1. Median marker corners over many overview frames (dictionary auto-detected, edge-refined corners).
  2. Joint fit: overview camera pose + every marker's (x, y, yaw) on one shared table plane (+ focal length
     when no calibrated intrinsics exist; see perception/calib_intrinsics.py for the board procedure).
- 3. Arm base on the table (defines the world frame). Sources, in the order "auto" tries them:
-      measured     tape distances from the j1 axis to the two base-marker centres (scene_config.json)
+ 3. Arm base on the table (defines the world frame; perception/arm_base.py). Sources, in the order "auto" tries:
+      tape         tape distances foot front corners -> marker corners (scene_config.json arm_base.tape_mm; README)
+      foot+wrist   overview: the arm foot's front edge (position); wrist: a marker through FK (mostly yaw)
+      foot         foot only, yaw assumed square to the base-marker line
       wrist        the wrist camera sees a calibrated marker; FK (URDF + CAD mount) closes the loop
       midpoint     midpoint of the base markers, facing the far markers (rough fallback)
  4. Hold-one-out accuracy on the markers, wrist consistency, annotated image, json.
@@ -25,7 +27,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from . import accuracy, aruco, geometry as g, scene_fit, wrist
+from . import accuracy, arm_base, aruco, geometry as g, scene_fit, wrist
 from .scene import CALIB_DIR, CONFIG_PATH, SCENE_PATH, intrinsics_file, load_intrinsics
 from .station_io import QUEUES, ROOT
 
@@ -113,23 +115,6 @@ def _base_axes(fit: scene_fit.SceneFit, base_ids: list[int]):
     return mid, perp, c
 
 
-def base_from_measured(fit, base_ids, dists: dict, yaw_offset_deg: float):
-    """Two tape distances (j1 axis -> each base-marker centre) -> base position; yaw perpendicular to
-    the base-marker line (+ offset). Of the two circle intersections, the one away from the far markers."""
-    mid, perp, c = _base_axes(fit, base_ids)
-    a, b = c[base_ids[0]], c[base_ids[1]]
-    ra, rb = float(dists[str(base_ids[0])]), float(dists[str(base_ids[1])])
-    d = np.linalg.norm(b - a)
-    x = (ra ** 2 - rb ** 2 + d ** 2) / (2 * d)
-    h = math.sqrt(max(0.0, ra ** 2 - x ** 2))
-    e = (b - a) / d
-    n = np.array([-e[1], e[0]])
-    cands = [a + x * e + h * n, a + x * e - h * n]
-    p = min(cands, key=lambda q: (q - mid) @ perp)
-    fwd = math.atan2(perp[1], perp[0]) + math.radians(yaw_offset_deg)
-    return p, fwd
-
-
 def T_table_base_from(p, fwd_yaw: float, base_z: float) -> np.ndarray:
     """Base frame on the table whose +y (URDF reach direction) points along fwd_yaw."""
     return g.T_from(g.rot_z(fwd_yaw - math.pi / 2), [p[0], p[1], base_z])
@@ -206,15 +191,59 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
         wrist_est = wrist.solve_base_from_wrist(w_obs, T_tm, w_T, size, W, H, intr=intr_wr, base_z=base_z)
         if intr_wr is None:
             wrist_est["intr"]["source"] = "estimated jointly with the arm base from FK + markers (rough)"
-        log(f"wrist estimate of the arm base from {len(w_obs)} pose(s): "
+        log(f"wrist-only estimate of the arm base from {len(w_obs)} pose(s): "
             f"{np.round(wrist_est['T_table_base'][:3, 3], 4).tolist()} (table frame), "
             f"rms {wrist_est['rms_px']:.2f} px, sigma {wrist_est['sigma_mm']:.1f} mm / {wrist_est['sigma_yaw_deg']:.2f} deg")
-    dists = ab.get("measured_dist_to_base_marker_centres_m")
-    if src in ("measured", "auto") and dists and len(base_ids) == 2:
-        p, fwd = base_from_measured(fit, base_ids, dists, float(ab.get("measured_yaw_deg_from_perpendicular", 0)))
-        T_table_base = T_table_base_from(p, fwd, base_z)
-        base_info = {"source": "measured (tape distances to base markers; yaw perpendicular to their line)",
-                     "sigma_mm": 3.0, "sigma_yaw_deg": 1.5}
+    # the foot's front edge in the overview
+    foot, foot_pt = None, None
+    if len(base_ids) == 2:
+        gray = np.median(np.stack([cv2.cvtColor(f, cv2.COLOR_BGR2GRAY) for f in ov]), 0).astype(np.float32)
+        foot = arm_base.detect_foot(gray, fit, base_ids)
+        if foot:
+            foot_pt = arm_base.foot_front_point(foot, fit)
+            log(f"foot: front edge at pixel ({foot['uv_centre'][0]:.1f}, {foot['v_edge']:.2f}), columns "
+                f"{foot['u_left']:.1f}-{foot['u_right']:.1f}, measured width {foot_pt[2] * 1000:.0f} mm (CAD 100), "
+                f"front-centre sigma {np.sqrt(np.linalg.eigvalsh(foot_pt[1])).round(4) * 1000} mm")
+        else:
+            log("foot: not found between the base markers")
+    if foot_pt is not None and not 0.07 < foot_pt[2] < 0.14:
+        log(f"  -> foot width {foot_pt[2] * 1000:.0f} mm is implausible (CAD 100 mm): foot detection ignored")
+        foot_pt = None
+    tape = {k: v for k, v in (ab.get("tape_mm") or {}).items() if v is not None}
+    if src in ("tape", "auto") and len(tape) >= 3 and len(base_ids) == 2:
+        T0 = (wrist_est or {}).get("T_table_base")
+        if T0 is None:
+            mid, perp, _ = _base_axes(fit, base_ids)
+            T0 = T_table_base_from(mid, math.atan2(perp[1], perp[0]), base_z)
+        segs = arm_base.tape_segments(T0, T_tm, size, base_ids)
+        t = arm_base.solve_tape(segs, tape, T0, base_z)
+        T_table_base = t["T_table_base"]
+        base_info = {"source": f"tape ({', '.join(t['used'])}: foot front corners -> marker corners, scene_config.json)",
+                     "sigma_mm": t["sigma_mm"], "sigma_yaw_deg": t["sigma_yaw_deg"], "tape_residual_mm": t["residual_mm"]}
+    elif src in ("foot", "auto") and foot_pt is not None and w_obs:
+        it_w = intr_wr or wrist_est["intr"]
+        sigma_px = max(1.0, wrist_est["rms_px"])
+        est = wrist.solve_base_from_wrist(w_obs, T_tm, w_T, size, W, H, intr=it_w, base_z=base_z,
+                                          point_priors=[(arm_base.FOOT_FRONT_CENTRE, foot_pt[0], foot_pt[1])],
+                                          sigma_px=sigma_px)
+        T_table_base = est["T_table_base"]
+        R_wt = (wrist.T_world_base(base_z) @ g.inv(T_table_base))[:2, :2]
+        cov = R_wt @ est["cov_xyyaw"][:2, :2] @ R_wt.T                     # world x/y
+        base_info = {"source": "foot + wrist (overview: front edge of the arm foot -> position; wrist camera: marker "
+                               "seen through FK at the current pose -> mostly yaw)",
+                     "sigma_mm": est["sigma_mm"], "sigma_yaw_deg": est["sigma_yaw_deg"],
+                     "sigma_world_x_mm": float(np.sqrt(cov[0, 0]) * 1000), "sigma_world_y_mm": float(np.sqrt(cov[1, 1]) * 1000),
+                     "wrist_rms_px": est["rms_px"], "wrist_sigma_px_used": sigma_px,
+                     "caveat": "sigma assumes the foot edge to 0.5 px and the wrist model error = its own rms; joint "
+                               "signs of j1/j5/j7 unverified. The tape procedure (README) pins it to ~2 mm."}
+    elif src in ("foot", "auto") and foot_pt is not None:
+        mid, perp, _ = _base_axes(fit, base_ids)
+        yaw, s_yaw = math.atan2(perp[1], perp[0]) - math.pi / 2, math.radians(3.0)
+        p = arm_base.base_from_foot(foot_pt[0], yaw)
+        T_table_base = g.T_from(g.rot_z(yaw), [p[0], p[1], base_z])
+        s = math.sqrt(max(np.linalg.eigvalsh(foot_pt[1]))) + arm_base.FOOT_FRONT_Y * s_yaw
+        base_info = {"source": "foot (overview: front edge of the arm foot); yaw ASSUMED square to the base-marker line",
+                     "sigma_mm": s * 1000, "sigma_yaw_deg": 3.0}
     elif src in ("wrist", "auto") and wrist_est is not None:
         T_table_base = wrist_est["T_table_base"]
         base_info = {"source": "wrist (FK from Station joint ticks + CAD camera mount + markers seen by the wrist)",
@@ -232,7 +261,22 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
                      "sigma_mm": float("nan"), "sigma_yaw_deg": float("nan")}
     if moved:
         base_info["warning"] = f"arm moved during capture ({moved}); wrist estimate skipped"
-    log(f"arm base source: {base_info['source']}")
+    if foot_pt is not None:
+        yaw_b = math.atan2(T_table_base[1, 0], T_table_base[0, 0])
+        p_foot = arm_base.base_from_foot(foot_pt[0], yaw_b)
+        base_info["foot"] = {"pixel": np.round(foot["uv_centre"], 2).tolist(), "columns": [foot["u_left"], foot["u_right"]],
+                             "width_mm": round(foot_pt[2] * 1000, 1), "row_scatter_px": round(foot["row_scatter_px"], 2),
+                             "base_from_foot_alone_mm_off": round(float(np.linalg.norm(p_foot - T_table_base[:2, 3])) * 1000, 1)}
+    if len(base_ids) == 2:
+        _, perp, _ = _base_axes(fit, base_ids)
+        base_info["yaw_vs_base_marker_line_deg"] = round(math.degrees(math.remainder(
+            wrist.planar_of(T_table_base)[2] + math.pi / 2 - math.atan2(perp[1], perp[0]), 2 * math.pi)), 2)
+    if wrist_est is not None:
+        base_info["wrist_only"] = {"mm_off": round(float(np.linalg.norm(wrist_est["T_table_base"][:2, 3] - T_table_base[:2, 3])) * 1000, 1),
+                                   "yaw_off_deg": round(math.degrees(math.remainder(
+                                       wrist.planar_of(wrist_est["T_table_base"])[2] - wrist.planar_of(T_table_base)[2], 2 * math.pi)), 2),
+                                   "rms_px": round(wrist_est["rms_px"], 2), "sigma_mm": round(wrist_est["sigma_mm"], 1)}
+    log(f"arm base source: {base_info['source']}  (sigma {base_info['sigma_mm']:.1f} mm, {base_info['sigma_yaw_deg']:.2f} deg)")
 
     T_world_base = wrist.T_world_base(base_z)
     T_world_table = T_world_base @ g.inv(T_table_base)
@@ -306,6 +350,8 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
                                  "twin): q = lower + n*(upper - lower), n = fraction of the calibrated range; "
                                  "signs of j1/j5/j7 unverified",
                 "T_world_base": _m(T_world_base), "base_on_table": base_info,
+                "j1_axis_world": g.apply(T_world_base, [[0, arm_base.J1_AXIS_Y, 0]])[0].round(4).tolist(),
+                "tape_segments": arm_base.tape_segments(T_table_base, T_tm, size, base_ids) if len(base_ids) == 2 else [],
                 "joints_at_calibration": joints},
         "quality": {"overview_reproj_px": round(fit.rms_px(), 3), "per_marker": per_marker,
                     "held_out": holdout,
@@ -322,7 +368,7 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
         "T_world_table_internal": _m(T_world_table),
     }
     return {"calib": calib, "fit": fit, "frame": ov[len(ov) // 2], "wrist_frame": wr_frames[len(wr_frames) // 2] if wr_frames else None,
-            "obs": med, "wr_obs": wr_med}
+            "obs": med, "wr_obs": wr_med, "foot": foot, "T_cam_base": fit.T_cam_table @ T_table_base}
 
 
 def _joints_moved(a, b, tol: int = 8):
@@ -379,7 +425,13 @@ def main():
         if res["wrist_frame"] is not None and data.get("joints"):
             cv2.imwrite(str(CALIB_DIR / "wrist_annotated.jpg"),
                         annotate_wrist(sc, res["wrist_frame"], data["joints"], res["wr_obs"]), [cv2.IMWRITE_JPEG_QUALITY, 90])
-        print(f"wrote {a.out} and {CALIB_DIR}/overview_annotated.jpg")
+        cv2.imwrite(str(CALIB_DIR / "arm_base_overview.jpg"),
+                    arm_base.annotate_foot(res["frame"], res["foot"], res["T_cam_base"], res["fit"].intr),
+                    [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if c["arm"]["tape_segments"]:
+            cv2.imwrite(str(CALIB_DIR / "tape_guide.jpg"), arm_base.annotate_tape(sc, res["frame"], c["arm"]["tape_segments"]),
+                        [cv2.IMWRITE_JPEG_QUALITY, 80])
+        print(f"wrote {a.out} and {CALIB_DIR}/{{overview_annotated,wrist_annotated,arm_base_overview,tape_guide}}.jpg")
 
 
 def print_report(c: dict):
