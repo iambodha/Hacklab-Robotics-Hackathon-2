@@ -13,6 +13,7 @@ as `resume`, which keeps its mailbox if the hub still has it.
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from collections import OrderedDict, deque
@@ -27,6 +28,8 @@ BACKOFF_MAX_S = 10.0         # a robot back online is noticed within 10 s
 SEND_RETRIES = 3             # network-level retries of one send (same id, so never delivered twice)
 LOCAL_KEEP = 2000            # messages kept locally for comms_inbox
 SEEN_KEEP = 10000
+
+logging.getLogger("httpx").setLevel(logging.WARNING)   # one INFO line per long-poll is noise on an MCP server's stderr
 
 
 class CommsError(Exception):

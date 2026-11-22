@@ -19,6 +19,8 @@ import secrets
 import socket
 from pathlib import Path
 
+import httpx
+
 from . import protocol as P
 from .client import CommsClient, CommsError
 
@@ -160,8 +162,13 @@ class CommsTools:
     def peers(self) -> dict:
         c = self._need_client()
         me = c.robot_id
-        return {"you": me, "session": c.state(),
-                "peers": [self._peer_line(p) for p in c.peers() if p["robot_id"] != me]}
+        try:
+            peers, note = c.peers(), None
+        except (CommsError, httpx.HTTPError) as e:           # hub unreachable: last known roster, clearly marked
+            peers, note = c.peers_cache, f"hub unreachable ({type(e).__name__}); showing the last known peers; " \
+                                         "the client keeps reconnecting on its own"
+        out = {"you": me, "session": c.state(), "peers": [self._peer_line(p) for p in peers if p["robot_id"] != me]}
+        return out | ({"warning": note} if note else {})
 
     def send(self, peer: str, kind: str, payload: dict | None = None, re: str | None = None) -> dict:
         c = self._need_client()
@@ -229,8 +236,8 @@ def _err(fn):
     async def wrapper(*a, **kw):
         try:
             return await fn(*a, **kw)
-        except (CommsError, P.ProtocolError, OSError) as e:
-            return json.dumps({"ok": False, "error": str(e)})
+        except (CommsError, P.ProtocolError, OSError, httpx.HTTPError) as e:
+            return json.dumps({"ok": False, "error": f"{type(e).__name__}: {e}"})
     return wrapper
 
 

@@ -143,6 +143,8 @@ class Hub:
         self.log_path = Path(log_path) if log_path else None
         self.log: deque = deque(maxlen=5000)
         self.started = self.clock()
+        self.closing = False
+        self.loop: asyncio.AbstractEventLoop | None = None
 
     # ---------- log ----------
     def _log(self, event: str, **kw):
@@ -317,6 +319,12 @@ class Hub:
         self._system(list(self.peers.values()), "peer_left", {"robot_id": peer.robot_id, "reason": reason})
         peer.wake.set()
 
+    def close(self):
+        """Hub shutting down: end every open long-poll/stream now (clients see the hub go and start reconnecting)."""
+        self.closing = True
+        for p in self.peers.values():
+            p.wake.set()
+
     def sweep(self):
         now = self.clock()
         for r in self.tracker.expire(now):
@@ -402,7 +410,7 @@ def create_app(hub: Hub) -> Starlette:
                 ev = peer.wake
                 out = hub.inbox(peer, since, limit)
                 remaining = deadline - hub.clock()
-                if out["messages"] or remaining <= 0 or hub.peers.get(peer.robot_id) is not peer:
+                if out["messages"] or remaining <= 0 or hub.closing or hub.peers.get(peer.robot_id) is not peer:
                     return JSONResponse(out)
                 with contextlib.suppress(asyncio.TimeoutError):
                     await asyncio.wait_for(ev.wait(), remaining)
@@ -426,7 +434,7 @@ def create_app(hub: Hub) -> Starlette:
                 peer.last_seen = hub.clock()
 
         async def _events(cursor):
-            while hub.peers.get(peer.robot_id) is peer:
+            while hub.peers.get(peer.robot_id) is peer and not hub.closing:
                 ev = peer.wake
                 out = hub.inbox(peer, cursor, 100)
                 for m in out["messages"]:
@@ -475,6 +483,7 @@ def create_app(hub: Hub) -> Starlette:
             while True:
                 await asyncio.sleep(cfg.sweep_s)
                 hub.sweep()
+        hub.loop = asyncio.get_running_loop()
         task = asyncio.create_task(sweeper())
         hub._log("hub_start", auth="peer_keys" if hub.peer_keys else "token")
         try:
@@ -503,7 +512,8 @@ class HubServer:
         import uvicorn
         self.hub = hub
         self.server = uvicorn.Server(uvicorn.Config(create_app(hub), host=host, port=port, log_level="warning",
-                                                    lifespan="on", access_log=False))
+                                                    lifespan="on", access_log=False,
+                                                    timeout_graceful_shutdown=2))
         self.host = host
         self.thread = threading.Thread(target=self.server.run, name="comms-hub", daemon=True)
 
@@ -526,5 +536,8 @@ class HubServer:
         return f"http://{host}:{self.port}"
 
     def stop(self):
+        loop = getattr(self.hub, "loop", None)
+        if loop is not None and loop.is_running():          # release open long-polls so shutdown is immediate
+            loop.call_soon_threadsafe(self.hub.close)
         self.server.should_exit = True
         self.thread.join(timeout=10)
