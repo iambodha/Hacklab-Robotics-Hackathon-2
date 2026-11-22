@@ -19,6 +19,7 @@ class TrapConnector:
     """A connector whose identity can be read but whose every other attribute raises: proves that comms never
     reaches for the arm, whatever a peer sends."""
     name = "so101"
+    display_name = "SO-101"
     skills = ["twist_cap", "pick"]
     capabilities = ["5dof-arm", "gripper"]
     frames = {"world": "table", "units": "m"}
