@@ -100,7 +100,6 @@ to `sim/real_sessions/actions.jsonl`, plus the model's full transcript.
 - **The overview camera is not calibrated.** It is used for context only.
 - **`pick_thin` and the new thin-sheet hold check** have held a real sheet through a lift once. That is all the
   hardware evidence there is.
-- **SO-101.** The profile and kinematics load and pass offline checks. It has never driven a real SO-101.
 
 ## Run it
 
