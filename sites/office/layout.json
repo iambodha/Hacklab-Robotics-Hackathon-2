@@ -1,0 +1,427 @@
+{
+ "_notes": [
+  "Home table twin (2026-11-22). Select it with SIM_LAYOUT=home (sim/layout.json stays the venue table).",
+  "Frame = the sim frame (URDF base_link on the table top): +y = arm forward at j1 = 0, +z up. The contract world of scene_calib.json has +x forward: p_sim = T_sim_world @ p_world.",
+  "Every calibrated block carries 'src': 'estimate' (sim/estimate_home.py, from the live cameras) or 'scene_calib' (perception's calibration via sim/sync_from_calib.py). 'fixed' = hand-set.",
+  "Re-sync: python3 sim/sync_from_calib.py ../perception/calibration/scene_calib.json ; re-estimate: python3 sim/estimate_home.py",
+  "Sizes: table/bin sizes are full lengths; 'fixed' and object part sizes are MuJoCo half-sizes.",
+  "OFFICE site: started from a copy of the home layout (objects removed), then synced from sites/office/scene_calib.json."
+ ],
+ "table": {
+  "size": [
+   0.874,
+   0.766
+  ],
+  "center": [
+   0.035,
+   0.233
+  ],
+  "yaw": 0.0,
+  "thickness": 0.025,
+  "height": 0.75,
+  "rgba": [
+   0.88,
+   0.88,
+   0.86,
+   1
+  ],
+  "floor_rgba": [
+   0.5,
+   0.5,
+   0.5,
+   1
+  ],
+  "specular": 0.05,
+  "src": "office: marker bounding box + 15 cm margin, extended 15 cm behind the arm base (real edges not measured yet)"
+ },
+ "lighting": {
+  "headlight": {
+   "ambient": [
+    0.751,
+    0.751,
+    0.751
+   ],
+   "diffuse": [
+    0,
+    0,
+    0
+   ],
+   "specular": [
+    0,
+    0,
+    0
+   ]
+  },
+  "skybox": [
+   [
+    0.75,
+    0.75,
+    0.74
+   ],
+   [
+    0.45,
+    0.43,
+    0.4
+   ]
+  ],
+  "lights": [
+   {
+    "name": "key",
+    "directional": true,
+    "pos": [
+     0.0,
+     0.3,
+     2.0
+    ],
+    "dir": [
+     0.1,
+     0.2,
+     -1.0
+    ],
+    "diffuse": [
+     0.25,
+     0.25,
+     0.25
+    ],
+    "specular": [
+     0.03,
+     0.03,
+     0.03
+    ],
+    "castshadow": true
+   }
+  ],
+  "src": "fit_appearance",
+  "_about": "gain fitted to the real overview (table colour error 0.16 -> 0.12 rgb)"
+ },
+ "arm_rgba": [
+  0.12,
+  0.12,
+  0.13,
+  1
+ ],
+ "arm": {
+  "joint_mapping": {
+   "mode": "range_fraction"
+  },
+  "bus": "5B61033301"
+ },
+ "rest_pose": [
+  -0.066,
+  -1.552,
+  -0.212,
+  1.723,
+  0.02,
+  0.037,
+  0.005,
+  0.939
+ ],
+ "_rest_pose_about": "the real follower's (limp, folded) pose when the estimate was taken (sim/layouts/home_estimate/joints.json)",
+ "bins": [],
+ "objects": [],
+ "fixed": [
+  {
+   "name": "cam_stand_pole",
+   "type": "cylinder",
+   "pos": [
+    0.0055,
+    0.6997,
+    0.1414
+   ],
+   "size": [
+    0.008,
+    0.2414
+   ],
+   "yaw": 0,
+   "rgba": [
+    0.05,
+    0.05,
+    0.05,
+    1
+   ],
+   "src": "scene_calib",
+   "_about": "overview camera stand just beyond the near edge, under the camera: the wrist camera sees it rise from the table edge; the overview camera does not see it"
+  }
+ ],
+ "markers": {
+  "dictionary": "DICT_4X4_50",
+  "size_m": 0.1,
+  "items": [
+   {
+    "id": 20,
+    "role": "top",
+    "T": [
+     [
+      -0.99912,
+      0.04186,
+      0.0,
+      0.31616
+     ],
+     [
+      -0.04186,
+      -0.99912,
+      0.0,
+      0.46557
+     ],
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "src": "scene_calib",
+    "rms_mm": 1.262
+   },
+   {
+    "id": 21,
+    "role": "top",
+    "T": [
+     [
+      0.01964,
+      0.99981,
+      0.0,
+      -0.25231
+     ],
+     [
+      -0.99981,
+      0.01964,
+      0.0,
+      0.45736
+     ],
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "src": "scene_calib",
+    "rms_mm": 2.17
+   },
+   {
+    "id": 22,
+    "role": "base",
+    "T": [
+     [
+      -0.99874,
+      0.05017,
+      0.0,
+      -0.23067
+     ],
+     [
+      -0.05017,
+      -0.99874,
+      0.0,
+      0.0112
+     ],
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "src": "scene_calib",
+    "rms_mm": 4.854
+   },
+   {
+    "id": 23,
+    "role": "base",
+    "T": [
+     [
+      0.05614,
+      0.99842,
+      0.0,
+      0.32188
+     ],
+     [
+      -0.99842,
+      0.05614,
+      0.0,
+      0.02911
+     ],
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+     ],
+     [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "src": "scene_calib",
+    "rms_mm": 2.784
+   }
+  ],
+  "levels": [
+   0.133,
+   0.723
+  ]
+ },
+ "cameras": [
+  {
+   "name": "overview_cam",
+   "fovy": 75.86,
+   "src": "scene_calib",
+   "T_cv": [
+    [
+     -0.99863,
+     -0.04604,
+     0.02492,
+     0.00526
+    ],
+    [
+     -0.05057,
+     0.72487,
+     -0.68703,
+     0.6697
+    ],
+    [
+     0.01357,
+     -0.68734,
+     -0.7262,
+     0.38277
+    ],
+    [
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ]
+   ],
+   "queue": "usbvideo/ce4e355ece1334a6c4c77e01a0db2dcc",
+   "K_normalized": {
+    "fx": 0.479236,
+    "fy": 0.641638,
+    "cx": 0.513426,
+    "cy": 0.526548
+   },
+   "dist": [
+    0.068819,
+    -0.050624,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "reproj_px": 0.537
+  },
+  {
+   "name": "top_cam",
+   "pos": [
+    0.0,
+    0.3,
+    1.1
+   ],
+   "lookat": [
+    0.0,
+    0.29,
+    0.0
+   ],
+   "fovy": 55
+  },
+  {
+   "name": "side_cam",
+   "pos": [
+    -1.0,
+    0.3,
+    0.55
+   ],
+   "lookat": [
+    0.0,
+    0.25,
+    0.1
+   ],
+   "fovy": 45
+  }
+ ],
+ "wrist_camera": {
+  "pose_file": "camera_pose/wrist_camera.json",
+  "fovy": 77.635,
+  "src": "scene_calib",
+  "K_normalized": {
+   "fx": 0.466274,
+   "fy": 0.621489,
+   "cx": 0.506474,
+   "cy": 0.529637
+  },
+  "dist": [
+   0.058589,
+   -0.071567,
+   -0.002509,
+   -0.00398,
+   0.017699
+  ],
+  "queue": "usbvideo/9b061799a7c5f6fa2f9fbd0e1a46d4b8",
+  "pose_source": "CAD (camera_pose/wrist_camera.json)",
+  "link": "Gripper_Base_v1_1"
+ },
+ "image_size": [
+  299,
+  224
+ ],
+ "reach": {
+  "show_rings": false,
+  "samples": 150000,
+  "top_down_tolerance_deg": 30,
+  "position_tolerance": 0.015,
+  "bin_drop_clearance": 0.05
+ },
+ "T_sim_world": {
+  "value": [
+   [
+    -0.0,
+    -1.0,
+    -0.0,
+    -0.0
+   ],
+   [
+    1.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    1.0,
+    0.0
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ]
+  ],
+  "src": "scene_calib",
+  "_about": "p_sim = T_sim_world @ p_world (contract world: x forward; sim/URDF: y forward)"
+ },
+ "_synced_from": [
+  "/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/perception/calibration/scene_calib.json",
+  "calibration/scene_calib.json",
+  "/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/integration/sites/office/scene_calib.json"
+ ]
+}
