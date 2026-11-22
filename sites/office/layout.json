@@ -124,13 +124,13 @@
    "name": "cam_stand_pole",
    "type": "cylinder",
    "pos": [
-    0.0055,
-    0.6997,
-    0.1414
+    -0.0207,
+    0.6908,
+    0.1411
    ],
    "size": [
     0.008,
-    0.2414
+    0.2411
    ],
    "yaw": 0,
    "rgba": [
@@ -152,16 +152,16 @@
     "role": "top",
     "T": [
      [
-      -0.99912,
-      0.04186,
+      -0.99672,
+      0.08092,
       0.0,
-      0.31616
+      0.29884
      ],
      [
-      -0.04186,
-      -0.99912,
+      -0.08092,
+      -0.99672,
       0.0,
-      0.46557
+      0.46989
      ],
      [
       0.0,
@@ -177,23 +177,23 @@
      ]
     ],
     "src": "scene_calib",
-    "rms_mm": 1.262
+    "rms_mm": 1.246
    },
    {
     "id": 21,
     "role": "top",
     "T": [
      [
-      0.01964,
-      0.99981,
+      0.05486,
+      0.99849,
       0.0,
-      -0.25231
+      -0.26771
      ],
      [
-      -0.99981,
-      0.01964,
+      -0.99849,
+      0.05486,
       0.0,
-      0.45736
+      0.43926
      ],
      [
       0.0,
@@ -209,23 +209,23 @@
      ]
     ],
     "src": "scene_calib",
-    "rms_mm": 2.17
+    "rms_mm": 1.823
    },
    {
     "id": 22,
     "role": "base",
     "T": [
      [
-      -0.99874,
-      0.05017,
+      -0.99864,
+      0.05223,
       0.0,
-      -0.23067
+      -0.22905
      ],
      [
-      -0.05017,
-      -0.99874,
+      -0.05223,
+      -0.99864,
       0.0,
-      0.0112
+      -0.00289
      ],
      [
       0.0,
@@ -241,23 +241,23 @@
      ]
     ],
     "src": "scene_calib",
-    "rms_mm": 4.854
+    "rms_mm": 5.929
    },
    {
     "id": 23,
     "role": "base",
     "T": [
      [
-      0.05614,
-      0.99842,
+      0.09232,
+      0.99573,
       0.0,
-      0.32188
+      0.32169
      ],
      [
-      -0.99842,
-      0.05614,
+      -0.99573,
+      0.09232,
       0.0,
-      0.02911
+      0.03523
      ],
      [
       0.0,
@@ -273,7 +273,7 @@
      ]
     ],
     "src": "scene_calib",
-    "rms_mm": 2.784
+    "rms_mm": 2.764
    }
   ],
   "levels": [
@@ -288,22 +288,22 @@
    "src": "scene_calib",
    "T_cv": [
     [
-     -0.99863,
-     -0.04604,
-     0.02492,
-     0.00526
+     -0.99584,
+     -0.07418,
+     0.05291,
+     -0.01981
     ],
     [
-     -0.05057,
-     0.72487,
-     -0.68703,
-     0.6697
+     -0.09025,
+     0.72326,
+     -0.68465,
+     0.66077
     ],
     [
-     0.01357,
-     -0.68734,
-     -0.7262,
-     0.38277
+     0.01252,
+     -0.68658,
+     -0.72695,
+     0.38212
     ],
     [
      0.0,
@@ -326,7 +326,7 @@
     0.0,
     0.0
    ],
-   "reproj_px": 0.537
+   "reproj_px": 0.512
   },
   {
    "name": "top_cam",
@@ -375,7 +375,7 @@
    0.017699
   ],
   "queue": "usbvideo/9b061799a7c5f6fa2f9fbd0e1a46d4b8",
-  "pose_source": "CAD (camera_pose/wrist_camera.json)",
+  "pose_source": "CAD (sites/home/wrist_camera.json)",
   "link": "Gripper_Base_v1_1"
  },
  "image_size": [
@@ -420,8 +420,8 @@
   "_about": "p_sim = T_sim_world @ p_world (contract world: x forward; sim/URDF: y forward)"
  },
  "_synced_from": [
-  "/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/perception/calibration/scene_calib.json",
   "calibration/scene_calib.json",
-  "/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/integration/sites/office/scene_calib.json"
+  "/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/integration/sites/office/scene_calib.json",
+  "sites/office/scene_calib.json"
  ]
 }
