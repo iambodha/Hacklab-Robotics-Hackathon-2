@@ -1,12 +1,16 @@
 """Live mirror: the twin's joints follow the real follower arm (read-only), shown next to the real cameras.
 
-  python3 sim/mirror_real.py [--layout home] [--port 8892] [--fps 15] [--viewer] [--seconds N]
+  python3 sim/mirror_real.py [--layout home] [--port 8892] [--fps 15] [--q-tol 0.002] [--viewer] [--seconds N]
 
 Follows Station's st3215/inference (raw ticks -> URDF radians via sim/real_joints.py; mapping configurable with
 layout["arm"]["joint_mapping"] or TWIN_JOINT_MAP) and both camera queues. Serves http://127.0.0.1:<port>/ with a live
 2x2 view (real overview | twin overview / real wrist | twin wrist) and /state.json (q, raw ticks, latency).
 --viewer also opens the MuJoCo viewer (on macOS run it with `mjpython` instead of python3).
 Latency = time the twin frame is ready minus the bus read time stamped by Station (system_stamp_ns).
+Cheap enough to run next to the console: the twin re-renders only when a joint moved more than --q-tol (rad; -1 =
+every frame), camera JPEGs are decoded only when new, and the 2x2 grid is sent at native size (the page scales it).
+Measured 22 Nov (load avg ~4 from other jobs): still arm 14.9 fps, 6.5 ms median, 11 % of one core; rendering every
+frame 14.9 fps, 25 ms, 25 %; --fps 30 --q-tol -1 28.8 fps, 27 ms, 41 %.
 Nothing is ever written to Station: no torque, goals or calibration.
 """
 from __future__ import annotations
@@ -32,7 +36,7 @@ import station_io  # noqa: E402
 
 STATE = {"jpeg": b"", "state": {}, "lock": threading.Lock()}
 PAGE = b"""<!doctype html><title>twin mirror</title><body style="margin:0;background:#111;color:#ddd;font:13px monospace">
-<img src="/stream" style="width:100%;max-width:1196px;display:block"><pre id=s></pre>
+<img src="/stream" style="width:100%;max-width:1196px;aspect-ratio:598/448;display:block"><pre id=s></pre>
 <script>setInterval(async()=>{const r=await fetch('/state.json');document.getElementById('s').textContent=JSON.stringify(await r.json(),null,1)},500)</script>"""
 
 
@@ -68,18 +72,23 @@ class Handler(BaseHTTPRequestHandler):
 
 
 async def follow_camera(cli, cam, latest):
+    """One subscription per camera for the whole run; keeps only the newest JPEG (bytes, sequence number)."""
     import station_io as s
     _, usbvideo, fr, _ = s._mods()
     q: asyncio.Queue = asyncio.Queue()
     cli.follow(s.QUEUES[cam], q)
+    seq = 0
     while True:
         e = await q.get()
+        while not q.empty():                            # parse only the newest envelope
+            e = q.get_nowait()
         env = usbvideo.RxEnvelopeReader(memoryview(bytes(e.Data)))
         pack = env.get_frames()
         if env.get_type() == usbvideo.RxEnvelopeType.ET_FRAMES and pack is not None:
             frames = pack.get_frames_data() or []
             if pack.get_format().get_kind() == fr.FrameFormatKind.FF_JPEG and frames:
-                latest[cam] = bytes(frames[-1])
+                seq += 1
+                latest[cam] = (bytes(frames[-1]), seq)
 
 
 async def run(a):
@@ -100,32 +109,47 @@ async def run(a):
     latest: dict = {}
     for cam in ("overview", "wrist"):
         asyncio.ensure_future(follow_camera(cli, cam, latest))
-    lat, n, t0, period = [], 0, time.time(), 1.0 / a.fps
+    lat, n, renders, t0, period = [], 0, 0, time.time(), 1.0 / a.fps
+    cpu0 = time.process_time()
     blank = np.zeros((H, W, 3), np.uint8)
+    twin = {name: blank for name in compare_real.CAMS}
+    real = {name: blank for name in compare_real.CAMS}
+    seen_seq, q_drawn = {}, None
     while a.seconds is None or time.time() - t0 < a.seconds:
         t_loop = time.time()
         raw, meta = await jf.read()
         q = real_joints.to_q(raw, meta["ranges"], lo, hi, mapping)
-        real_joints.set_arm_q(model, data, q)
-        tiles = []
-        for name, cam in compare_real.CAMS.items():
-            renderer.update_scene(data, camera=cam, scene_option=opt)
-            twin = cv2.cvtColor(renderer.render(), cv2.COLOR_RGB2BGR)
-            real = cv2.imdecode(np.frombuffer(latest[name], np.uint8), cv2.IMREAD_COLOR) if name in latest else blank
-            tiles.append(np.hstack([cv2.resize(real, (W, H)), twin]))
-        grid = cv2.resize(np.vstack(tiles), None, fx=2, fy=2, interpolation=cv2.INTER_LINEAR)
+        dirty = False
+        if q_drawn is None or np.abs(q - q_drawn).max() > a.q_tol:     # a still arm costs no renders
+            real_joints.set_arm_q(model, data, q)
+            for name, cam in compare_real.CAMS.items():
+                renderer.update_scene(data, camera=cam, scene_option=opt)
+                twin[name] = cv2.cvtColor(renderer.render(), cv2.COLOR_RGB2BGR)
+            q_drawn, dirty, renders = q, True, renders + 1
+        for name in compare_real.CAMS:                                  # decode only frames not shown yet
+            if name in latest and latest[name][1] != seen_seq.get(name):
+                jpg_b, seen_seq[name] = latest[name]
+                im = cv2.imdecode(np.frombuffer(jpg_b, np.uint8), cv2.IMREAD_COLOR)
+                real[name] = im if im.shape[:2] == (H, W) else cv2.resize(im, (W, H))
+                dirty = True
         t_ready = time.time()
         latency = (t_ready - meta["stamp_s"]) if meta.get("stamp_s") else None
         if latency is not None:
             lat.append(latency)
-        cv2.putText(grid, f"real | twin   q={np.round(q, 2).tolist()}   latency {latency * 1000:.0f} ms" if latency is not None
-                    else "real | twin", (8, 18), 0, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-        ok, jpg = cv2.imencode(".jpg", grid, [cv2.IMWRITE_JPEG_QUALITY, 80])
         n += 1
+        if dirty:            # native resolution; the page scales it up (2x server-side resize + bigger JPEG were ~3x the encode)
+            grid = np.vstack([np.hstack([real[name], twin[name]]) for name in compare_real.CAMS])
+            cv2.putText(grid, f"real | twin   latency {latency * 1000:.0f} ms" if latency is not None else "real | twin",
+                        (4, 12), 0, 0.35, (255, 255, 255), 1, cv2.LINE_AA)
+            ok, jpg = cv2.imencode(".jpg", grid, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            with STATE["lock"]:
+                STATE["jpeg"] = jpg.tobytes()
+        el = max(time.time() - t0, 1e-6)
         with STATE["lock"]:
-            STATE["jpeg"] = jpg.tobytes()
             STATE["state"] = {"q_rad": np.round(q, 4).tolist(), "raw": raw, "mapping": mapping, "frames": n,
-                              "fps": round(n / max(time.time() - t0, 1e-6), 1),
+                              "renders": renders, "fps": round(n / el, 1),
+                              "cpu_pct": round(100 * (time.process_time() - cpu0) / el, 1),
+                              "cameras_live": sorted(latest),
                               "latency_ms": round(latency * 1000, 1) if latency is not None else None,
                               "latency_ms_median": round(float(np.median(lat[-100:])) * 1000, 1) if lat else None,
                               "receive_to_ready_ms": round((t_ready - meta["t_recv"]) * 1000, 1)}
@@ -142,6 +166,7 @@ def main():
     ap.add_argument("--layout", default="home")
     ap.add_argument("--port", type=int, default=8892)
     ap.add_argument("--fps", type=float, default=15)
+    ap.add_argument("--q-tol", type=float, default=2e-3, help="re-render the twin only when a joint moved more (rad)")
     ap.add_argument("--viewer", action="store_true")
     ap.add_argument("--seconds", type=float, help="stop after N seconds and print the last state (for tests)")
     a = ap.parse_args()

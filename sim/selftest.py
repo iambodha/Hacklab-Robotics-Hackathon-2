@@ -70,6 +70,18 @@ def model_corners(cam, mid, d=None):
     return pc[:, :2] / pc[:, 2:3] * f + [W / 2, H / 2]
 
 
+def arm_near(seg, px, arm_geoms, grow=1.5):
+    """True if any arm pixel (segmentation render) lies inside the marker's corner hull grown by `grow`: the
+    marker would sit at the jaws' edge, where a little sag or jaw play hides a corner."""
+    import cv2
+    import mujoco
+    hull = np.zeros(seg.shape[:2], np.uint8)
+    c = px.mean(0)
+    cv2.fillConvexPoly(hull, cv2.convexHull(((px - c) * grow + c).astype(np.int32)), 1)
+    geom = np.where(seg[..., 1] == int(mujoco.mjtObj.mjOBJ_GEOM), seg[..., 0], -1)   # (objid, objtype) per pixel
+    return bool(np.isin(geom[hull > 0], arm_geoms).any())
+
+
 async def home_check(args):
     """Markers, reach and wrist view on the home table (no objects to move there yet)."""
     mk = srv.arm.layout['markers']
@@ -89,19 +101,33 @@ async def home_check(args):
     import real_joints
     kin = mujoco.MjData(srv.arm.model)
     W, H = srv.arm.layout['image_size']
+    probe = mujoco.Renderer(srv.arm.model, H, W)
+    m = srv.arm.model
+    arm_root = m.body_rootid[m.site_bodyid[m.site('grasp_tcp').id]]
+    arm_geoms = np.flatnonzero(m.body_rootid[m.geom_bodyid] == arm_root)
     for it in base_markers:
         xy = np.asarray(it['T'])[:2, 3] if 'T' in it else np.asarray(it['pos'][:2])
-        # a reachable TCP point on the way to the marker from which the model's wrist camera sees the whole marker
+        # a reachable TCP point on the way to the marker from which the wrist camera of the kinematic pose sees the
+        # whole marker AND decodes it in a render (projection alone ignores jaw occlusion and too-oblique views)
         pick = None
-        for frac in (0.55, 0.45, 0.65, 0.35):
-            for z in (0.14, 0.18, 0.10):
+        for frac in (0.55, 0.45, 0.65, 0.35, 0.75):
+            for z in (0.14, 0.18, 0.10, 0.22):
                 target = [*(xy * frac), z]
                 sol, lean = ik.solve_least_lean(target, q_now)
                 if sol is None:
                     continue
                 real_joints.set_arm_q(srv.arm.model, kin, sol)
                 px = model_corners('wrist_cam', it['id'], kin)
-                if np.isfinite(px).all() and (px > 12).all() and (px < [W - 12, H - 12]).all():
+                if not (np.isfinite(px).all() and (px > 12).all() and (px < [W - 12, H - 12]).all()):
+                    continue
+                probe.update_scene(kin, camera='wrist_cam', scene_option=srv.arm.vis_option)
+                if it['id'] not in detect_markers(probe.render(), mk['dictionary']):
+                    continue
+                probe.enable_segmentation_rendering()
+                probe.update_scene(kin, camera='wrist_cam', scene_option=srv.arm.vis_option)
+                seg = probe.render()
+                probe.disable_segmentation_rendering()
+                if not arm_near(seg, px, arm_geoms):
                     pick = (target, sol, lean); break
             if pick:
                 break
@@ -123,6 +149,7 @@ async def home_check(args):
             args.images.mkdir(parents=True, exist_ok=True)
             for cam, *_ in srv.CAMERAS:
                 (args.images / f"home_marker{it['id']}_{cam}.jpg").write_bytes(srv.arm.snapshot(cam))
+    probe.close()
     print(json.dumps({'layout': str(srv.LAYOUT), 'steps': log, 'success': bool(ok)}, indent=2))
     srv.arm.running = False
     return 0 if ok else 1
@@ -130,7 +157,8 @@ async def home_check(args):
 
 async def main():
     args = ARGS
-    if 'markers' in srv.arm.layout and not srv.arm.layout['objects']:
+    names = {o['name'] for o in srv.arm.layout['objects']}
+    if 'markers' in srv.arm.layout and 'black_cube' not in names:   # home table (objects there are r2-task's)
         return await home_check(args)
     if args.randomize:
         await srv.operator_reset_scene(True)
