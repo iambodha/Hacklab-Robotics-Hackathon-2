@@ -35,11 +35,48 @@ class Board:
         return np.array([[self.x0, self.y0], [self.x1, self.y0], [self.x1, self.y1], [self.x0, self.y1]], float)
 
 
+def _distort(xn: np.ndarray, dist: np.ndarray) -> np.ndarray:
+    """OpenCV radial/tangential model [k1, k2, p1, p2, k3] on normalised image coords (..., 2)."""
+    k1, k2, p1, p2, k3 = (list(dist) + [0.0] * 5)[:5]
+    x, y = xn[..., 0], xn[..., 1]
+    r2 = x * x + y * y
+    rad = 1 + k1 * r2 + k2 * r2 * r2 + k3 * r2 * r2 * r2
+    xd = x * rad + 2 * p1 * x * y + p2 * (r2 + 2 * x * x)
+    yd = y * rad + p1 * (r2 + 2 * y * y) + 2 * p2 * x * y
+    return np.stack([xd, yd], -1)
+
+
+def _undistort(xd: np.ndarray, dist: np.ndarray, iters: int = 20) -> np.ndarray:
+    """Inverse of _distort by fixed-point iteration (enough for the mild UVC lenses here)."""
+    x = xd.copy()
+    for _ in range(iters):
+        x = x + (xd - _distort(x, dist))
+    return x
+
+
+@dataclass(frozen=True)
+class PlaneMap:
+    """Image <- world-plane mapping with lens distortion: the undistorted homography H, then K^-1, distortion, K.
+    apply_H() accepts it wherever a plain 3x3 homography is accepted."""
+    H: np.ndarray
+    K: np.ndarray
+    dist: np.ndarray
+
+    def apply(self, xy) -> np.ndarray:
+        xy = np.asarray(xy, float)
+        p = np.stack([xy[..., 0], xy[..., 1], np.ones(xy.shape[:-1])], -1) @ self.H.T
+        uv = p[..., :2] / p[..., 2:3]
+        xn = np.stack([(uv[..., 0] - self.K[0, 2]) / self.K[0, 0], (uv[..., 1] - self.K[1, 2]) / self.K[1, 1]], -1)
+        xd = _distort(xn, self.dist)
+        return np.stack([xd[..., 0] * self.K[0, 0] + self.K[0, 2], xd[..., 1] * self.K[1, 1] + self.K[1, 2]], -1)
+
+
 @dataclass
 class Camera:
     K: np.ndarray            # 3x3 pixel intrinsics for `size`
     T_world_cam: np.ndarray  # 4x4, OpenCV camera axes
     size: tuple[int, int]    # (width, height)
+    dist: np.ndarray | None = None  # OpenCV [k1, k2, p1, p2, k3]; None/zeros = pinhole
 
     @classmethod
     def from_scene_calib(cls, calib: dict | str | Path, role: str = "overview") -> "Camera":
@@ -49,26 +86,37 @@ class Camera:
         W, H = c["image_size"]
         k = c["K_normalized"]
         K = np.array([[k["fx"] * W, 0, k["cx"] * W], [0, k["fy"] * H, k["cy"] * H], [0, 0, 1]], float)
-        if any(abs(float(d)) > 1e-9 for d in c.get("dist", [])):
-            raise NotImplementedError("lens distortion is not modelled here; undistort first or pass a homography")
-        return cls(K, np.array(c["T_world_cam"], float), (int(W), int(H)))
+        dist = np.array([float(d) for d in c.get("dist", [])][:5], float)
+        return cls(K, np.array(c["T_world_cam"], float), (int(W), int(H)),
+                   dist if np.any(np.abs(dist) > 1e-9) else None)
 
-    def H_img_world(self, z: float = 0.0) -> np.ndarray:
-        """3x3 homography: [u, v, 1] ~ H @ [x, y, 1] for world points on the plane at height z."""
+    def _H_pinhole(self, z: float = 0.0) -> np.ndarray:
         T = np.linalg.inv(self.T_world_cam)
         R, t = T[:3, :3], T[:3, 3]
         M = np.column_stack([R[:, 0], R[:, 1], R[:, 2] * z + t])
         return self.K @ M
 
+    def H_img_world(self, z: float = 0.0):
+        """Image <- world-plane (height z) mapping: a 3x3 homography [u, v, 1] ~ H @ [x, y, 1] for a pinhole camera,
+        or a PlaneMap (homography + lens distortion) when the calibration has distortion. Use via apply_H/rectify."""
+        H = self._H_pinhole(z)
+        return H if self.dist is None else PlaneMap(H, self.K, self.dist)
+
     def project(self, xyz) -> np.ndarray:
         P = np.atleast_2d(np.asarray(xyz, float))
         T = np.linalg.inv(self.T_world_cam)
         pc = P @ T[:3, :3].T + T[:3, 3]
-        uv = pc @ self.K.T
-        return uv[:, :2] / uv[:, 2:3]
+        xn = pc[:, :2] / pc[:, 2:3]
+        if self.dist is not None:
+            xn = _distort(xn, self.dist)
+        return np.column_stack([xn[:, 0] * self.K[0, 0] + self.K[0, 2], xn[:, 1] * self.K[1, 1] + self.K[1, 2]])
 
     def pixel_to_plane(self, uv, z: float = 0.0) -> np.ndarray:
         uv = np.atleast_2d(np.asarray(uv, float))
+        if self.dist is not None:
+            xd = np.column_stack([(uv[:, 0] - self.K[0, 2]) / self.K[0, 0], (uv[:, 1] - self.K[1, 2]) / self.K[1, 1]])
+            xn = _undistort(xd, self.dist)
+            uv = np.column_stack([xn[:, 0] * self.K[0, 0] + self.K[0, 2], xn[:, 1] * self.K[1, 1] + self.K[1, 2]])
         rays = np.column_stack([uv, np.ones(len(uv))]) @ np.linalg.inv(self.K).T
         d = rays @ self.T_world_cam[:3, :3].T
         o = self.T_world_cam[:3, 3]
@@ -91,6 +139,8 @@ def homography_from_points(img_uv, world_xy) -> np.ndarray:
 
 
 def apply_H(H, xy) -> np.ndarray:
+    if isinstance(H, PlaneMap):
+        return H.apply(xy)
     xy = np.asarray(xy, float)
     p = np.stack([xy[..., 0], xy[..., 1], np.ones(xy.shape[:-1])], -1) @ H.T
     return p[..., :2] / p[..., 2:3]
