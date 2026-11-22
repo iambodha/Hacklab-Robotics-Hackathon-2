@@ -10,3 +10,6 @@ robot_mcp/data/*.local.json
 recordings/
 recorder/serve.log
 executor/logs/
+.scratch/
+skills/.loop/
+skills/data/
