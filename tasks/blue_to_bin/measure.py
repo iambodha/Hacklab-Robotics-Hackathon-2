@@ -3,7 +3,7 @@
     uv run --no-project --with numpy --with scipy --with opencv-contrib-python \
         python -m tasks.blue_to_bin.measure --tail 10          # newest 10 stored frames (works while video is down)
     ... python -m tasks.blue_to_bin.measure --live 10          # next 10 live frames (one subscription)
-    ... python -m tasks.blue_to_bin.measure --frames DIR       # overview*.jpg in DIR
+    ... python -m tasks.blue_to_bin.measure --frames DIR       # overview*.jpg in DIR (or one JPEG file)
 
 Blue cap: colour silhouette (perception.locate.segment, "blue") -> an upright cylinder (centre x, y, radius, height)
 whose projection has the same extreme pixels (left, right, top, bottom) as the silhouette.
@@ -189,7 +189,8 @@ async def _station_frames(n: int, tail: bool) -> list[bytes]:
 
 def load_frames(args) -> tuple[list[np.ndarray], str]:
     if args.frames:
-        files = sorted(Path(args.frames).glob("overview*.jpg")) or sorted(Path(args.frames).glob("*.jpg"))
+        p = Path(args.frames)
+        files = [p] if p.is_file() else sorted(p.glob("overview*.jpg")) or sorted(p.glob("*.jpg"))
         return [cv2.imread(str(f)) for f in files], f"files {args.frames}"
     jpgs = asyncio.run(_station_frames(args.tail or args.live, bool(args.tail)))
     src = f"Station {'newest stored' if args.tail else 'live'} overview entries x{len(jpgs)}"
@@ -201,7 +202,7 @@ def main():
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--tail", type=int, help="newest N stored overview frames")
     src.add_argument("--live", type=int, help="next N live overview frames")
-    src.add_argument("--frames", help="directory of overview JPEGs")
+    src.add_argument("--frames", help="directory of overview JPEGs, or one JPEG")
     ap.add_argument("--bin-pixels", help="JSON with rim_left/right/far/near and base_left/right/near pixels")
     ap.add_argument("--out", default=str(OUT))
     args = ap.parse_args()

@@ -39,7 +39,7 @@ def test_background_blue_is_ignored(loc):
     """The top-right of the overview has a blue patch (off the table) larger than the lid."""
     r = BlueLocator(Spec.load()).fit(cv2.imread(str(ON_TABLE)))
     assert r["ok"] and abs(r["z_base"]) < 0.005
-    assert np.allclose(r["xyz"][:2], [0.2619, -0.1298], atol=0.01)
+    assert np.allclose(r["xyz"][:2], [0.2836, -0.1409], atol=0.01)   # measured.json, scene_calib 01:50
 
 
 def test_predicate_on_real_frames():
