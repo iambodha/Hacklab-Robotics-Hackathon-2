@@ -1,7 +1,8 @@
 """Find the kit sheet, its cells and its start spots in an overview image, from the sheet's own ArUco markers.
 
-The overview camera is calibrated against the table (sim/layouts/home.json: T_cv, K, dist from scene_calib), so every
-detected marker corner is a ray that meets the table plane at a known point. The sheet pose (x, y, yaw on the table)
+The overview camera is calibrated against the table (the SITE's layout, sites.get_site().layout: T_cv, K, dist from
+scene_calib), so every detected marker corner is a ray that meets the table plane at a known point. The sheet pose
+(x, y, yaw on the table)
 is the 2D rigid fit of those points to the same corners in the sheet frame (kit_a4.json). One marker (4 corners) is
 enough; all visible ones are used. No PnP: the camera pose is the calibrated one, only the paper moves.
 
@@ -168,14 +169,15 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("image")
     ap.add_argument("--spec", default=None)
-    ap.add_argument("--layout", default=str(ROOT / "sim" / "layouts" / "home.json"))
+    ap.add_argument("--layout", default=None, help="layout json (default: the SITE's layout, home if unset)")
     ap.add_argument("--twin", action="store_true", help="the image is a twin render (pinhole, no distortion)")
     ap.add_argument("--out", default=None, help="overlay image (default: next to the input, *_kit.jpg)")
     a = ap.parse_args()
     from PIL import Image
     spec = Spec.load(a.spec)
     img = np.asarray(Image.open(a.image).convert("RGB"))
-    cam = camera_model(json.loads(Path(a.layout).read_text()), twin=a.twin)
+    from sites import get_site
+    cam = camera_model(json.loads(Path(a.layout or get_site().layout).read_text()), twin=a.twin)
     r = locate_sheet(img, spec, cam)
     if r.get("pose") is not None:
         out = Path(a.out or Path(a.image).with_name(Path(a.image).stem + "_kit.jpg"))

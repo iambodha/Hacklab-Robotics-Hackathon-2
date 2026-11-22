@@ -107,6 +107,9 @@ if __name__ == "__main__":
     sys.path.insert(0, str(REPO))
     from learning import bottle_twin
     name = "bottle_twin_real" if a.real_geometry else "bottle_twin"
+    from sites import get_site
+    if get_site().name != "home":
+        name += f"_{get_site().name}"
     lay = bottle_twin.make_layout(Path(a.layout or REPO / "sim" / "generated" / f"{name}.json"),
                                   bottle_twin.REAL_BOTTLE if a.real_geometry else None)
     os.environ["SIM_LAYOUT"] = os.environ["ROBOT_SIM_LAYOUT"] = str(lay)

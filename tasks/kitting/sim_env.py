@@ -66,7 +66,7 @@ class DR:
     sheet: bool = True                       # sheet pose from spec placement.randomize
     human: bool = True                       # objects off their spots by the spec's human_placement noise
     light_scale: tuple = (0.6, 1.5)          # key light diffuse x (room light changes over a day)
-    ambient: tuple = (0.5, 0.95)             # headlight ambient (home.json fitted 0.75)
+    ambient: tuple = (0.5, 0.95)             # headlight ambient (home.json fitted 0.75, office 0.75)
     light_dir_jitter: float = 0.35           # added to the key light direction x/y
     cam_pos_m: float = 0.003                 # overview camera position error (scene_calib: marker rms 1-2 mm)
     cam_rot_deg: float = 0.4                 # overview camera rotation error (0.4 deg ~ 3 mm at 0.45 m)
@@ -102,9 +102,12 @@ class SimulationUnstable(RuntimeError):
 
 
 class KitSim:
-    def __init__(self, spec: Spec | None = None, scene: Path | None = None):
+    def __init__(self, spec: Spec | None = None, scene: Path | None = None, base: str | None = None):
+        """base: the site table (default: SITE, home if unset); the sheet lies at that site's placement."""
         self.spec = spec or Spec.load()
-        sc, self.layout = kitting_scene.ensure_scene(self.spec)
+        sc, self.layout = kitting_scene.ensure_scene(self.spec, base=base)
+        self.site = self.layout["kitting"]["base_layout"]
+        self.nominal_sheet = Pose2D(*self.layout["kitting"]["sheet_pose"])
         self.m = mujoco.MjModel.from_xml_path(str(scene or sc))
         self.d = mujoco.MjData(self.m)
         m = self.m
@@ -136,7 +139,7 @@ class KitSim:
         m, d, S = self.m, self.d, self.spec
         mujoco.mj_resetDataKeyframe(m, d, m.key("rest").id)
         pl = S.raw["placement"]
-        nom = S.nominal_sheet_pose()
+        nom = self.nominal_sheet
         if dr.sheet:
             r = pl["randomize"]
             sheet = Pose2D(nom.x + rng.uniform(*r["x_m"]), nom.y + rng.uniform(*r["y_m"]), nom.yaw_deg + rng.uniform(*r["yaw_deg"]))

@@ -1,8 +1,10 @@
-"""The kitting twin: the calibrated home table (sim/layouts/home.json) + the printed kit sheet as a textured plane +
-the kit objects (screws, caps, boxes) on their start spots, from tasks/kitting/kit_a4.json.
+"""The kitting twin: a calibrated site table (sites.get_site().layout: SITE, default home = sim/layouts/home.json) +
+the printed kit sheet as a textured plane + the kit objects (screws, caps, boxes) on their start spots, from
+tasks/kitting/kit_a4.json. The sheet lies at the site's placement (spec.site_sheet_pose: sites/<site>/tasks.json
+"kitting", else the spec's nominal home pose).
 
-    python3 sim/kitting_scene.py [--spec tasks/kitting/kit_a4.json] [--base home] [--out sim/generated/kit_home]
-        -> sim/layouts/kit_home.json (the layout, nominal poses) + <out>/workspace.xml + previews
+    python3 sim/kitting_scene.py [--spec tasks/kitting/kit_a4.json] [--base SITE] [--out DIR]
+        -> sim/layouts/kit_<base>.json (the layout, nominal poses) + <out>/workspace.xml + previews
 
 Built with sim/build_scene.build_xml (same arm, servos, cameras, markers, table texture and lights as every twin) and
 three kitting-only additions done here on the XML, so build_scene.py stays unchanged:
@@ -42,6 +44,7 @@ for p in (str(HERE), str(REPO)):
 import build_scene  # noqa: E402
 
 from tasks.kitting.sheet import twin_texture  # noqa: E402
+from sites import get_site  # noqa: E402
 from tasks.kitting.spec import Pose2D, Spec  # noqa: E402
 
 PAD_FIX_M = 0.0035          # tasks/blue_to_bin/sim_trials.PAD_FIX_M: real jaw gap ~49 mm open .. ~1 mm closed
@@ -49,6 +52,17 @@ PAD_TIP_SHIFT_M = 0.006     # stock pad tip 16 mm below the TCP -> 10 mm (profil
 SHEET_Z = 0.0004            # paper plane above the table top (table skin at 0.2 mm, table markers at 0.6 mm)
 TEXTURE_PPM = 4.0           # sheet texture pixels per mm: 0.25 mm pixels, finer than the overview's ~3 mm/px
 KIT_LAYOUT = HERE / 'layouts' / 'kit_home.json'
+SCENE_ROOT = Path(os.environ.get('DATA_ROOT', '/Volumes/Dell HDD/Robotics-Hackathon')) / 'r5-kitsim'
+
+
+def default_base() -> str:
+    """The selected site (SITE, default home); SIM_LAYOUT is not consulted: kitting needs a calibrated site table."""
+    return get_site().name
+
+
+def scene_dir(base: str) -> Path:
+    """Generated kitting scene per base layout; home keeps the historical r5-kitsim/scene."""
+    return SCENE_ROOT / ('scene' if base == 'home' else f'scene_{base}')
 
 
 def object_parts(spec: Spec, cls: str) -> tuple[list[dict], float]:
@@ -71,10 +85,12 @@ def object_parts(spec: Spec, cls: str) -> tuple[list[dict], float]:
     raise ValueError(c['shape'])
 
 
-def make_layout(spec: Spec, base: str = 'home', sheet_pose: Pose2D | None = None) -> dict:
-    """The twin layout: the base table layout with its loose objects replaced by the kit objects on their spots."""
+def make_layout(spec: Spec, base: str | None = None, sheet_pose: Pose2D | None = None) -> dict:
+    """The twin layout: the base table layout (a site name, default the selected site) with its loose objects
+    replaced by the kit objects on their spots."""
+    base = base or default_base()
     lay = copy.deepcopy(json.loads(build_scene.layout_path(base).read_text()))
-    sheet_pose = sheet_pose or spec.nominal_sheet_pose()
+    sheet_pose = sheet_pose or spec.site_sheet_pose(base)
     objs = []
     for t in spec.targets(sheet_pose):
         parts, z = object_parts(spec, t['class'])
@@ -130,15 +146,19 @@ def build(layout: dict, out_dir: Path, spec: Spec | None = None) -> Path:
     return scene
 
 
-def ensure_scene(spec: Spec | None = None, out_dir: Path | None = None, base: str = 'home') -> tuple[Path, dict]:
-    """(workspace.xml, layout) of the nominal kitting twin, rebuilt when the spec, this file or build_scene changed."""
+def ensure_scene(spec: Spec | None = None, out_dir: Path | None = None, base: str | None = None) -> tuple[Path, dict]:
+    """(workspace.xml, layout) of the nominal kitting twin, rebuilt when the spec, this file, build_scene, the base
+    layout or the generated layout (e.g. a new site sheet placement) changed."""
     spec = spec or Spec.load()
-    out_dir = Path(out_dir or Path(os.environ.get('DATA_ROOT', '/Volumes/Dell HDD/Robotics-Hackathon')) / 'r5-kitsim' / 'scene')
+    base = base or default_base()
+    out_dir = Path(out_dir or scene_dir(base))
     scene = out_dir / 'workspace.xml'
     srcs = [spec.path, Path(__file__), HERE / 'build_scene.py', REPO / 'tasks' / 'kitting' / 'sheet.py',
             build_scene.layout_path(base)]
     lay = make_layout(spec, base)
-    if not scene.exists() or scene.stat().st_mtime < max(p.stat().st_mtime for p in srcs):
+    built = out_dir / 'layout.json'
+    if (not scene.exists() or scene.stat().st_mtime < max(p.stat().st_mtime for p in srcs)
+            or not built.exists() or json.loads(built.read_text()) != json.loads(json.dumps(lay))):
         build(lay, out_dir, spec)
     return scene, lay
 
@@ -146,11 +166,14 @@ def ensure_scene(spec: Spec | None = None, out_dir: Path | None = None, base: st
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--spec', default=None)
-    ap.add_argument('--base', default='home')
-    ap.add_argument('--out', type=Path, default=Path(os.environ.get('DATA_ROOT', '/Volumes/Dell HDD/Robotics-Hackathon')) / 'r5-kitsim' / 'scene')
-    ap.add_argument('--layout-out', type=Path, default=KIT_LAYOUT)
+    ap.add_argument('--base', default=None, help='site (default: SITE, home if unset)')
+    ap.add_argument('--out', type=Path, default=None, help='default: DATA_ROOT/r5-kitsim/scene[_<base>]')
+    ap.add_argument('--layout-out', type=Path, default=None, help='default: sim/layouts/kit_<base>.json')
     a = ap.parse_args()
     spec = Spec.load(a.spec)
+    a.base = a.base or default_base()
+    a.out = a.out or scene_dir(a.base)
+    a.layout_out = a.layout_out or KIT_LAYOUT.with_name(f'kit_{a.base}.json')
     lay = make_layout(spec, a.base)
     a.layout_out.write_text(json.dumps(lay, indent=1) + '\n')
     scene = build(lay, a.out, spec)

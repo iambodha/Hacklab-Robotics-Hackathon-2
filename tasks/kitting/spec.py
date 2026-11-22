@@ -3,9 +3,11 @@ start spots, object classes. Pure numpy; every other kitting module goes through
 
 Frames
   sheet  mm, origin = page centre, +x = right edge of the printed page, +y = top edge, z out of the paper.
-  table  metres, the arm base frame of the twin (= sim frame, sim/layouts/home.json): +y = arm forward, +x = the
-         arm's right, z up, z = 0 the table top. The executor's world frame is a rotation of it (kin.to_world).
-A sheet pose is (x_m, y_m, yaw_deg) of the sheet origin in the table frame; the paper lies flat on z = 0.
+  table  metres, the arm base frame of the twin (= sim frame, the SITE's layout, sites.get_site().layout): +y = arm
+         forward, +x = the arm's right, z up, z = 0 the table top. The executor's world frame is a rotation of it
+         (kin.to_world).
+A sheet pose is (x_m, y_m, yaw_deg) of the sheet origin in the table frame; the paper lies flat on z = 0. The spec's
+placement is the home pose; a site may place the sheet elsewhere (sites/<site>/tasks.json "kitting", site_sheet_pose).
 """
 from __future__ import annotations
 
@@ -17,8 +19,25 @@ from pathlib import Path
 import numpy as np
 
 HERE = Path(__file__).resolve().parent
+SITES = HERE.parents[1] / "sites"
 DEFAULT_SPEC = HERE / "kit_a4.json"
-TABLE_MARKER_IDS = (20, 21, 22, 23)      # sim/layouts/home.json markers: a sheet must not reuse them
+TABLE_MARKER_IDS = (20, 21, 22, 23)      # home + office table markers; table_marker_ids() reads every site layout
+
+
+def table_marker_ids() -> tuple[int, ...]:
+    """Marker ids on any site's table (the same printed sheet travels between sites: it must reuse none of them)."""
+    ids = set(TABLE_MARKER_IDS)
+    for manifest in SITES.glob("*/site.json"):
+        layout = SITES.parent / json.loads(manifest.read_text())["files"]["layout"]
+        if layout.is_file():
+            ids |= {int(m["id"]) for m in json.loads(layout.read_text()).get("markers", {}).get("items", [])}
+    return tuple(sorted(ids))
+
+
+def site_tasks(site: str) -> dict:
+    """sites/<site>/tasks.json (task placements measured for that table), {} if the site has none or is a layout name."""
+    path = SITES / site / "tasks.json"
+    return json.loads(path.read_text()) if path.is_file() else {}
 
 
 @dataclass(frozen=True)
@@ -112,6 +131,11 @@ class Spec:
         p = self.raw["placement"]
         return Pose2D(*p["sheet_xy_m"], p.get("sheet_yaw_deg", 0.0))
 
+    def site_sheet_pose(self, site: str) -> Pose2D:
+        """The sheet pose on a site's table: its tasks.json "kitting" placement, else the spec's nominal (home)."""
+        p = site_tasks(site).get("kitting")
+        return Pose2D(*p["sheet_xy_m"], p.get("sheet_yaw_deg", 0.0)) if p else self.nominal_sheet_pose()
+
     # --- geometry in the sheet frame (mm) ----------------------------------------------------------------------
     def marker_corners_mm(self, mid: int) -> np.ndarray:
         """(4, 2) corners of marker mid's black square in the sheet frame, OpenCV order TL, TR, BR, BL (marker x right,
@@ -192,9 +216,10 @@ class Spec:
         margin = 4.0                      # printers cannot print the outer ~4 mm of a page
         inside = lambda pts: bool(np.all(np.abs(pts[:, 0]) <= W / 2 - margin) and np.all(np.abs(pts[:, 1]) <= H / 2 - margin))
         boxes = {}
+        table_ids = table_marker_ids()
         for mid in self.markers():
-            if mid in TABLE_MARKER_IDS:
-                out.append(f"marker id {mid} is a table marker (20..23)")
+            if mid in table_ids:
+                out.append(f"marker id {mid} is a table marker {list(table_ids)}")
             q = self.raw["markers"].get("quiet_zone_mm", 0.0)
             c = self.marker_corners_mm(mid)
             if not inside(c):
