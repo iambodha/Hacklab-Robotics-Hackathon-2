@@ -4,10 +4,12 @@ Each returns (text, images) with images = {"wrist": jpeg, "overview": jpeg}; the
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 
 from . import episodes as E
+from . import skillcfg as SC
 from .twist import Twister
 
 TOOL_DOCS = {
@@ -15,7 +17,7 @@ TOOL_DOCS = {
 this attempt (missing ones are inherited from the previous attempt; nothing is clamped: out-of-range values are
 REFUSED with the reason). Change at most 3 against the previous attempt. `hypothesis`: what you expect the change to
 do and why. Saves the before images, starts a recorder session. Returns the attempt number and the full parameters.
-Bounds:
+Bounds (the code defaults; skill_config() shows the bounds in force, params.bounds.*):
 """ + E.bounds_text(),
     "episode_history": """All previous attempts as compact text: parameters, what changed, hypothesis, every phase with
 its measurements (rotation achieved, j7 load, jaw slip, z change), judgements, outcome, lesson and the planned next
@@ -36,7 +38,33 @@ in the jaws; otherwise the jaws open and the gripper lifts away.""",
 lesson: one or two honest sentences on what this attempt showed (cite the measurements). next_change: the parameter
 change you plan next, e.g. {"grip_torque_limit": 0.5}. Saves the after images, writes the attempt's report.md and
 SUMMARY.md, stops the recording.""",
+    "skill_config": """The skill strategy settings in force (one level above the per-attempt params): the IK lean policy
+(ik.leans, ik.search, ik.restarts), how twist_cap approaches the cap (twist.approach top|side|auto, twist.side_lean_deg,
+twist.hovers_m, twist.max_lean_deg, twist.grasp_below_top_m, twist.release_open) and the bounds of the episode params
+(params.bounds.<name>.lo/hi), each with its envelope; the safety limits (read-only); the config version (every
+attempt records the version it ran with); pending proposals with their check results; recent versions.""",
+    "propose_skill_change": """Request a change of skill strategy settings (see skill_config()) when the evidence
+shows the strategy, not the attempt's params, is the problem. Examples: the gripper leans > 45 deg at the cap and
+attempts slip on the cap's bevel -> {"twist.approach": "top"}; the operator needs more strokes than the bound allows ->
+{"params.bounds.strokes.hi": 24}; tcp_pose/twist_cap notes say "jaws-down unreachable ... leans 60 deg" while smaller
+leans are known to reach -> an ik.leans / ik.search change. `changes`: {key: new value}. `reason`: what the evidence
+shows and what the change should do. `evidence`: references, e.g. ["attempt 7 approach lean_deg=60 mode=side",
+"attempt 7 lesson: jaws slid onto the bevel"]. Validated against each key's envelope (safety keys never change), then
+checked offline: IK keys and approach keys probe the last real cap poses (lean and approach mode before vs after);
+twin_check=true also starts a short twin run before vs after (minutes, in the background; results appear in
+skill_config()). <<APPLY>>""",
 }
+
+APPLY_TEXT = {
+    "twin": "On the twin the change is APPLIED at once when no check fails: the next attempt uses the new version.",
+    "real": "On the real arm nothing changes until a HUMAN approves it (python -m learning.skillcfg approve <id> --by "
+            "<name>): tell the person at the table the proposal id; keep running attempts with the current version "
+            "meanwhile. Never run the approve command yourself.",
+}
+
+
+def skill_doc(name: str, target: str) -> str:
+    return TOOL_DOCS[name].replace("<<APPLY>>", APPLY_TEXT[target])
 
 
 def store() -> E.EpisodeStore:
@@ -146,3 +174,36 @@ async def episode_end(st: E.EpisodeStore, rig, outcome: str, lesson: str, next_c
     return (f"attempt {r['attempt']} closed: {e['outcome']}, rotation {e['rotation_achieved_deg']:.0f} deg, cap lift "
             f"{e['cap_lift_mm'] if e['cap_lift_mm'] is not None else '-'} mm. Report {r['report']}; summary {r['summary']}."
             + (f" ({r['stop_note']})" if r["stop_note"] else "")), images
+
+
+async def skill_config():
+    return SC.config_text(), {}
+
+
+async def propose_skill_change(changes, reason: str, evidence=None, twin_check: bool = False, author: str = "operator",
+                               auto_apply: bool = False):
+    """auto_apply: the twin server applies a proposal whose checks pass; the real server never does."""
+    if isinstance(changes, str):
+        changes = json.loads(changes)
+    if isinstance(evidence, str):
+        evidence = [e.strip() for e in evidence.split("\n") if e.strip()]
+    t = SC.target()
+    r = SC.propose(changes or {}, reason, evidence or [], author, t)
+    if not r["ok"]:
+        return "REFUSED, nothing proposed:\n- " + "\n- ".join(r["errors"]), {}
+    pid = r["proposal"]["id"]
+    from . import skillcheck
+    p = await asyncio.to_thread(skillcheck.run_checks, pid, "async" if twin_check else False)
+    lines = [f"PROPOSAL {pid} recorded with its checks:", SC.proposal_text(p)]
+    failed = SC.checks_failed(p)
+    if t == "real" or not auto_apply:
+        lines.append(f"PENDING: the {t} config is unchanged (version {SC.version(t)}) until a human approves: "
+                     f"python -m learning.skillcfg approve {pid} --by <name>" + (f". Checks FAILED: {'; '.join(failed)}"
+                                                                                  if failed else ""))
+    elif failed:
+        lines.append(f"NOT APPLIED: checks failed ({'; '.join(failed)}). Change the proposal or bring more evidence.")
+    else:
+        a = SC.apply(pid, by="auto (twin)")
+        lines.append(f"APPLIED to the twin: version {a['version']}; the next attempt runs with it." if a["ok"] else
+                     "NOT APPLIED: " + "; ".join(a["errors"]))
+    return "\n".join(lines), {}

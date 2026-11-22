@@ -4,6 +4,9 @@ the reports end to end. Each attempt: episode_history -> episode_begin -> twist_
     MUJOCO_GL=cgl uv run --no-project --with numpy --with scipy --with pillow --with mujoco --with 'mcp>=1.12,<2' \\
         python -m learning.sim_loop [--attempts 3] [--learn-dir DIR] [--recorder-url URL]
 
+The twin reads the skill config of target "twin" (SKILLCFG_DIR, learning/skillcfg.py); learning/skillcheck.py runs
+this loop with a scratch config before and after a proposed change.
+
 Prints one JSON line per attempt and a final {"summary": ...} line. The cap position comes from the layout (a
 scripted policy, not perception: the agent finds it with look / pixel_to_table on the real arm).
 """
@@ -28,7 +31,8 @@ POLICY = [
      "The cap turns with 0.45. 2 x 45 deg is not enough thread: 6 x 90 deg should free it."),
 ]
 
-# The real table's geometry: the gripper leans ~60 deg at the cap and only ~15 deg per stroke are reachable.
+# The real table's geometry: the gripper leans ~55 deg at the twin's cap (least-lean IK) and only small strokes are
+# reachable.
 POLICY_REAL = [
     ({"grip_torque_limit": 0.12, "twist_deg_per_stroke": 15, "strokes": 3, "twist_speed": "medium"},
      "Small 15 deg strokes fit the reach; a gentle grip (0.12) keeps the pinch risk low."),
@@ -98,7 +102,7 @@ if __name__ == "__main__":
     ap.add_argument("--recorder-url", default=None)
     ap.add_argument("--layout", default=None)
     ap.add_argument("--real-geometry", action="store_true",
-                    help="the 25 cm bottle 10 cm in front of the base, as on the real table (the gripper leans ~70 deg)")
+                    help="the 25 cm bottle ~0.28 m in front of the base, as on the real table (the gripper leans ~55 deg)")
     a = ap.parse_args()
     sys.path.insert(0, str(REPO))
     from learning import bottle_twin

@@ -220,8 +220,12 @@ def to_norm(q):
 # --- inverse kinematics: as close to jaws-down as the target allows ------------------------------------
 # build_scene.ArmIK.solve either gets jaws exactly down or, as a fallback, ignores orientation completely; from a
 # folded seed that fallback left the gripper 76 deg from vertical on hardware. Here the lean is stepped up
-# gradually, staying near the current joints first, so the result is the least-tilted reachable pose.
-LEAN_SMALL, LEAN_LARGE = tuple(IKP.leans_small), tuple(IKP.leans_large)
+# gradually, so the result is the least-tilted reachable pose. The lean list, restarts and search order are the shared
+# skill config (learning/skillcfg.py: ik.leans, ik.restarts, ik.search; defaults = the profile's ik section), read
+# on every solve: a new approved version applies without a restart.
+from learning import skillcfg as SC  # noqa: E402
+
+SC.set_target("real")      # never the twin config (proposals made there are applied without a human)
 
 
 def _yaw_now(q) -> float:
@@ -278,24 +282,11 @@ def _solve_rot(xyz, Rt, q0, restarts: int = 0, seed: int = IKP.seed):
 
 def _solve_tcp(xyz, q0, yaw_deg: float):
     """(q, lean_deg) for the least-leaning reachable pose, preferring one near the current joints; (None, None).
-    Pass 1 stays on the current arm configuration (no restarts). Pass 2 tries random restarts (solution nearest the
-    current joints) only for leans smaller than pass 1 found, so a less tilted pose always wins. (22 Nov: the old
-    order accepted 60 deg from the current joints before trying restarts at 40, where the arm reaches the bottle cap at
-    ~35 deg, which pushed twist_cap into the side approach.)"""
-    leans = LEAN_SMALL + LEAN_LARGE
-    first = (None, None)
-    for lean in leans:
-        q = _solve_rot(xyz, _target_rot(xyz, lean, yaw_deg), q0, 0)
-        if q is not None:
-            first = (q, lean)
-            break
-    for lean in leans:
-        if first[1] is not None and abs(lean) >= abs(first[1]):
-            continue
-        q = _solve_rot(xyz, _target_rot(xyz, lean, yaw_deg), q0, IKP.restarts)
-        if q is not None:
-            return q, lean
-    return first
+    skillcfg.lean_search, search "least_lean": pass 1 stays on the current arm configuration (no restarts); pass 2
+    tries random restarts (solution nearest the current joints) only for leans smaller than pass 1 found, so a less
+    tilted pose always wins. (22 Nov: the old order accepted 60 deg from the current joints before trying restarts at
+    40, where the arm reaches the bottle cap at ~35 deg, which pushed twist_cap into the side approach.)"""
+    return SC.lean_search(lambda lean, rs: _solve_rot(xyz, _target_rot(xyz, lean, yaw_deg), q0, rs))
 
 
 # --- motion on real servos ----------------------------------------------------------------------------
@@ -1533,6 +1524,27 @@ async def check_cap() -> list:
 @_learn_doc
 async def episode_end(outcome: str, lesson: str, next_change: dict | None = None) -> list:
     return await _content(*await LT.episode_end(LT.store(), RIG, outcome, lesson, next_change))
+
+
+# --- skill config: read it, propose changes (applying to the real arm is a human step: learning/SELF_TUNING.md) ------
+def _skill_doc(fn):
+    fn.__doc__ = LT.skill_doc(fn.__name__, "real")
+    return fn
+
+
+@server.tool(annotations={"readOnlyHint": True})
+@recorded
+@_skill_doc
+async def skill_config() -> str:
+    return (await LT.skill_config())[0]
+
+
+@server.tool()
+@recorded
+@_skill_doc
+async def propose_skill_change(changes: dict, reason: str, evidence: list[str], twin_check: bool = False) -> str:
+    return (await LT.propose_skill_change(changes, reason, evidence, twin_check, author="operator (real_arm_mcp)",
+                                          auto_apply=False))[0]
 
 
 if __name__ == "__main__":

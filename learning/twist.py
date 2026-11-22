@@ -30,24 +30,26 @@ import time
 
 import numpy as np
 
+from . import skillcfg as SC
 from .episodes import SAFETY
 
 STEP_DEG = {"slow": 3.0, "medium": 6.0}
 STEP_DT = {"slow": 0.15, "medium": 0.10}
-HOVERS = (0.05, 0.035, 0.025)   # m above the cap top before the descent: the highest one the arm can reach there
-MAX_LEAN = 75.0              # deg from vertical: steeper poses are not used for the cap
-SIDE_LEAN = 90.0             # a grasp pose leaning more than this is approached from the side, not from above.
-                             # 22 Nov: always from above (hover + guarded vertical descent); with the least-lean IK the
-                             # real cap is reached at ~35 deg, and the side approach slid the jaws up onto the cap's bevel
+# Strategy settings: these module values are the code defaults; a Twister reads the active skill config
+# (learning/skillcfg.py, keys twist.*) once per attempt, so a new config version applies from the next attempt.
+HOVERS = tuple(SC.TWIST_DEFAULTS["twist.hovers_m"])    # m above the cap top before the descent (highest reachable)
+MAX_LEAN = SC.TWIST_DEFAULTS["twist.max_lean_deg"]     # deg from vertical: steeper poses are not used for the cap
+SIDE_LEAN = SC.TWIST_DEFAULTS["twist.side_lean_deg"]   # auto approach: a grasp pose leaning more than this is approached
+                                                       # from the side (22 Nov: 90 = always from above; see skillcfg)
 SIDE_BACK = 0.04             # side approach: start this far back along the jaws' approach axis
 SIDE_STEP = 0.005            # advance in steps of this
 SIDE_CONTACT = 0.006         # a step that ends this far short = contact
 GUARD_ABOVE = 0.02           # the descent feels for contact from this height above the cap top (fingertips ~1 cm below TCP)
 CONTACT_OK = 0.004           # a touch this close to the grasp height is accepted as arrival
-GRASP_BELOW_TOP = 0.010      # nominal TCP height below the cap top (approach_z_offset_mm is added)
+GRASP_BELOW_TOP = SC.TWIST_DEFAULTS["twist.grasp_below_top_m"]   # nominal TCP height below the cap top
 FINGERTIP_BELOW = 0.010      # the fingertips reach this far below the TCP (table contact at TCP z ~ 0.01)
 LAG_STALL_DEG = 15.0         # achieved rotation this far behind the command = the cap does not turn
-RELEASE_OPEN = 0.25          # how much the jaws open (norm) to release the cap between strokes
+RELEASE_OPEN = SC.TWIST_DEFAULTS["twist.release_open"]   # jaw opening (norm) to release the cap between strokes
 RETREAT_UP = 0.04            # m straight up after an abort
 CHECK_LIFT = 0.015           # check_cap: lift this far with the cap gripped
 TILTS_DEG = (4, -4, 8, -8, 12, -12)   # IK fallback tilts (see Twister._solve)
@@ -84,6 +86,8 @@ class Twister:
         self.t0 = clock()
         self.strokes: list[dict] = []
         self.cap = None
+        self.cfg = SC.active()                 # the skill-config version this attempt runs with (one snapshot)
+        self.c = self.cfg["values"]
 
     # --- helpers -------------------------------------------------------------------------------------------
     async def _pose(self):
@@ -147,7 +151,7 @@ class Twister:
         try:
             st = await self.rig.state()
             if st[self.j8]["norm"] < 0.85:
-                out.append("open: " + (await self.rig.grip(min(0.96, st[self.j8]["norm"] + RELEASE_OPEN + 0.2), None))[0].splitlines()[0])
+                out.append("open: " + (await self.rig.grip(min(0.96, st[self.j8]["norm"] + self.c["twist.release_open"] + 0.2), None))[0].splitlines()[0])
         except Exception as e:  # noqa: BLE001  (keep going: lifting away matters more)
             out.append(f"open failed: {e}")
         try:
@@ -164,7 +168,7 @@ class Twister:
         p = self.p
         res = {"ok": False, "strokes": self.strokes, "abort_reason": None, "notes": []}
         z_floor = cap_top_z - cap_height - SAFETY["below_cap_edge_m"] + FINGERTIP_BELOW     # as a TCP height
-        z_grasp = cap_top_z - GRASP_BELOW_TOP + p["approach_z_offset_mm"] / 1000.0
+        z_grasp = cap_top_z - self.c["twist.grasp_below_top_m"] + p["approach_z_offset_mm"] / 1000.0
         if z_grasp < z_floor - 1e-9:
             res["abort_reason"] = (f"grasp height {z_grasp:.3f} puts the fingertips below the safety floor (cap lower edge "
                                    f"- {SAFETY['below_cap_edge_m'] * 1000:.0f} mm; lowest TCP {z_floor:.3f}): raise "
@@ -182,7 +186,7 @@ class Twister:
         # reachability first, without moving. Lean > 0: the approach axis tilts away from the base.
         q, _, _ = await self._pose()
         g_lean = await self.rig.reachable(x, y, z_grasp, yaw_start, q)
-        if g_lean is None or abs(g_lean) > MAX_LEAN:
+        if g_lean is None or abs(g_lean) > self.c["twist.max_lean_deg"]:
             res["abort_reason"] = (f"the grasp pose [{x:.3f}, {y:.3f}, {z_grasp:.3f}] is out of reach "
                                    f"({'no joint solution' if g_lean is None else f'the gripper would lean {abs(g_lean):.0f} deg'}). "
                                    f"Nothing moved.")
@@ -191,7 +195,8 @@ class Twister:
         st = await self.rig.state()
         if st[self.j8]["norm"] < 0.85:
             await self.rig.grip(0.96, None)
-        side = abs(g_lean) > SIDE_LEAN
+        approach = self.c["twist.approach"]
+        side = approach == "side" or (approach == "auto" and abs(g_lean) > self.c["twist.side_lean_deg"])
         ok = await (self._approach_side(x, y, z_grasp, yaw_start, g_lean, res) if side else
                     self._approach_down(x, y, z_grasp, cap_top_z, yaw_start, q, res))
         if not ok:
@@ -218,7 +223,7 @@ class Twister:
                 break                                      # keep the last grip for check_cap
             # release, turn back with open jaws, regrasp
             st = await self.rig.state()
-            text, _ = await self.rig.grip(min(0.96, st[self.j8]["norm"] + RELEASE_OPEN), None)
+            text, _ = await self.rig.grip(min(0.96, st[self.j8]["norm"] + self.c["twist.release_open"]), None)
             self.log("release", "ok", {"j8_norm": st[self.j8]["norm"]}, text.splitlines()[0])
             back = float(p["regrasp_backoff_deg"]) or max(stroke["achieved_deg"], 0.0)
             if back > 0:
@@ -248,13 +253,14 @@ class Twister:
     async def _approach_down(self, x, y, z_grasp, cap_top_z, yaw_start, q, res) -> bool:
         """Jaws (nearly) down: hover at the highest reachable height above the cap, guarded descent to z_grasp."""
         hover_z = None
-        for h in HOVERS:
+        hovers, max_lean = self.c["twist.hovers_m"], self.c["twist.max_lean_deg"]
+        for h in hovers:
             lean_h = await self.rig.reachable(x, y, cap_top_z + h, yaw_start, q)
-            if lean_h is not None and abs(lean_h) <= MAX_LEAN:
+            if lean_h is not None and abs(lean_h) <= max_lean:
                 hover_z = cap_top_z + h
                 break
         if hover_z is None:
-            res["abort_reason"] = (f"no reachable hover above the cap (tried {', '.join(f'+{h * 100:.1f}' for h in HOVERS)} cm "
+            res["abort_reason"] = (f"no reachable hover above the cap (tried {', '.join(f'+{h * 100:.1f}' for h in hovers)} cm "
                                    f"above z = {cap_top_z:.3f}). Nothing moved.")
             self.log("approach", "fail", {}, res["abort_reason"])
             return False
@@ -292,7 +298,7 @@ class Twister:
         pre = goal - SIDE_BACK * a
         q, _, _ = await self._pose()
         lp = await self.rig.reachable(float(pre[0]), float(pre[1]), float(pre[2]), yaw_start, q)
-        if lp is None or abs(lp) > MAX_LEAN:
+        if lp is None or abs(lp) > self.c["twist.max_lean_deg"]:
             res["abort_reason"] = f"the pre-grasp point {np.round(pre, 3).tolist()} is out of reach. Nothing moved."
             self.log("approach", "fail", {}, res["abort_reason"])
             return False

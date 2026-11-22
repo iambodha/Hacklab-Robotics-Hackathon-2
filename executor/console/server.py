@@ -420,6 +420,8 @@ def make_handler(c: Console):
                     return self._send(200, data, "image/jpeg") if data else self._json({"error": "no such frame"}, 404)
                 if r == ["observe"]:
                     return self._json(to_dict(ex.observe()))
+                if r == ["skillcfg"]:
+                    return self._json(ex.skill_config())
             if method == "POST":
                 b = self._body()
                 if r == ["observe"]:
@@ -457,6 +459,10 @@ def make_handler(c: Console):
                     msg = fn(bool(b.get("enabled")))
                     c.events.add("arm", text=msg, enabled=ex.backend.can_move)
                     return self._json({"message": msg, "can_move": ex.backend.can_move})
+                if r == ["skillcfg", "propose"]:      # no approve route: the real config changes only by the CLI
+                    return self._json(ex.propose_skill_change(b.get("changes") or {}, b.get("reason", ""),
+                                                              b.get("evidence") or [], self.headers.get("X-Advisor") or "operator",
+                                                              bool(b.get("twin_check"))))
                 if r == ["tool"]:
                     sid = ex.set_tool(b.get("tool", "none"))
                     return self._json({"tool": ex.tool, "setup_id": sid})

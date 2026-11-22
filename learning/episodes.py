@@ -17,6 +17,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from . import skillcfg
+
 DEFAULT_DIR = Path("/Users/bodha/Documents/b0dha/Robotics-Hackathon/logs/learning/bottle")
 OUTCOMES = ("opened", "loosened", "no_progress", "slip", "misaligned", "aborted", "fault")
 PHASES = ("locate", "approach", "grasp", "twist", "release", "regrasp", "check", "retreat")
@@ -59,9 +61,18 @@ def defaults() -> dict:
     return {k: spec[3] for k, spec in PARAMS.items()}
 
 
+def params_table() -> dict[str, tuple]:
+    """PARAMS with the bounds of the active skill config (keys params.bounds.<name>.lo/hi; the code values above are
+    their defaults, each capped by a hard envelope in skillcfg.PARAM_ENVELOPE)."""
+    v = skillcfg.active()["values"]
+    return {k: (kind, lo, hi, d, about) if kind == "enum" else
+            (kind, v[f"params.bounds.{k}.lo"], v[f"params.bounds.{k}.hi"], d, about)
+            for k, (kind, lo, hi, d, about) in PARAMS.items()}
+
+
 def bounds_text() -> str:
     out = []
-    for k, (kind, lo, hi, dflt, about) in PARAMS.items():
+    for k, (kind, lo, hi, dflt, about) in params_table().items():
         rng = "|".join(lo) if kind == "enum" else f"{lo}..{hi}"
         out.append(f"  {k}: {rng} (default {dflt}) - {about}")
     return "\n".join(out)
@@ -72,11 +83,12 @@ def validate(params: dict, base: dict | None = None) -> tuple[dict, list[str], l
     out-of-range or unknown keys are errors: nothing is clamped."""
     base = dict(base or defaults())
     full, errors = dict(base), []
+    table = params_table()
     for k, v in (params or {}).items():
-        if k not in PARAMS:
+        if k not in table:
             errors.append(f"unknown parameter {k!r} (learnable: {', '.join(PARAMS)})")
             continue
-        kind, lo, hi = PARAMS[k][:3]
+        kind, lo, hi = table[k][:3]
         if kind == "enum":
             if v not in lo:
                 errors.append(f"{k}={v!r} must be one of {list(lo)}")
@@ -239,13 +251,16 @@ class EpisodeStore:
         n = (max(attempts) if attempts else 0) + 1
         if based_on is None:
             based_on = [k for k, a in attempts.items() if a["end"]]
+        cfg = skillcfg.stamp()
         rec_id, note = self.recorder.start(f"bottle-attempt-{n}", hypothesis[:200])
         self.save_images(n, "before", images or {})
         self._append({"type": "episode_begin", "attempt": n, "params": full, "hypothesis": hypothesis.strip(),
                       "based_on": list(based_on), "recording_id": rec_id, "changed": changed,
+                      "skillcfg": cfg,
                       **({"recording_note": note} if note else {})})
         self.write_report(n)
-        return {"ok": True, "attempt": n, "params": full, "changed": changed, "recording_id": rec_id, "note": note}
+        return {"ok": True, "attempt": n, "params": full, "changed": changed, "recording_id": rec_id, "note": note,
+                "skillcfg": cfg}
 
     def phase(self, n: int, phase: str, status: str = "ok", measurements: dict | None = None, note: str = "") -> dict:
         if phase not in PHASES or status not in STATUSES:
@@ -309,6 +324,8 @@ class EpisodeStore:
             lines.append("params: " + ", ".join(f"{k}={_fmt(v)}" for k, v in (b.get("params") or {}).items()))
             if ch:
                 lines.append("changed vs previous: " + ", ".join(ch))
+            if b.get("skillcfg"):
+                lines.append("skill config: " + cfg_label(b))
             lines.append(f"hypothesis: {b.get('hypothesis', '')}")
             for p in a["phases"]:
                 m = p.get("measurements") or {}
@@ -339,6 +356,7 @@ class EpisodeStore:
                f"**Hypothesis:** {b['hypothesis']}", "",
                f"Based on attempts: {', '.join(map(str, b.get('based_on') or [])) or 'none'}. "
                f"Changed: {', '.join(b.get('changed') or []) or 'nothing'}.", "",
+               f"Skill config: {cfg_label(b)}.", "",
                "| parameter | value |", "|---|---|"]
         out += [f"| {k}{' *' if k in (b.get('changed') or []) else ''} | {_fmt(v)} |" for k, v in b["params"].items()]
         out += ["", "## Phases", "", "| t (s) | phase | status | measurements | note |", "|---|---|---|---|---|"]
@@ -377,8 +395,8 @@ class EpisodeStore:
         out = ["# Bottle opening: attempts", "",
                f"{len(att)} attempt(s); updated {time.strftime('%Y-%m-%d %H:%M:%S')}. Source: `episodes.jsonl`.", "",
                trend_text(att), "",
-               "| # | changed | twist/stroke | strokes | torque | z off | lift/turn | outcome | rotation (deg) "
-               "| cap lift (mm) | lesson | links |", "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+               "| # | cfg | changed | twist/stroke | strokes | torque | z off | lift/turn | outcome | rotation (deg) "
+               "| cap lift (mm) | lesson | links |", "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
         for n, a in att.items():
             b, e = a["begin"] or {}, a["end"] or {}
             p = b.get("params") or {}
@@ -388,15 +406,47 @@ class EpisodeStore:
                 + (f" · [after](attempt_{n}/after_wrist.jpg)" if (self.root / f"attempt_{n}/after_wrist.jpg").exists() else "") \
                 + (f" · [recording]({recording_link(rid)})" if rid else "")
             lesson = (e.get("lesson") or "").replace("|", "/").replace("\n", " ")
-            out.append(f"| {n} | {', '.join(b.get('changed') or []) or '-'} | {_fmt(p.get('twist_deg_per_stroke'))} | "
+            out.append(f"| {n} | {cfg_label(b, short=True)} | {', '.join(b.get('changed') or []) or '-'} | {_fmt(p.get('twist_deg_per_stroke'))} | "
                        f"{_fmt(p.get('strokes'))} | {_fmt(p.get('grip_torque_limit'))} | {_fmt(p.get('approach_z_offset_mm'))} | "
                        f"{_fmt(p.get('lift_per_turn_mm'))} | {e.get('outcome', 'open')} | {_fmt(e.get('rotation_achieved_deg'))} | "
                        f"{_fmt(e.get('cap_lift_mm'))} | {lesson} | {links} |")
         lessons = [(n, a["end"]["lesson"]) for n, a in att.items() if a["end"]]
         if lessons:
             out += ["", "## Lessons, in order", ""] + [f"{n}. {l}" for n, l in lessons]
+        per = by_config(att)
+        if len(per) > 1 or any(k != "-" for k in per):
+            out += ["", "## Outcomes per skill-config version", "", "| cfg | attempts | outcomes | mean rotation (deg) |",
+                    "|---|---|---|---|"]
+            out += [f"| {k} | {', '.join(map(str, v['attempts']))} | {', '.join(v['outcomes'])} | {v['mean_rotation']:.0f} |"
+                    for k, v in per.items()]
         (self.root / "SUMMARY.md").write_text("\n".join(out) + "\n")
         return str(self.root / "SUMMARY.md")
+
+
+def cfg_label(begin: dict, short: bool = False) -> str:
+    """'twin v3' (+ the keys that differ from the code defaults) for an episode_begin record; '-' before skillcfg."""
+    c = begin.get("skillcfg")
+    if not c:
+        return "-"
+    lab = f"{c['target']} v{c['version']}"
+    if short or not c.get("overrides"):
+        return lab + ("" if c.get("overrides") or short else " (code defaults)")
+    return lab + " (" + ", ".join(f"{k}={json.dumps(v)}" for k, v in c["overrides"].items()) + ")"
+
+
+def by_config(att: dict[int, dict]) -> dict[str, dict]:
+    """Finished attempts grouped by the skill-config version they ran with, in first-use order."""
+    out: dict[str, dict] = {}
+    for n, a in att.items():
+        if not (a["begin"] and a["end"]):
+            continue
+        g = out.setdefault(cfg_label(a["begin"], short=True), {"attempts": [], "outcomes": [], "rotations": []})
+        g["attempts"].append(n)
+        g["outcomes"].append(a["end"]["outcome"])
+        g["rotations"].append(float(a["end"].get("rotation_achieved_deg") or 0))
+    for g in out.values():
+        g["mean_rotation"] = sum(g.pop("rotations")) / len(g["attempts"])
+    return out
 
 
 def recording_link(rid: str) -> str:
