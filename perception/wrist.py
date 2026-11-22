@@ -1,8 +1,9 @@
 """Wrist camera in 3D: Station joint ticks -> ElRobot URDF FK -> CAD camera mount -> T_base_wristcam.
 
-Joint mapping (camera_pose/HANDOFF.md finding 3): q = mid(URDF limits) + (raw - mid(calibrated range)) * 2pi/4096.
-That assumes the calibrated range is centred on the URDF zero. The signs of j1/j5/j7 are unverified on
-hardware (HANDOFF task 3). Every number derived from FK is therefore labelled with its source.
+Joint mapping: the robot profile's (sim/robots/elrobot.json kinematics.arm_mapping = range_fraction), shared with
+the executor, sim/real_arm_mcp.py and the twin: q = lower + n * (upper - lower), n = fraction of the calibrated
+range (camera_pose/elrobot_camera.py implements it). The signs of j1/j5/j7 are unverified on hardware (HANDOFF
+task 3). Every number derived from FK is therefore labelled with its source.
 
 Frames: URDF base_link reaches along its +y axis, z up. The scene world frame (scene-contract.md) has
 x = the arm's forward direction at j1 = 0, so T_world_base = Rz(-90 deg) with the origin on the table.
@@ -38,34 +39,26 @@ def wrist_camera():
     return _WCAM
 
 
-RAW_CENTRE = 2048       # every calibrated follower range on this arm is centred on raw 2048 (22 Nov)
-
-
-def sane_joints(joints: dict) -> dict:
-    """The tick mapping only uses the calibrated range's centre. If Station's calibration is missing or
-    reset (range_min == range_max), use the servo centre 2048, which is what the calibrated ranges are
-    centred on, so FK keeps working uncalibrated."""
-    out = {}
-    for j, v in joints.items():
-        if isinstance(v, dict) and abs(v["hi"] - v["lo"]) < 200:
-            v = {**v, "lo": RAW_CENTRE - 1000, "hi": RAW_CENTRE + 1000}
-        out[j] = v
-    return out
-
-
 def joints_to_q(joints: dict, mapping: dict | None = None) -> dict:
-    return wrist_camera().joints_to_q(sane_joints(joints), mapping)
+    """Station joints {"j1": {"raw", "lo", "hi"}, ...} -> URDF radians by the robot profile's arm_mapping
+    (range_fraction for the ElRobot: the executor's and the twin's mapping). A joint with a missing/reset
+    calibrated range falls back to ticks around the servo centre 2048."""
+    return wrist_camera().joints_to_q(joints, mapping)
+
+
+def arm_mapping() -> str:
+    wrist_camera()
+    from camera_pose.elrobot_camera import DEFAULT_MAPPING
+    return DEFAULT_MAPPING["mode"]
 
 
 def T_base_wristcam(joints: dict, T_link_cam: np.ndarray | None = None) -> np.ndarray:
     cam = wrist_camera()
-    q = cam.joints_to_q(sane_joints(joints))
-    return cam.link_pose(q) @ (cam.T_link_cam if T_link_cam is None else T_link_cam)
+    return cam.link_pose(joints_to_q(joints)) @ (cam.T_link_cam if T_link_cam is None else T_link_cam)
 
 
 def tcp_base(joints: dict) -> np.ndarray:
-    cam = wrist_camera()
-    return cam.tcp(cam.joints_to_q(sane_joints(joints)))
+    return wrist_camera().tcp(joints_to_q(joints))
 
 
 def T_link_cam_cad() -> np.ndarray:

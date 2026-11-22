@@ -21,7 +21,49 @@ POSE = {"j1": {"raw": 2006, "lo": 1056, "hi": 3040}, "j2": {"raw": 1015, "lo": 9
 
 def test_uncalibrated_ranges_fall_back_to_servo_centre():
     flat = {j: {**v, "lo": 2048, "hi": 2048} for j, v in POSE.items()}
-    assert np.allclose(wrist.T_base_wristcam(flat), wrist.T_base_wristcam(POSE), atol=1e-9)
+    centred = {j: {**v, "lo": 2048 - 1000, "hi": 2048 + 1000} for j, v in POSE.items()}
+    T = wrist.T_base_wristcam(flat)
+    assert np.isfinite(T).all()
+    assert np.allclose(T, wrist.wrist_camera().link_pose(wrist.joints_to_q(centred, {"mode": "ticks"}))
+                       @ wrist.T_link_cam_cad(), atol=1e-9)
+
+
+def test_joint_mapping_is_the_robot_profiles_range_fraction():
+    assert wrist.arm_mapping() == "range_fraction"
+    q = wrist.joints_to_q(POSE)
+    lim = wrist.wrist_camera().urdf.limits
+    for j, v in POSE.items():
+        lo, hi = lim[f"rev_motor_0{j[1]}"]
+        assert q[f"rev_motor_0{j[1]}"] == pytest.approx(lo + (v["raw"] - v["lo"]) / (v["hi"] - v["lo"]) * (hi - lo))
+
+
+def test_joint_mapping_agrees_with_twin():
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(wrist.ROOT) / "sim"))
+    import real_joints
+    lim = wrist.wrist_camera().urdf.limits
+    names = [f"rev_motor_0{i}" for i in range(1, 9)]
+    lo = np.array([lim[n][0] for n in names])
+    hi = np.array([lim[n][1] for n in names])
+    raw = {i: POSE[f"j{i}"]["raw"] for i in range(1, 8)} | {8: 2000}
+    ranges = {i: (POSE[f"j{i}"]["lo"], POSE[f"j{i}"]["hi"]) for i in range(1, 8)} | {8: (1228, 2868)}
+    q_twin = real_joints.to_q(raw, ranges, lo, hi, {"mode": "range_fraction"})
+    q = wrist.joints_to_q(POSE)
+    assert np.allclose([q[n] for n in names[:7]], q_twin[:7], atol=1e-9)
+
+
+def test_joint_mapping_agrees_with_executor():
+    try:
+        from executor.kinematics import Kinematics
+        kin = Kinematics()
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(f"executor kinematics unavailable: {e}")
+    norm = {i: (POSE[f"j{i}"]["raw"] - POSE[f"j{i}"]["lo"]) / (POSE[f"j{i}"]["hi"] - POSE[f"j{i}"]["lo"])
+            for i in range(1, 8)} | {8: 0.5}
+    q_exec = kin.q_from_norm(norm)
+    q = wrist.joints_to_q(POSE)
+    assert np.allclose([q[f"rev_motor_0{i}"] for i in range(1, 8)], q_exec[:7], atol=1e-4)
 
 
 def test_reach_direction_is_base_plus_y_and_world_plus_x():

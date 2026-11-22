@@ -302,7 +302,8 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
                       "source": "CAD (camera_pose/wrist_camera.json)"},
         },
         "arm": {"bus": "5B61033301", "urdf": "norma-core/hardware/elrobot/simulation/elrobot_follower.urdf",
-                "joint_mapping": "q = mid(URDF limits) + (raw - mid(calibrated range)) * 2*pi/4096 (see camera_pose/HANDOFF.md); "
+                "joint_mapping": f"{wrist.arm_mapping()} (robot profile sim/robots/elrobot.json, as the executor and "
+                                 "twin): q = lower + n*(upper - lower), n = fraction of the calibrated range; "
                                  "signs of j1/j5/j7 unverified",
                 "T_world_base": _m(T_world_base), "base_on_table": base_info,
                 "joints_at_calibration": joints},

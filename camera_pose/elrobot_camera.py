@@ -11,12 +11,13 @@ Frames: everything is in the URDF base_link frame (metres). Camera axes follow O
 (x right, y down, z forward). Pixels are image indices (u = column, v = row, (0,0) = top-left
 pixel centre).
 
-Joint mapping (HANDOFF finding 3): direct, q = lower + n*(upper - lower), for every joint by
-default. j2, j3, j4 and j6 are backed by the taught-grid evidence; the signs of j1, j5 and j7 are
-NOT verified (task 3) -- override with `mapping={"sign": {"j7": -1}}`. Default mode "ticks" uses
-q = mid(limits) + sign * (raw - mid(range)) * 2*pi/4096, which matches the direct mapping when the
-calibrated range covers the URDF span (true on this arm, within 2%) and stays physical when a
-range is short.
+Joint mapping: the robot profile's `kinematics.arm_mapping` (sim/robot_profile.py, ROBOT_PROFILE,
+default elrobot = "range_fraction"), the same as the executor, sim/real_arm_mcp.py and the twin:
+q = lower + n*(upper - lower), n = (raw - range_min) / (range_max - range_min). A joint whose
+calibrated range is missing or reset (< 200 ticks wide) falls back to "ticks" around the servo
+centre 2048, like sim/real_joints.py. Mode "ticks" (HANDOFF finding 3) is still available:
+q = mid(limits) + sign * (raw - mid(range)) * 2*pi/4096. The signs of j1, j5 and j7 are NOT verified
+(task 3) -- override with `mapping={"sign": {"j7": -1}}`.
 
 Intrinsics: unknown until task 2. Pass them explicitly ({"fx_n","fy_n","cx_n","cy_n","dist"},
 normalised by image width/height so a resize doesn't break them) or use `assumed_intrinsics(hfov)`
@@ -44,7 +45,33 @@ CAMERA_JSON = HERE / "wrist_camera.json"
 LINK = "Gripper_Base_v1_1"
 JOINT_OF = {f"j{i}": f"rev_motor_0{i}" for i in range(1, 8)}
 RAD_PER_TICK = 2 * math.pi / 4096
-DEFAULT_MAPPING = {"mode": "ticks", "sign": {f"j{i}": 1 for i in range(1, 8)}}
+RAW_CENTRE = 2048                  # servo centre; every calibrated follower range on this arm is centred on it
+MIN_RANGE_TICKS = 200              # narrower calibrated range = missing/reset calibration
+MODES = ("range_fraction", "ticks")
+
+
+def profile_arm_mapping() -> str:
+    """kinematics.arm_mapping of the robot profile, loaded like sim/robot_profile.load (ROBOT_PROFILE path or
+    name in sim/robots/, else elrobot). Read from the JSON directly when robot_profile can't be imported
+    (it needs mujoco)."""
+    try:
+        if str(REPO / "sim") not in sys.path:
+            sys.path.append(str(REPO / "sim"))        # appended: sim/recorder.py must not shadow the recorder package
+        import robot_profile
+        prof = robot_profile.load().raw
+    except ImportError:
+        choice = os.environ.get("ROBOT_PROFILE") or "elrobot"
+        p = Path(choice)
+        if not p.exists():
+            p = REPO / "sim/robots" / (choice if choice.endswith(".json") else choice + ".json")
+        prof = json.loads(p.read_text())
+    mode = prof["kinematics"]["arm_mapping"]
+    if mode not in MODES:
+        raise ValueError(f"robot profile arm_mapping {mode!r} is not supported for the ElRobot URDF FK ({MODES})")
+    return mode
+
+
+DEFAULT_MAPPING = {"mode": profile_arm_mapping(), "sign": {f"j{i}": 1 for i in range(1, 8)}}
 
 
 def find_urdf() -> Path:
@@ -95,8 +122,10 @@ class WristCamera:
     # ---- joints -------------------------------------------------------------------------
     def joints_to_q(self, state: dict, mapping: dict | None = None) -> dict:
         """state: {"j1": {"raw", "lo", "hi"} | norm float, ...} -> {rev_motor_0i: radians}.
-        Norm floats (0..1 through the calibrated range) use the norm mapping."""
+        Norm floats (0..1 through the calibrated range) use the range_fraction mapping."""
         m = {**DEFAULT_MAPPING, **(mapping or {})}
+        if m["mode"] not in MODES:
+            raise ValueError(f"unknown joint mapping {m['mode']!r}; one of {MODES}")
         sign = {**DEFAULT_MAPPING["sign"], **m.get("sign", {})}
         q = {}
         for j, name in JOINT_OF.items():
@@ -104,7 +133,9 @@ class WristCamera:
                 continue
             lo_q, hi_q = self.urdf.limits[name]
             s, v = sign[j], state[j]
-            if isinstance(v, dict) and m["mode"] == "ticks":
+            if isinstance(v, dict) and abs(v["hi"] - v["lo"]) < MIN_RANGE_TICKS:
+                q[name] = (lo_q + hi_q) / 2 + s * (v["raw"] - RAW_CENTRE) * RAD_PER_TICK
+            elif isinstance(v, dict) and m["mode"] == "ticks":
                 q[name] = (lo_q + hi_q) / 2 + s * (v["raw"] - (v["lo"] + v["hi"]) / 2) * RAD_PER_TICK
             else:
                 n = v if not isinstance(v, dict) else (v["raw"] - v["lo"]) / (v["hi"] - v["lo"])

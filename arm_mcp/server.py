@@ -190,6 +190,7 @@ def _wcam():
 
 
 async def _q():
+    """URDF radians from the motor bus by the robot profile's joint mapping (range_fraction, as the executor)."""
     st = await _read()
     return _wcam().joints_to_q({NAMES[i]: {"raw": st[mid]["raw"], "lo": st[mid]["lo"], "hi": st[mid]["hi"]}
                                 for i, mid in enumerate(IDS)})
