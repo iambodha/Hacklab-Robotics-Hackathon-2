@@ -98,6 +98,7 @@ class Peer:
     mailbox: deque = field(default_factory=deque)
     next_seq: int = 1
     dropped: int = 0                        # messages lost to mailbox overflow
+    polling: int = 0                        # open long-polls / streams: a peer waiting on the hub is alive
     status: dict = field(default_factory=dict)
     wake: asyncio.Event = field(default_factory=asyncio.Event)
 
@@ -177,11 +178,13 @@ class Hub:
         return auth[7:].strip() if auth[:7].lower() == "bearer " else ""
 
     def _session(self, req: HTTPRequest, now: float) -> Peer:
-        addr = self._client_addr(req)
-        self._check_lockout(addr, now)
+        """A valid session key always gets through, even while its address is locked out: behind cloudflared every
+        peer shares 127.0.0.1, and a stranger spamming bad tokens must not cut off robots already in session."""
         key = self._bearer(req)
         rid = self.sessions.get(_hash(key)) if key else None
         if rid is None or rid not in self.peers:
+            addr = self._client_addr(req)
+            self._check_lockout(addr, now)
             self._auth_failed(addr, now, "unknown or expired session; join again")
         peer = self.peers[rid]
         if not peer.call_bucket.take(now):
@@ -207,8 +210,11 @@ class Hub:
             self._deliver(p, msg)
         self._log("message", **{k: msg[k] for k in ("id", "kind", "from", "to", "re")}, payload=payload)
 
+    def _alive(self, p: Peer, now: float, limit: float) -> bool:
+        return p.polling > 0 or now - p.last_seen < limit
+
     def roster(self, now: float) -> list[dict]:
-        return [{**p.profile, "online": now - p.last_seen < self.config.peer_stale_s,
+        return [{**p.profile, "online": self._alive(p, now, self.config.peer_stale_s),
                  "last_seen_s": round(now - p.last_seen, 1), "status": p.status} for p in self.peers.values()]
 
     # ---------- operations (called by the HTTP handlers; also usable directly in tests) ----------
@@ -232,7 +238,7 @@ class Hub:
             resume = body.get("resume") or ""
             if resume and hmac.compare_digest(_hash(resume), old.session_hash):
                 resumed = True
-            elif now - old.last_seen < self.config.peer_stale_s:
+            elif self._alive(old, now, self.config.peer_stale_s):
                 raise HubError(409, f"robot id {rid} is already connected; pick another id or wait "
                                     f"{self.config.peer_stale_s:.0f} s for it to go stale")
             self.sessions.pop(old.session_hash, None)
@@ -318,7 +324,7 @@ class Hub:
             if r.to == P.BROADCAST and not r.assignee:
                 to = list(self.peers.values())
             self._system(to, "expired", {"request": r.view(now), "reason": "deadline passed"}, re=r.id)
-        for p in [p for p in self.peers.values() if now - p.last_seen > self.config.peer_drop_s]:
+        for p in [p for p in self.peers.values() if not self._alive(p, now, self.config.peer_drop_s)]:
             self.leave(p, reason="timeout")
         self.tracker.prune(now, self.config.keep_terminal_s)
 
@@ -390,15 +396,19 @@ def create_app(hub: Hub) -> Starlette:
         except ValueError:
             raise HubError(400, "wait must be a number")
         deadline = hub.clock() + wait
-        while True:
-            ev = peer.wake
-            out = hub.inbox(peer, since, limit)
-            remaining = deadline - hub.clock()
-            if out["messages"] or remaining <= 0 or hub.peers.get(peer.robot_id) is not peer:
-                peer.last_seen = hub.clock()
-                return JSONResponse(out)
-            with contextlib.suppress(asyncio.TimeoutError):
-                await asyncio.wait_for(ev.wait(), remaining)
+        peer.polling += 1
+        try:
+            while True:
+                ev = peer.wake
+                out = hub.inbox(peer, since, limit)
+                remaining = deadline - hub.clock()
+                if out["messages"] or remaining <= 0 or hub.peers.get(peer.robot_id) is not peer:
+                    return JSONResponse(out)
+                with contextlib.suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(ev.wait(), remaining)
+        finally:
+            peer.polling -= 1
+            peer.last_seen = hub.clock()
 
     @handler
     async def stream(req):
@@ -407,6 +417,15 @@ def create_app(hub: Hub) -> Starlette:
 
         async def events():
             cursor = since
+            peer.polling += 1
+            try:
+                async for chunk in _events(cursor):
+                    yield chunk
+            finally:
+                peer.polling -= 1
+                peer.last_seen = hub.clock()
+
+        async def _events(cursor):
             while hub.peers.get(peer.robot_id) is peer:
                 ev = peer.wake
                 out = hub.inbox(peer, cursor, 100)
