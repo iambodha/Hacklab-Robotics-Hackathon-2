@@ -1,0 +1,5479 @@
+{
+ "summary": {
+  "trials": 5,
+  "successes": 5,
+  "success_rate": 1.0,
+  "predicate_agreed_with_truth": 5,
+  "false_positives": 0,
+  "seconds_median": 54.3,
+  "seconds_max": 75.7,
+  "attempts_hist": {
+   "1": 4,
+   "2": 1,
+   "3": 0
+  },
+  "modes": {
+   "success": 5
+  },
+  "step_seconds_median": {
+   "park": 4.24,
+   "jaw check: close empty": 3.52,
+   "jaw check: open": 3.18,
+   "observe": 0.29,
+   "locate blue": 0.0,
+   "approach above": 7.58,
+   "re-observe above": 0.45,
+   "descend (guarded)": 4.79,
+   "close (verify hold)": 5.71,
+   "test lift": 1.79,
+   "verify hold (test lift): observe": 0.06,
+   "verify hold (test lift)": 0.0,
+   "lift": 1.5,
+   "verify lifted: observe": 0.06,
+   "verify lifted": 0.0,
+   "carry above bin": 3.83,
+   "move above bin": 1.03,
+   "lower into bin (guarded)": 1.39,
+   "release": 2.34,
+   "retreat (straight up)": 2.2,
+   "retreat (above park)": 3.12,
+   "verify: observe": 0.44,
+   "verify": 0.0,
+   "recover: open (missed)": 2.51,
+   "recover: up (missed)": 1.89
+  },
+  "spec": {
+   "cap_diameter": 0.062,
+   "cap_height": 0.0264,
+   "cap_wall": 0.002,
+   "bin_xy": [
+    0.2545,
+    0.1234
+   ],
+   "bin_rim_diameter": 0.1094,
+   "bin_base_diameter": 0.0875,
+   "bin_rim_height": 0.0779,
+   "bin_sigma_mm": 8.6,
+   "max_grip_width": 0.04,
+   "grasp": "auto",
+   "hover_above": 0.05,
+   "grasp_above_mid": 0.008,
+   "test_lift": 0.04,
+   "carry_z": 0.2,
+   "rim_margin": 0.04,
+   "release_depth": 0.006,
+   "release_shift": 0.5,
+   "retreat_z": 0.2,
+   "grip_force": 0.5,
+   "max_attempts": 3,
+   "moved_tol": 0.015,
+   "sigma_max_mm": 20.0,
+   "tcp_offset": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "source": {
+    "file": "/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/r2-task/tasks/blue_to_bin/measured.json",
+    "created": "2026-11-22T01:23:51+0100",
+    "frames": "median of Station's 10 newest stored overview entries (usbvideo/9ea4cacd..., ids up to 150339 = last frame before Station's 00:58 restart; video not streaming since). Re-run with --live 10 when video is back."
+   }
+  },
+  "seed": 2,
+  "twin_pad_fix_m": 0.0
+ },
+ "trials": [
+  {
+   "trial": 1,
+   "start_cap_world": [
+    0.2441,
+    -0.1252,
+    0.013
+   ],
+   "offset_mm": [
+    -17.8,
+    4.6
+   ],
+   "perturbed": false,
+   "predicate_success": true,
+   "truth_in_bin": true,
+   "end_truth": {
+    "blue_cap": [
+     0.2444,
+     0.1376,
+     0.015
+    ],
+    "bin_tub": [
+     0.2481,
+     0.1296,
+     0.039
+    ]
+   },
+   "bin_moved_mm": 8.9,
+   "attempts": 1,
+   "seconds": 54.3,
+   "proposals": 15,
+   "why": "in the bin",
+   "mode": "success",
+   "report": {
+    "goal": "Take the blue object (a jar lid on the table) and put it in the bin (the transparent tub).",
+    "mode": "full",
+    "success": true,
+    "stage_ok": null,
+    "verdict": {
+     "success": true,
+     "overview": {
+      "result": true,
+      "radial_mm": 23.0,
+      "rim_radius_mm": 54.7,
+      "top_z_mm": 26.4,
+      "rim_z_mm": 77.9,
+      "sigma_mm": 8.2,
+      "margin_mm": 31.7,
+      "confident": true,
+      "source": "overview seq 21: colour blue inside the table extent, fit 0.31 px, base z 0 mm"
+     },
+     "gripper": {
+      "held_after_lift": true,
+      "open_after_release": true,
+      "empty_after_release": true,
+      "result": true
+     }
+    },
+    "why": "in the bin",
+    "attempts": 1,
+    "seconds": 54.3,
+    "grasp_mode": "rim",
+    "proposals": 15,
+    "steps": [
+     {
+      "step": "park",
+      "skill": "park",
+      "params": {},
+      "preconditions": {
+       "no execution running": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 6.7,
+      "attempt": 0,
+      "execution_id": "exec-85130692e5",
+      "obs_id": "obs-68460833b4",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.9,
+        "tcp_xyz_mm": [
+         1.7,
+         -0.1,
+         2.4
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1883,
+         0.0001,
+         0.0576
+        ],
+        "joints_rad": [
+         0.0155,
+         0.0806,
+         -0.4825,
+         0.6207,
+         0.0341,
+         1.3683,
+         -0.0737,
+         0.9384
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "jaw check: close empty",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 0.0
+      },
+      "preconditions": {
+       "parked, nothing in the jaws": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "closed fully: nothing between the jaws",
+      "seconds": 3.42,
+      "attempt": 0,
+      "execution_id": "exec-9fe1c7362c",
+      "obs_id": "obs-fb6cf7ce39",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.0
+       },
+       "achieved": {
+        "gripper_norm": 0.0,
+        "load": 1,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "jaw check: open",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 1.0
+      },
+      "preconditions": {
+       "parked, nothing in the jaws": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "jaws at 0.959 (target 0.960)",
+      "seconds": 3.18,
+      "attempt": 0,
+      "execution_id": "exec-eef5d7cadb",
+      "obs_id": "obs-d8386fbf30",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.04
+       },
+       "achieved": {
+        "gripper_norm": 0.96,
+        "load": 1,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 5), ('overview', 5)]",
+      "seconds": 0.3,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-fa3a86ba38",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.243,
+          -0.1252,
+          0.0132
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 8.2,
+         "source": "overview seq 5: colour blue inside the table extent, fit 0.24 px, base z 0 mm",
+         "visible": true,
+         "t_seen": 160479.277626
+        }
+       ]
+      }
+     },
+     {
+      "step": "locate blue",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "[0.243, -0.1252, 0.0132] sigma 8.2 mm (overview seq 5: colour blue inside the table extent, fit 0.24 px, base z 0 mm)",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-fa3a86ba38",
+      "extra": {
+       "xyz": [
+        0.243,
+        -0.1252,
+        0.0132
+       ],
+       "sigma_mm": 8.2
+      }
+     },
+     {
+      "step": "approach above",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.21633157570167466,
+        -0.11145972542324967,
+        0.0764
+       ],
+       "yaw_deg": -27.258716
+      },
+      "preconditions": {
+       "blue located": true,
+       "sigma_mm<=max": true,
+       "jaws open": true,
+       "grasp": {
+        "mode": "rim",
+        "tcp_xy": [
+         0.2163,
+         -0.1115
+        ],
+        "yaw_deg": -27.3,
+        "z_grasp": 0.0212,
+        "z_hover": 0.0764,
+        "object_offset_mm": [
+         26.7,
+         -13.7
+        ]
+       }
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 7.22,
+      "attempt": 1,
+      "execution_id": "exec-4645a12d02",
+      "obs_id": "obs-36a987d784",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.8,
+        "tcp_xyz_mm": [
+         1.1,
+         -0.7,
+         3.6
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2152,
+         -0.1107,
+         0.0728
+        ],
+        "joints_rad": [
+         -0.5521,
+         0.603,
+         -0.7502,
+         0.0666,
+         0.0283,
+         1.6447,
+         1.6534,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "re-observe above",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 7), ('overview', 7)]",
+      "seconds": 0.5,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-616d9e16a1",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2659,
+          -0.1193,
+          0.0346
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 17.2,
+         "source": "overview seq 7: colour blue inside the table extent, fit 0.28 px, base z 21 mm",
+         "visible": true,
+         "t_seen": 160487.056153
+        }
+       ]
+      }
+     },
+     {
+      "step": "descend (guarded)",
+      "skill": "descend_guarded",
+      "params": {
+       "xy_world": [
+        0.21633157570167466,
+        -0.11145972542324967
+       ],
+       "z_world": 0.0212,
+       "yaw_deg": -27.258716
+      },
+      "preconditions": {
+       "above the grasp point": true,
+       "jaws open": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 4.01,
+      "attempt": 1,
+      "execution_id": "exec-348046baa0",
+      "obs_id": "obs-b78893d82c",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.5,
+        "tcp_xyz_mm": [
+         2.6,
+         -1.7,
+         3.3
+        ],
+        "tol_mm": 6.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2138,
+         -0.1098,
+         0.0179
+        ],
+        "joints_rad": [
+         -0.5552,
+         0.5643,
+         -0.5177,
+         0.277,
+         0.0283,
+         1.2426,
+         1.6475,
+         0.0881
+        ],
+        "contact_z": null
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "close (verify hold)",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 0.0,
+       "force": 0.5
+      },
+      "preconditions": {
+       "at grasp height": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "closed fully: nothing between the jaws",
+      "seconds": 6.1,
+      "attempt": 1,
+      "execution_id": "exec-c1353517cc",
+      "obs_id": "obs-15a5e3d4f1",
+      "extra": {
+       "residuals": {
+        "gripper_norm": -0.001
+       },
+       "achieved": {
+        "gripper_norm": 0.001,
+        "load": 52,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "test lift",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.21633157570167466,
+        -0.11145972542324967,
+        0.0612
+       ],
+       "yaw_deg": -27.258716
+      },
+      "preconditions": {
+       "jaws closed": true,
+       "touch": "nothing felt (thin wall?): the camera decides"
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.84,
+      "attempt": 1,
+      "execution_id": "exec-8d58acf72c",
+      "obs_id": "obs-d4fdc88651",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.6,
+        "tcp_xyz_mm": [
+         1.3,
+         -1.0,
+         3.2
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.215,
+         -0.1105,
+         0.058
+        ],
+        "joints_rad": [
+         -0.5521,
+         0.5578,
+         -0.6445,
+         0.1262,
+         0.0283,
+         1.5222,
+         1.6534,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify hold (test lift): observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 11), ('overview', 11)]",
+      "seconds": 0.05,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-7849c91c45",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2394,
+          -0.1231,
+          0.0491
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 18.5,
+         "source": "overview seq 11: colour blue inside the table extent, fit 0.38 px, base z 36 mm",
+         "visible": true,
+         "t_seen": 160499.723281
+        }
+       ]
+      }
+     },
+     {
+      "step": "verify hold (test lift)",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "LIFTED",
+      "termination": "touch False, jaws {'norm': 0.001, 'load': 23}, lid base z 36 mm",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": null,
+      "extra": {
+       "seen": {
+        "name": "blue_cap",
+        "xyz_world": [
+         0.2394,
+         -0.1231,
+         0.0491
+        ],
+        "size": [
+         0.062,
+         0.062,
+         0.0264
+        ],
+        "yaw": null,
+        "uncertainty_mm": 18.5,
+        "source": "overview seq 11: colour blue inside the table extent, fit 0.38 px, base z 36 mm",
+        "visible": true,
+        "t_seen": 160499.723281
+       }
+      }
+     },
+     {
+      "step": "lift",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.21633157570167466,
+        -0.11145972542324967,
+        0.2
+       ],
+       "yaw_deg": -27.258716
+      },
+      "preconditions": {
+       "hold confirmed": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.35,
+      "attempt": 1,
+      "execution_id": "exec-bd6ef11993",
+      "obs_id": "obs-35d793bcbf",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.8,
+        "tcp_xyz_mm": [
+         0.5,
+         0.3,
+         3.8
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2158,
+         -0.1118,
+         0.1962
+        ],
+        "joints_rad": [
+         -0.6017,
+         0.1999,
+         -1.0284,
+         0.1753,
+         -0.0539,
+         1.5222,
+         1.6831,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify lifted: observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 13), ('overview', 13)]",
+      "seconds": 0.08,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-e7c40fe83b",
+      "extra": {
+       "objects": []
+      }
+     },
+     {
+      "step": "verify lifted",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "NOT_SEEN",
+      "termination": "touch False, jaws {'norm': 0.001, 'load': 13}, lid base z None mm",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": null,
+      "extra": {
+       "seen": null
+      }
+     },
+     {
+      "step": "carry above bin",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.24116578785083734,
+        0.13027013728837517,
+        0.2
+       ],
+       "yaw_deg": -27.258716
+      },
+      "preconditions": {
+       "hold confirmed after the lift": true,
+       "jaws closed": true,
+       "at carry height": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 3.96,
+      "attempt": 1,
+      "execution_id": "exec-1f12e17257",
+      "obs_id": "obs-b30b124d68",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.3,
+        "tcp_xyz_mm": [
+         -0.1,
+         -0.8,
+         3.2
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2412,
+         0.131,
+         0.1968
+        ],
+        "joints_rad": [
+         0.6607,
+         0.4966,
+         -0.9615,
+         -0.3261,
+         0.1281,
+         1.6793,
+         0.3833,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "move above bin",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.241166,
+        0.13027,
+        0.1391
+       ],
+       "yaw_deg": -27.258716
+      },
+      "preconditions": {
+       "over the bin": true,
+       "release clears rim + margin": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.52,
+      "attempt": 1,
+      "execution_id": "exec-bb2cb4bd10",
+      "obs_id": "obs-36d4e4d195",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.0,
+        "tcp_xyz_mm": [
+         0.5,
+         0.1,
+         4.0
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2407,
+         0.1301,
+         0.1351
+        ],
+        "joints_rad": [
+         0.6235,
+         0.6449,
+         -0.8805,
+         -0.2981,
+         0.0752,
+         1.761,
+         0.4724,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "lower into bin (guarded)",
+      "skill": "descend_guarded",
+      "params": {
+       "xy_world": [
+        0.241166,
+        0.13027
+       ],
+       "z_world": 0.0839,
+       "yaw_deg": -27.258716
+      },
+      "preconditions": {
+       "open jaws fit inside the rim": true,
+       "jaw fit": {
+        "jaw_reach_from_bin_centre_mm": 46.0,
+        "rim_inner_radius_mm": 52.7,
+        "fits": true
+       },
+       "above the release point": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.83,
+      "attempt": 1,
+      "execution_id": "exec-060c89c47c",
+      "obs_id": "obs-d226912e80",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.4,
+        "tcp_xyz_mm": [
+         1.0,
+         0.6,
+         2.1
+        ],
+        "tol_mm": 6.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2401,
+         0.1297,
+         0.0818
+        ],
+        "joints_rad": [
+         0.6049,
+         0.6513,
+         -0.7044,
+         -0.1297,
+         0.0459,
+         1.5819,
+         0.4902,
+         2.2006
+        ],
+        "contact_z": null
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "release",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 1.0
+      },
+      "preconditions": {
+       "TCP inside the rim": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "jaws at 0.960 (target 0.960)",
+      "seconds": 2.77,
+      "attempt": 1,
+      "execution_id": "exec-c89532021b",
+      "obs_id": "obs-9651828e88",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.04
+       },
+       "achieved": {
+        "gripper_norm": 0.96,
+        "load": 7,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "retreat (straight up)",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.24037226715368679,
+        0.12983961181546075,
+        0.2
+       ],
+       "yaw_deg": -27.258716
+      },
+      "preconditions": {
+       "jaws open": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.7,
+      "attempt": 1,
+      "execution_id": "exec-0955d78bff",
+      "obs_id": "obs-273fa91636",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.2,
+        "tcp_xyz_mm": [
+         -0.3,
+         0.3,
+         4.2
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2407,
+         0.1295,
+         0.1958
+        ],
+        "joints_rad": [
+         0.6607,
+         0.4708,
+         -0.9932,
+         -0.2314,
+         0.134,
+         1.6384,
+         0.3774,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "retreat (above park)",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.19,
+        0.0,
+        0.2
+       ]
+      },
+      "preconditions": {
+       "above the rim": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 2.81,
+      "attempt": 1,
+      "execution_id": "exec-b47d6c6a9c",
+      "obs_id": "obs-d503c03c79",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.4,
+        "tcp_xyz_mm": [
+         -0.0,
+         -0.4,
+         4.4
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.19,
+         0.0004,
+         0.1956
+        ],
+        "joints_rad": [
+         0.0806,
+         -0.2708,
+         -0.7889,
+         0.3647,
+         0.087,
+         1.5819,
+         0.6979,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "park",
+      "skill": "park",
+      "params": {},
+      "preconditions": {
+       "above the park spot": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 2.3,
+      "attempt": 1,
+      "execution_id": "exec-de58c3e69e",
+      "obs_id": "obs-03d5296614",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.9,
+        "tcp_xyz_mm": [
+         1.7,
+         0.1,
+         2.4
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1883,
+         -0.0001,
+         0.0576
+        ],
+        "joints_rad": [
+         0.0186,
+         0.0645,
+         -0.4473,
+         0.5996,
+         0.04,
+         1.3588,
+         0.6029,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify: observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 21), ('overview', 21)]",
+      "seconds": 0.35,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-7ee1594058",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2403,
+          0.1415,
+          0.0132
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 8.2,
+         "source": "overview seq 21: colour blue inside the table extent, fit 0.31 px, base z 0 mm",
+         "visible": true,
+         "t_seen": 160518.200132
+        }
+       ]
+      }
+     },
+     {
+      "step": "verify",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "SUCCESS",
+      "termination": "{'result': True, 'radial_mm': 23.0, 'rim_radius_mm': 54.7, 'top_z_mm': 26.4, 'rim_z_mm': 77.9, 'sigma_mm': 8.2, 'margin_mm': 31.7, 'confident': True, 'source': 'overview seq 21: colour blue inside the table extent, fit 0.31 px, base z 0 mm'}",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-7ee1594058",
+      "extra": {
+       "verdict": {
+        "success": true,
+        "overview": {
+         "result": true,
+         "radial_mm": 23.0,
+         "rim_radius_mm": 54.7,
+         "top_z_mm": 26.4,
+         "rim_z_mm": 77.9,
+         "sigma_mm": 8.2,
+         "margin_mm": 31.7,
+         "confident": true,
+         "source": "overview seq 21: colour blue inside the table extent, fit 0.31 px, base z 0 mm"
+        },
+        "gripper": {
+         "held_after_lift": true,
+         "open_after_release": true,
+         "empty_after_release": true,
+         "result": true
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "trial": 2,
+   "start_cap_world": [
+    0.2895,
+    -0.1531,
+    0.013
+   ],
+   "offset_mm": [
+    27.6,
+    -23.3
+   ],
+   "perturbed": false,
+   "predicate_success": true,
+   "truth_in_bin": true,
+   "end_truth": {
+    "blue_cap": [
+     0.2503,
+     0.1405,
+     0.015
+    ],
+    "bin_tub": [
+     0.2475,
+     0.1304,
+     0.039
+    ]
+   },
+   "bin_moved_mm": 9.9,
+   "attempts": 2,
+   "seconds": 75.7,
+   "proposals": 21,
+   "why": "in the bin",
+   "mode": "success",
+   "report": {
+    "goal": "Take the blue object (a jar lid on the table) and put it in the bin (the transparent tub).",
+    "mode": "full",
+    "success": true,
+    "stage_ok": null,
+    "verdict": {
+     "success": true,
+     "overview": {
+      "result": true,
+      "radial_mm": 19.2,
+      "rim_radius_mm": 54.7,
+      "top_z_mm": 26.4,
+      "rim_z_mm": 77.9,
+      "sigma_mm": 8.2,
+      "margin_mm": 35.5,
+      "confident": true,
+      "source": "overview seq 51: colour blue inside the table extent, fit 0.33 px, base z 0 mm"
+     },
+     "gripper": {
+      "held_after_lift": true,
+      "open_after_release": true,
+      "empty_after_release": true,
+      "result": true
+     }
+    },
+    "why": "in the bin",
+    "attempts": 2,
+    "seconds": 75.7,
+    "grasp_mode": "rim",
+    "proposals": 21,
+    "steps": [
+     {
+      "step": "park",
+      "skill": "park",
+      "params": {},
+      "preconditions": {
+       "no execution running": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 5.1,
+      "attempt": 0,
+      "execution_id": "exec-8ed33b269b",
+      "obs_id": "obs-12d3144e56",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.5,
+        "tcp_xyz_mm": [
+         1.6,
+         -0.1,
+         1.9
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1884,
+         0.0001,
+         0.0581
+        ],
+        "joints_rad": [
+         0.0155,
+         0.0774,
+         -0.4825,
+         0.6207,
+         0.0341,
+         1.3683,
+         -0.0737,
+         0.9384
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "jaw check: close empty",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 0.0
+      },
+      "preconditions": {
+       "parked, nothing in the jaws": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "closed fully: nothing between the jaws",
+      "seconds": 3.52,
+      "attempt": 0,
+      "execution_id": "exec-c1029288a0",
+      "obs_id": "obs-c013c16cba",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.0
+       },
+       "achieved": {
+        "gripper_norm": 0.0,
+        "load": 0,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "jaw check: open",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 1.0
+      },
+      "preconditions": {
+       "parked, nothing in the jaws": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "jaws at 0.959 (target 0.960)",
+      "seconds": 3.14,
+      "attempt": 0,
+      "execution_id": "exec-0e5545a961",
+      "obs_id": "obs-6e0a53737b",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.041
+       },
+       "achieved": {
+        "gripper_norm": 0.959,
+        "load": 4,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 26), ('overview', 26)]",
+      "seconds": 0.26,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-94b40859f0",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2901,
+          -0.1521,
+          0.0132
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 8.1,
+         "source": "overview seq 26: colour blue inside the table extent, fit 0.04 px, base z 0 mm",
+         "visible": true,
+         "t_seen": 160531.149399
+        }
+       ]
+      }
+     },
+     {
+      "step": "locate blue",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "[0.2901, -0.1521, 0.0132] sigma 8.1 mm (overview seq 26: colour blue inside the table extent, fit 0.04 px, base z 0 mm)",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-94b40859f0",
+      "extra": {
+       "xyz": [
+        0.2901,
+        -0.1521,
+        0.0132
+       ],
+       "sigma_mm": 8.1
+      }
+     },
+     {
+      "step": "approach above",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.2635304338451151,
+        -0.13816952426005516,
+        0.0764
+       ],
+       "yaw_deg": -27.668111
+      },
+      "preconditions": {
+       "blue located": true,
+       "sigma_mm<=max": true,
+       "jaws open": true,
+       "grasp": {
+        "mode": "rim",
+        "tcp_xy": [
+         0.2635,
+         -0.1382
+        ],
+        "yaw_deg": -27.7,
+        "z_grasp": 0.0212,
+        "z_hover": 0.0764,
+        "object_offset_mm": [
+         26.6,
+         -13.9
+        ]
+       }
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 8.2,
+      "attempt": 1,
+      "execution_id": "exec-31a61a1ac4",
+      "obs_id": "obs-bc256825c9",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.9,
+        "tcp_xyz_mm": [
+         1.0,
+         -0.7,
+         2.7
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2626,
+         -0.1374,
+         0.0737
+        ],
+        "joints_rad": [
+         -0.549,
+         1.0092,
+         -0.9369,
+         -0.4208,
+         0.0107,
+         1.7233,
+         1.6475,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "re-observe above",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 28), ('overview', 28)]",
+      "seconds": 0.3,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-cdf672c5c2",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2991,
+          -0.1484,
+          0.0252
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 15.7,
+         "source": "overview seq 28: colour blue inside the table extent, fit 0.3 px, base z 12 mm",
+         "visible": true,
+         "t_seen": 160539.814447
+        }
+       ]
+      }
+     },
+     {
+      "step": "descend (guarded)",
+      "skill": "descend_guarded",
+      "params": {
+       "xy_world": [
+        0.2635304338451151,
+        -0.13816952426005516
+       ],
+       "z_world": 0.0212,
+       "yaw_deg": -27.668111
+      },
+      "preconditions": {
+       "above the grasp point": true,
+       "jaws open": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 6.81,
+      "attempt": 1,
+      "execution_id": "exec-31a8344f59",
+      "obs_id": "obs-ec35d5455e",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.9,
+        "tcp_xyz_mm": [
+         1.7,
+         -0.8,
+         3.5
+        ],
+        "tol_mm": 6.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2619,
+         -0.1374,
+         0.0177
+        ],
+        "joints_rad": [
+         -0.5459,
+         1.2607,
+         -0.8875,
+         -0.5575,
+         0.0224,
+         1.7264,
+         1.6416,
+         0.0881
+        ],
+        "contact_z": null
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "close (verify hold)",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 0.0,
+       "force": 0.5
+      },
+      "preconditions": {
+       "at grasp height": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "closed fully: nothing between the jaws",
+      "seconds": 7.35,
+      "attempt": 1,
+      "execution_id": "exec-4e305400bb",
+      "obs_id": "obs-725c66fe41",
+      "extra": {
+       "residuals": {
+        "gripper_norm": -0.002
+       },
+       "achieved": {
+        "gripper_norm": 0.002,
+        "load": 120,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "test lift",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.2635304338451151,
+        -0.13816952426005516,
+        0.0612
+       ],
+       "yaw_deg": -27.668111
+      },
+      "preconditions": {
+       "jaws closed": true,
+       "touch": "nothing felt (thin wall?): the camera decides"
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 2.0,
+      "attempt": 1,
+      "execution_id": "exec-04b33d4afd",
+      "obs_id": "obs-e3dc786323",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 1.7,
+        "tcp_xyz_mm": [
+         0.0,
+         -0.3,
+         1.7
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2635,
+         -0.1379,
+         0.0595
+        ],
+        "joints_rad": [
+         -0.549,
+         0.9931,
+         -0.9686,
+         -0.2314,
+         0.0107,
+         1.5913,
+         1.6475,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify hold (test lift): observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 32), ('overview', 32)]",
+      "seconds": 0.06,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-a902f8af73",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2609,
+          -0.1595,
+          0.0341
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 17.7,
+         "source": "overview seq 32: colour blue inside the table extent, fit 0.59 px, base z 21 mm",
+         "visible": true,
+         "t_seen": 160556.459156
+        }
+       ]
+      }
+     },
+     {
+      "step": "verify hold (test lift)",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "ON_TABLE",
+      "termination": "touch False, jaws {'norm': 0.001, 'load': 34}, lid base z 21 mm",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": null,
+      "extra": {
+       "seen": {
+        "name": "blue_cap",
+        "xyz_world": [
+         0.2609,
+         -0.1595,
+         0.0341
+        ],
+        "size": [
+         0.062,
+         0.062,
+         0.0264
+        ],
+        "yaw": null,
+        "uncertainty_mm": 17.7,
+        "source": "overview seq 32: colour blue inside the table extent, fit 0.59 px, base z 21 mm",
+        "visible": true,
+        "t_seen": 160556.459156
+       }
+      }
+     },
+     {
+      "step": "recover: open (missed)",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 1.0
+      },
+      "preconditions": {
+       "arm stopped": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "jaws at 0.959 (target 0.960)",
+      "seconds": 2.51,
+      "attempt": 1,
+      "execution_id": "exec-8272aee467",
+      "obs_id": "obs-a10b5f6a76",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.041
+       },
+       "achieved": {
+        "gripper_norm": 0.959,
+        "load": 4,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "recover: up (missed)",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.26357756115378195,
+        -0.1379521651553864,
+        0.0764
+       ],
+       "yaw_deg": -27.668111
+      },
+      "preconditions": {
+       "arm stopped": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.89,
+      "attempt": 1,
+      "execution_id": "exec-68135a8700",
+      "obs_id": "obs-2a216abc7d",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.7,
+        "tcp_xyz_mm": [
+         1.3,
+         -0.7,
+         2.3
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2623,
+         -0.1373,
+         0.0741
+        ],
+        "joints_rad": [
+         -0.549,
+         1.0286,
+         -0.9967,
+         -0.3822,
+         0.0107,
+         1.7233,
+         1.6475,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 35), ('overview', 35)]",
+      "seconds": 0.56,
+      "attempt": 2,
+      "execution_id": null,
+      "obs_id": "obs-3fefd7f023",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2852,
+          -0.1459,
+          0.0132
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 8.1,
+         "source": "overview seq 35: colour blue inside the table extent, fit 0.12 px, base z 0 mm",
+         "visible": true,
+         "t_seen": 160561.288224
+        }
+       ]
+      }
+     },
+     {
+      "step": "locate blue",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "[0.2852, -0.1459, 0.0132] sigma 8.1 mm (overview seq 35: colour blue inside the table extent, fit 0.12 px, base z 0 mm)",
+      "seconds": 0.0,
+      "attempt": 2,
+      "execution_id": null,
+      "obs_id": "obs-3fefd7f023",
+      "extra": {
+       "xyz": [
+        0.2852,
+        -0.1459,
+        0.0132
+       ],
+       "sigma_mm": 8.1
+      }
+     },
+     {
+      "step": "approach above",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.2584919369809213,
+        -0.1322369341006887,
+        0.0764
+       ],
+       "yaw_deg": -27.09296
+      },
+      "preconditions": {
+       "blue located": true,
+       "sigma_mm<=max": true,
+       "jaws open": true,
+       "grasp": {
+        "mode": "rim",
+        "tcp_xy": [
+         0.2585,
+         -0.1322
+        ],
+        "yaw_deg": -27.1,
+        "z_grasp": 0.0212,
+        "z_hover": 0.0764,
+        "object_offset_mm": [
+         26.7,
+         -13.7
+        ]
+       }
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.28,
+      "attempt": 2,
+      "execution_id": "exec-8e66db0b32",
+      "obs_id": "obs-bced0b0712",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.9,
+        "tcp_xyz_mm": [
+         0.7,
+         -0.6,
+         2.7
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2578,
+         -0.1316,
+         0.0737
+        ],
+        "joints_rad": [
+         -0.5397,
+         0.9447,
+         -0.9932,
+         -0.2244,
+         0.0107,
+         1.6636,
+         1.6475,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "re-observe above",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 37), ('overview', 37)]",
+      "seconds": 0.49,
+      "attempt": 2,
+      "execution_id": null,
+      "obs_id": "obs-47302a3389",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.3068,
+          -0.1398,
+          0.0384
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 15.1,
+         "source": "overview seq 37: colour blue inside the table extent, fit 0.05 px, base z 25 mm",
+         "visible": true,
+         "t_seen": 160563.212175
+        }
+       ]
+      }
+     },
+     {
+      "step": "descend (guarded)",
+      "skill": "descend_guarded",
+      "params": {
+       "xy_world": [
+        0.2584919369809213,
+        -0.1322369341006887
+       ],
+       "z_world": 0.0212,
+       "yaw_deg": -27.09296
+      },
+      "preconditions": {
+       "above the grasp point": true,
+       "jaws open": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 4.76,
+      "attempt": 2,
+      "execution_id": "exec-0587f01fa9",
+      "obs_id": "obs-e7717ab38b",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.5,
+        "tcp_xyz_mm": [
+         1.6,
+         -0.7,
+         3.0
+        ],
+        "tol_mm": 6.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2569,
+         -0.1315,
+         0.0182
+        ],
+        "joints_rad": [
+         -0.5366,
+         1.164,
+         -0.9087,
+         -0.3331,
+         0.0224,
+         1.6416,
+         1.6416,
+         0.0881
+        ],
+        "contact_z": null
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "close (verify hold)",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 0.0,
+       "force": 0.5
+      },
+      "preconditions": {
+       "at grasp height": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "closed fully: nothing between the jaws",
+      "seconds": 5.19,
+      "attempt": 2,
+      "execution_id": "exec-5c60bbef91",
+      "obs_id": "obs-cdc8aee320",
+      "extra": {
+       "residuals": {
+        "gripper_norm": -0.001
+       },
+       "achieved": {
+        "gripper_norm": 0.001,
+        "load": 177,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "test lift",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.2584919369809213,
+        -0.1322369341006887,
+        0.0612
+       ],
+       "yaw_deg": -27.09296
+      },
+      "preconditions": {
+       "jaws closed": true,
+       "touch": "nothing felt (thin wall?): the camera decides"
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.74,
+      "attempt": 2,
+      "execution_id": "exec-59e85d49e0",
+      "obs_id": "obs-85e32de1cf",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.9,
+        "tcp_xyz_mm": [
+         1.0,
+         -1.0,
+         2.6
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2575,
+         -0.1312,
+         0.0586
+        ],
+        "joints_rad": [
+         -0.5397,
+         0.8545,
+         -0.9087,
+         -0.0421,
+         0.0107,
+         1.4814,
+         1.6475,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify hold (test lift): observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 41), ('overview', 41)]",
+      "seconds": 0.06,
+      "attempt": 2,
+      "execution_id": null,
+      "obs_id": "obs-0536f663bb",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.271,
+          -0.145,
+          0.046
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 16.8,
+         "source": "overview seq 41: colour blue inside the table extent, fit 0.35 px, base z 33 mm",
+         "visible": true,
+         "t_seen": 160575.466593
+        }
+       ]
+      }
+     },
+     {
+      "step": "verify hold (test lift)",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "LIFTED",
+      "termination": "touch False, jaws {'norm': 0.001, 'load': 20}, lid base z 33 mm",
+      "seconds": 0.0,
+      "attempt": 2,
+      "execution_id": null,
+      "obs_id": null,
+      "extra": {
+       "seen": {
+        "name": "blue_cap",
+        "xyz_world": [
+         0.271,
+         -0.145,
+         0.046
+        ],
+        "size": [
+         0.062,
+         0.062,
+         0.0264
+        ],
+        "yaw": null,
+        "uncertainty_mm": 16.8,
+        "source": "overview seq 41: colour blue inside the table extent, fit 0.35 px, base z 33 mm",
+        "visible": true,
+        "t_seen": 160575.466593
+       }
+      }
+     },
+     {
+      "step": "lift",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.2584919369809213,
+        -0.1322369341006887,
+        0.2
+       ],
+       "yaw_deg": -27.09296
+      },
+      "preconditions": {
+       "hold confirmed": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.67,
+      "attempt": 2,
+      "execution_id": "exec-2d0dd7acd0",
+      "obs_id": "obs-eb62fcf882",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.9,
+        "tcp_xyz_mm": [
+         0.5,
+         0.5,
+         4.8
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.258,
+         -0.1327,
+         0.1952
+        ],
+        "joints_rad": [
+         -0.5614,
+         0.69,
+         -0.9791,
+         -0.6172,
+         -0.0363,
+         1.7578,
+         1.6475,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify lifted: observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 43), ('overview', 43)]",
+      "seconds": 0.06,
+      "attempt": 2,
+      "execution_id": null,
+      "obs_id": "obs-457693d950",
+      "extra": {
+       "objects": []
+      }
+     },
+     {
+      "step": "verify lifted",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "NOT_SEEN",
+      "termination": "touch False, jaws {'norm': 0.001, 'load': 12}, lid base z None mm",
+      "seconds": 0.0,
+      "attempt": 2,
+      "execution_id": null,
+      "obs_id": null,
+      "extra": {
+       "seen": null
+      }
+     },
+     {
+      "step": "carry above bin",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.24114596849046066,
+        0.13023153294965564,
+        0.2
+       ],
+       "yaw_deg": -27.09296
+      },
+      "preconditions": {
+       "hold confirmed after the lift": true,
+       "jaws closed": true,
+       "at carry height": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 3.59,
+      "attempt": 2,
+      "execution_id": "exec-5bb2320874",
+      "obs_id": "obs-852595f42a",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.7,
+        "tcp_xyz_mm": [
+         -0.7,
+         0.8,
+         2.5
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2418,
+         0.1294,
+         0.1975
+        ],
+        "joints_rad": [
+         0.6607,
+         0.4579,
+         -0.8664,
+         -0.3822,
+         0.1398,
+         1.6793,
+         0.3774,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "move above bin",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.241146,
+        0.130232,
+        0.1391
+       ],
+       "yaw_deg": -27.09296
+      },
+      "preconditions": {
+       "over the bin": true,
+       "release clears rim + margin": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 0.93,
+      "attempt": 2,
+      "execution_id": "exec-315abda8d7",
+      "obs_id": "obs-2c3d53ed39",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.2,
+        "tcp_xyz_mm": [
+         0.1,
+         0.7,
+         4.1
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2411,
+         0.1295,
+         0.135
+        ],
+        "joints_rad": [
+         0.6204,
+         0.6094,
+         -0.7889,
+         -0.3507,
+         0.0752,
+         1.7578,
+         0.4783,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "lower into bin (guarded)",
+      "skill": "descend_guarded",
+      "params": {
+       "xy_world": [
+        0.241146,
+        0.130232
+       ],
+       "z_world": 0.0839,
+       "yaw_deg": -27.09296
+      },
+      "preconditions": {
+       "open jaws fit inside the rim": true,
+       "jaw fit": {
+        "jaw_reach_from_bin_centre_mm": 46.0,
+        "rim_inner_radius_mm": 52.7,
+        "fits": true
+       },
+       "above the release point": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.39,
+      "attempt": 2,
+      "execution_id": "exec-802cfb5936",
+      "obs_id": "obs-81b74611bd",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.5,
+        "tcp_xyz_mm": [
+         1.3,
+         0.7,
+         4.2
+        ],
+        "tol_mm": 6.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2398,
+         0.1295,
+         0.0797
+        ],
+        "joints_rad": [
+         0.6049,
+         0.6288,
+         -0.6163,
+         -0.1894,
+         0.0459,
+         1.585,
+         0.4961,
+         2.2006
+        ],
+        "contact_z": null
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "release",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 1.0
+      },
+      "preconditions": {
+       "TCP inside the rim": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "jaws at 0.960 (target 0.960)",
+      "seconds": 2.34,
+      "attempt": 2,
+      "execution_id": "exec-eb3bd2be78",
+      "obs_id": "obs-f5c80d1c75",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.04
+       },
+       "achieved": {
+        "gripper_norm": 0.96,
+        "load": 9,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "retreat (straight up)",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.24046635307802178,
+        0.12989485894188563,
+        0.2
+       ],
+       "yaw_deg": -27.09296
+      },
+      "preconditions": {
+       "jaws open": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 2.2,
+      "attempt": 2,
+      "execution_id": "exec-7f66272b6c",
+      "obs_id": "obs-2dbc967d98",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.2,
+        "tcp_xyz_mm": [
+         0.1,
+         -0.4,
+         3.2
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2403,
+         0.1303,
+         0.1968
+        ],
+        "joints_rad": [
+         0.6607,
+         0.4321,
+         -0.9087,
+         -0.2735,
+         0.1281,
+         1.629,
+         0.3774,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "retreat (above park)",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.19,
+        0.0,
+        0.2
+       ]
+      },
+      "preconditions": {
+       "above the rim": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 4.0,
+      "attempt": 2,
+      "execution_id": "exec-22886633c2",
+      "obs_id": "obs-b6a34f27ce",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.9,
+        "tcp_xyz_mm": [
+         -0.2,
+         -0.4,
+         3.9
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1902,
+         0.0004,
+         0.1961
+        ],
+        "joints_rad": [
+         0.0806,
+         -0.3063,
+         -0.6903,
+         0.2981,
+         0.087,
+         1.5819,
+         0.6979,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "park",
+      "skill": "park",
+      "params": {},
+      "preconditions": {
+       "above the park spot": true
+      },
+      "status": "PARTIAL",
+      "termination": "PARTIAL: tcp is 5.8 mm from the target",
+      "seconds": 2.46,
+      "attempt": 2,
+      "execution_id": "exec-3586ca1d6f",
+      "obs_id": "obs-f9594958ea",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 5.8,
+        "tcp_xyz_mm": [
+         3.5,
+         0.1,
+         4.6
+        ],
+        "tol_mm": 5.0,
+        "joints_ticks": {
+         "j1": 0,
+         "j2": -6,
+         "j3": -6,
+         "j4": -5,
+         "j5": 0,
+         "j6": -3,
+         "j7": -1
+        }
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1865,
+         -0.0001,
+         0.0554
+        ],
+        "joints_rad": [
+         0.0186,
+         0.0355,
+         -0.3487,
+         0.5365,
+         0.04,
+         1.3683,
+         0.6089,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify: observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 51), ('overview', 51)]",
+      "seconds": 0.44,
+      "attempt": 2,
+      "execution_id": null,
+      "obs_id": "obs-e61ae3a170",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2456,
+          0.1404,
+          0.0132
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 8.2,
+         "source": "overview seq 51: colour blue inside the table extent, fit 0.33 px, base z 0 mm",
+         "visible": true,
+         "t_seen": 160594.524458
+        }
+       ]
+      }
+     },
+     {
+      "step": "verify",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "SUCCESS",
+      "termination": "{'result': True, 'radial_mm': 19.2, 'rim_radius_mm': 54.7, 'top_z_mm': 26.4, 'rim_z_mm': 77.9, 'sigma_mm': 8.2, 'margin_mm': 35.5, 'confident': True, 'source': 'overview seq 51: colour blue inside the table extent, fit 0.33 px, base z 0 mm'}",
+      "seconds": 0.0,
+      "attempt": 2,
+      "execution_id": null,
+      "obs_id": "obs-e61ae3a170",
+      "extra": {
+       "verdict": {
+        "success": true,
+        "overview": {
+         "result": true,
+         "radial_mm": 19.2,
+         "rim_radius_mm": 54.7,
+         "top_z_mm": 26.4,
+         "rim_z_mm": 77.9,
+         "sigma_mm": 8.2,
+         "margin_mm": 35.5,
+         "confident": true,
+         "source": "overview seq 51: colour blue inside the table extent, fit 0.33 px, base z 0 mm"
+        },
+        "gripper": {
+         "held_after_lift": true,
+         "open_after_release": true,
+         "empty_after_release": true,
+         "result": true
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "trial": 3,
+   "start_cap_world": [
+    0.2848,
+    -0.1175,
+    0.013
+   ],
+   "offset_mm": [
+    22.9,
+    12.3
+   ],
+   "perturbed": false,
+   "predicate_success": true,
+   "truth_in_bin": true,
+   "end_truth": {
+    "blue_cap": [
+     0.248,
+     0.1348,
+     0.015
+    ],
+    "bin_tub": [
+     0.2475,
+     0.1281,
+     0.039
+    ]
+   },
+   "bin_moved_mm": 8.4,
+   "attempts": 1,
+   "seconds": 51.4,
+   "proposals": 15,
+   "why": "in the bin",
+   "mode": "success",
+   "report": {
+    "goal": "Take the blue object (a jar lid on the table) and put it in the bin (the transparent tub).",
+    "mode": "full",
+    "success": true,
+    "stage_ok": null,
+    "verdict": {
+     "success": true,
+     "overview": {
+      "result": true,
+      "radial_mm": 16.0,
+      "rim_radius_mm": 54.7,
+      "top_z_mm": 26.4,
+      "rim_z_mm": 77.9,
+      "sigma_mm": 8.2,
+      "margin_mm": 38.7,
+      "confident": true,
+      "source": "overview seq 72: colour blue inside the table extent, fit 0.31 px, base z 0 mm"
+     },
+     "gripper": {
+      "held_after_lift": true,
+      "open_after_release": true,
+      "empty_after_release": true,
+      "result": true
+     }
+    },
+    "why": "in the bin",
+    "attempts": 1,
+    "seconds": 51.4,
+    "grasp_mode": "rim",
+    "proposals": 15,
+    "steps": [
+     {
+      "step": "park",
+      "skill": "park",
+      "params": {},
+      "preconditions": {
+       "no execution running": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 5.4,
+      "attempt": 0,
+      "execution_id": "exec-dcea5368e0",
+      "obs_id": "obs-7e9e325e7e",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.9,
+        "tcp_xyz_mm": [
+         1.7,
+         -0.1,
+         2.4
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1883,
+         0.0001,
+         0.0576
+        ],
+        "joints_rad": [
+         0.0155,
+         0.0806,
+         -0.4825,
+         0.6207,
+         0.0341,
+         1.3683,
+         -0.0737,
+         0.9384
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "jaw check: close empty",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 0.0
+      },
+      "preconditions": {
+       "parked, nothing in the jaws": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "closed fully: nothing between the jaws",
+      "seconds": 3.68,
+      "attempt": 0,
+      "execution_id": "exec-d177fec4b5",
+      "obs_id": "obs-6414b7042c",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.0
+       },
+       "achieved": {
+        "gripper_norm": 0.0,
+        "load": 0,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "jaw check: open",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 1.0
+      },
+      "preconditions": {
+       "parked, nothing in the jaws": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "jaws at 0.960 (target 0.960)",
+      "seconds": 3.39,
+      "attempt": 0,
+      "execution_id": "exec-7169934674",
+      "obs_id": "obs-6ccfdca06e",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.04
+       },
+       "achieved": {
+        "gripper_norm": 0.96,
+        "load": 0,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 56), ('overview', 56)]",
+      "seconds": 0.16,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-8601d6735b",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2846,
+          -0.1175,
+          0.0132
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 8.1,
+         "source": "overview seq 56: colour blue inside the table extent, fit 0.22 px, base z 0 mm",
+         "visible": true,
+         "t_seen": 160608.25636
+        }
+       ]
+      }
+     },
+     {
+      "step": "locate blue",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "[0.2846, -0.1175, 0.0132] sigma 8.1 mm (overview seq 56: colour blue inside the table extent, fit 0.22 px, base z 0 mm)",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-8601d6735b",
+      "extra": {
+       "xyz": [
+        0.2846,
+        -0.1175,
+        0.0132
+       ],
+       "sigma_mm": 8.1
+      }
+     },
+     {
+      "step": "approach above",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.2568703638523695,
+        -0.10605153813300566,
+        0.0764
+       ],
+       "yaw_deg": -22.43378
+      },
+      "preconditions": {
+       "blue located": true,
+       "sigma_mm<=max": true,
+       "jaws open": true,
+       "grasp": {
+        "mode": "rim",
+        "tcp_xy": [
+         0.2569,
+         -0.1061
+        ],
+        "yaw_deg": -22.4,
+        "z_grasp": 0.0212,
+        "z_hover": 0.0764,
+        "object_offset_mm": [
+         27.7,
+         -11.4
+        ]
+       }
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 8.14,
+      "attempt": 1,
+      "execution_id": "exec-e9ce14bd47",
+      "obs_id": "obs-709987fc71",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.7,
+        "tcp_xyz_mm": [
+         1.3,
+         -0.2,
+         2.4
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2555,
+         -0.1059,
+         0.074
+        ],
+        "joints_rad": [
+         -0.4498,
+         0.6803,
+         -0.7924,
+         -0.0035,
+         0.0165,
+         1.5002,
+         1.6356,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "re-observe above",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 58), ('overview', 58)]",
+      "seconds": 0.43,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-95bcffe31d",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.3009,
+          -0.1129,
+          0.0328
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 15.3,
+         "source": "overview seq 58: colour blue inside the table extent, fit 0.19 px, base z 20 mm",
+         "visible": true,
+         "t_seen": 160616.759523
+        }
+       ]
+      }
+     },
+     {
+      "step": "descend (guarded)",
+      "skill": "descend_guarded",
+      "params": {
+       "xy_world": [
+        0.2568703638523695,
+        -0.10605153813300566
+       ],
+       "z_world": 0.0212,
+       "yaw_deg": -22.43378
+      },
+      "preconditions": {
+       "above the grasp point": true,
+       "jaws open": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 4.82,
+      "attempt": 1,
+      "execution_id": "exec-67e4308bc1",
+      "obs_id": "obs-413b21841e",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.9,
+        "tcp_xyz_mm": [
+         2.0,
+         -0.9,
+         3.3
+        ],
+        "tol_mm": 6.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2549,
+         -0.1051,
+         0.0179
+        ],
+        "joints_rad": [
+         -0.4467,
+         0.9028,
+         -0.715,
+         -0.0771,
+         0.0224,
+         1.4531,
+         1.6297,
+         0.0881
+        ],
+        "contact_z": null
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "close (verify hold)",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 0.0,
+       "force": 0.5
+      },
+      "preconditions": {
+       "at grasp height": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "closed fully: nothing between the jaws",
+      "seconds": 5.1,
+      "attempt": 1,
+      "execution_id": "exec-45d40a32c6",
+      "obs_id": "obs-cccd4e6412",
+      "extra": {
+       "residuals": {
+        "gripper_norm": -0.001
+       },
+       "achieved": {
+        "gripper_norm": 0.001,
+        "load": 73,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "test lift",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.2568703638523695,
+        -0.10605153813300566,
+        0.0612
+       ],
+       "yaw_deg": -22.43378
+      },
+      "preconditions": {
+       "jaws closed": true,
+       "touch": "nothing felt (thin wall?): the camera decides"
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.61,
+      "attempt": 1,
+      "execution_id": "exec-c390f1cca9",
+      "obs_id": "obs-a6d1bc4540",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.8,
+        "tcp_xyz_mm": [
+         1.5,
+         -0.5,
+         2.3
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2554,
+         -0.1056,
+         0.0589
+        ],
+        "joints_rad": [
+         -0.4498,
+         0.6449,
+         -0.7291,
+         0.0982,
+         0.0165,
+         1.3683,
+         1.6356,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify hold (test lift): observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 62), ('overview', 62)]",
+      "seconds": 0.04,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-ed3611a832",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2741,
+          -0.1164,
+          0.0494
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 16.5,
+         "source": "overview seq 62: colour blue inside the table extent, fit 0.45 px, base z 36 mm",
+         "visible": true,
+         "t_seen": 160628.929409
+        }
+       ]
+      }
+     },
+     {
+      "step": "verify hold (test lift)",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "LIFTED",
+      "termination": "touch False, jaws {'norm': 0.001, 'load': 37}, lid base z 36 mm",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": null,
+      "extra": {
+       "seen": {
+        "name": "blue_cap",
+        "xyz_world": [
+         0.2741,
+         -0.1164,
+         0.0494
+        ],
+        "size": [
+         0.062,
+         0.062,
+         0.0264
+        ],
+        "yaw": null,
+        "uncertainty_mm": 16.5,
+        "source": "overview seq 62: colour blue inside the table extent, fit 0.45 px, base z 36 mm",
+        "visible": true,
+        "t_seen": 160628.929409
+       }
+      }
+     },
+     {
+      "step": "lift",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.2568703638523695,
+        -0.10605153813300566,
+        0.2
+       ],
+       "yaw_deg": -22.43378
+      },
+      "preconditions": {
+       "hold confirmed": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.5,
+      "attempt": 1,
+      "execution_id": "exec-93f868cc16",
+      "obs_id": "obs-4736c89cfa",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.2,
+        "tcp_xyz_mm": [
+         -0.6,
+         -0.4,
+         4.2
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2574,
+         -0.1057,
+         0.1958
+        ],
+        "joints_rad": [
+         -0.4653,
+         0.5449,
+         -1.113,
+         -0.2069,
+         -0.0304,
+         1.6384,
+         1.6416,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify lifted: observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 64), ('overview', 64)]",
+      "seconds": 0.06,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-6743f492a1",
+      "extra": {
+       "objects": []
+      }
+     },
+     {
+      "step": "verify lifted",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "NOT_SEEN",
+      "termination": "touch False, jaws {'norm': 0.001, 'load': 20}, lid base z None mm",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": null,
+      "extra": {
+       "seen": null
+      }
+     },
+     {
+      "step": "carry above bin",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.24063518192618474,
+        0.12912423093349717,
+        0.2
+       ],
+       "yaw_deg": -22.43378
+      },
+      "preconditions": {
+       "hold confirmed after the lift": true,
+       "jaws closed": true,
+       "at carry height": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 3.4,
+      "attempt": 1,
+      "execution_id": "exec-a3939a063e",
+      "obs_id": "obs-58df17a0ff",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.8,
+        "tcp_xyz_mm": [
+         -0.2,
+         -0.7,
+         3.7
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2408,
+         0.1298,
+         0.1963
+        ],
+        "joints_rad": [
+         0.6576,
+         0.4966,
+         -0.9967,
+         -0.2805,
+         0.1281,
+         1.6699,
+         0.4605,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "move above bin",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.240635,
+        0.129124,
+        0.1391
+       ],
+       "yaw_deg": -22.43378
+      },
+      "preconditions": {
+       "over the bin": true,
+       "release clears rim + margin": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.03,
+      "attempt": 1,
+      "execution_id": "exec-1bf5cf82bb",
+      "obs_id": "obs-8f3b3dbcf2",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 5.0,
+        "tcp_xyz_mm": [
+         0.6,
+         0.4,
+         4.9
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.24,
+         0.1288,
+         0.1342
+        ],
+        "joints_rad": [
+         0.6204,
+         0.6449,
+         -0.9122,
+         -0.2525,
+         0.0752,
+         1.7515,
+         0.5614,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "lower into bin (guarded)",
+      "skill": "descend_guarded",
+      "params": {
+       "xy_world": [
+        0.240635,
+        0.129124
+       ],
+       "z_world": 0.0839,
+       "yaw_deg": -22.43378
+      },
+      "preconditions": {
+       "open jaws fit inside the rim": true,
+       "jaw fit": {
+        "jaw_reach_from_bin_centre_mm": 46.0,
+        "rim_inner_radius_mm": 52.7,
+        "fits": true
+       },
+       "above the release point": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.37,
+      "attempt": 1,
+      "execution_id": "exec-ad8116c755",
+      "obs_id": "obs-c06d097bea",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.6,
+        "tcp_xyz_mm": [
+         1.0,
+         0.7,
+         4.4
+        ],
+        "tol_mm": 6.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2396,
+         0.1285,
+         0.0795
+        ],
+        "joints_rad": [
+         0.6017,
+         0.661,
+         -0.7396,
+         -0.0842,
+         0.0459,
+         1.5693,
+         0.5792,
+         2.2006
+        ],
+        "contact_z": null
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "release",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 1.0
+      },
+      "preconditions": {
+       "TCP inside the rim": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "jaws at 0.960 (target 0.960)",
+      "seconds": 2.33,
+      "attempt": 1,
+      "execution_id": "exec-eb548686dc",
+      "obs_id": "obs-4ae6b5b342",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.04
+       },
+       "achieved": {
+        "gripper_norm": 0.96,
+        "load": 9,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "retreat (straight up)",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.23989070854009834,
+        0.12864617715582374,
+        0.2
+       ],
+       "yaw_deg": -22.43378
+      },
+      "preconditions": {
+       "jaws open": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 2.5,
+      "attempt": 1,
+      "execution_id": "exec-d5a000eaa0",
+      "obs_id": "obs-2f8a087e9f",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.5,
+        "tcp_xyz_mm": [
+         -0.1,
+         0.6,
+         2.5
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.24,
+         0.128,
+         0.1975
+        ],
+        "joints_rad": [
+         0.6576,
+         0.4708,
+         -1.0355,
+         -0.1929,
+         0.134,
+         1.6322,
+         0.4546,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "retreat (above park)",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.19,
+        0.0,
+        0.2
+       ]
+      },
+      "preconditions": {
+       "above the rim": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 3.12,
+      "attempt": 1,
+      "execution_id": "exec-13021a193b",
+      "obs_id": "obs-cdd5c83842",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.3,
+        "tcp_xyz_mm": [
+         0.7,
+         -0.5,
+         4.2
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1893,
+         0.0005,
+         0.1958
+        ],
+        "joints_rad": [
+         0.0869,
+         -0.2418,
+         -0.884,
+         0.4278,
+         0.0929,
+         1.5819,
+         0.7572,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "park",
+      "skill": "park",
+      "params": {},
+      "preconditions": {
+       "above the park spot": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 2.05,
+      "attempt": 1,
+      "execution_id": "exec-b637c9e2bf",
+      "obs_id": "obs-1280c897ff",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.3,
+        "tcp_xyz_mm": [
+         1.4,
+         0.0,
+         1.9
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1886,
+         -0.0,
+         0.0581
+        ],
+        "joints_rad": [
+         0.0186,
+         0.0967,
+         -0.5459,
+         0.6698,
+         0.04,
+         1.3494,
+         0.6623,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify: observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 72), ('overview', 72)]",
+      "seconds": 0.28,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-d59146468d",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2457,
+          0.1368,
+          0.0132
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 8.2,
+         "source": "overview seq 72: colour blue inside the table extent, fit 0.31 px, base z 0 mm",
+         "visible": true,
+         "t_seen": 160646.545554
+        }
+       ]
+      }
+     },
+     {
+      "step": "verify",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "SUCCESS",
+      "termination": "{'result': True, 'radial_mm': 16.0, 'rim_radius_mm': 54.7, 'top_z_mm': 26.4, 'rim_z_mm': 77.9, 'sigma_mm': 8.2, 'margin_mm': 38.7, 'confident': True, 'source': 'overview seq 72: colour blue inside the table extent, fit 0.31 px, base z 0 mm'}",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-d59146468d",
+      "extra": {
+       "verdict": {
+        "success": true,
+        "overview": {
+         "result": true,
+         "radial_mm": 16.0,
+         "rim_radius_mm": 54.7,
+         "top_z_mm": 26.4,
+         "rim_z_mm": 77.9,
+         "sigma_mm": 8.2,
+         "margin_mm": 38.7,
+         "confident": true,
+         "source": "overview seq 72: colour blue inside the table extent, fit 0.31 px, base z 0 mm"
+        },
+        "gripper": {
+         "held_after_lift": true,
+         "open_after_release": true,
+         "empty_after_release": true,
+         "result": true
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "trial": 4,
+   "start_cap_world": [
+    0.2494,
+    -0.1382,
+    0.013
+   ],
+   "offset_mm": [
+    -12.5,
+    -8.4
+   ],
+   "perturbed": false,
+   "predicate_success": true,
+   "truth_in_bin": true,
+   "end_truth": {
+    "blue_cap": [
+     0.2466,
+     0.1355,
+     0.015
+    ],
+    "bin_tub": [
+     0.2483,
+     0.13,
+     0.039
+    ]
+   },
+   "bin_moved_mm": 9.1,
+   "attempts": 1,
+   "seconds": 49.2,
+   "proposals": 15,
+   "why": "in the bin",
+   "mode": "success",
+   "report": {
+    "goal": "Take the blue object (a jar lid on the table) and put it in the bin (the transparent tub).",
+    "mode": "full",
+    "success": true,
+    "stage_ok": null,
+    "verdict": {
+     "success": true,
+     "overview": {
+      "result": true,
+      "radial_mm": 25.7,
+      "rim_radius_mm": 54.7,
+      "top_z_mm": 26.4,
+      "rim_z_mm": 77.9,
+      "sigma_mm": 9.6,
+      "margin_mm": 29.0,
+      "confident": true,
+      "source": "overview seq 93: colour blue inside the table extent, fit 1.23 px, base z 0 mm"
+     },
+     "gripper": {
+      "held_after_lift": true,
+      "open_after_release": true,
+      "empty_after_release": true,
+      "result": true
+     }
+    },
+    "why": "in the bin",
+    "attempts": 1,
+    "seconds": 49.2,
+    "grasp_mode": "rim",
+    "proposals": 15,
+    "steps": [
+     {
+      "step": "park",
+      "skill": "park",
+      "params": {},
+      "preconditions": {
+       "no execution running": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 5.87,
+      "attempt": 0,
+      "execution_id": "exec-9f69cd250b",
+      "obs_id": "obs-d0e37ba484",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 1.8,
+        "tcp_xyz_mm": [
+         1.2,
+         -0.1,
+         1.4
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1888,
+         0.0001,
+         0.0586
+        ],
+        "joints_rad": [
+         0.0155,
+         0.0774,
+         -0.486,
+         0.6207,
+         0.0341,
+         1.3683,
+         -0.0737,
+         0.9384
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "jaw check: close empty",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 0.0
+      },
+      "preconditions": {
+       "parked, nothing in the jaws": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "closed fully: nothing between the jaws",
+      "seconds": 3.35,
+      "attempt": 0,
+      "execution_id": "exec-1df4e960ad",
+      "obs_id": "obs-b612ca5a2a",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.0
+       },
+       "achieved": {
+        "gripper_norm": 0.0,
+        "load": 0,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "jaw check: open",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 1.0
+      },
+      "preconditions": {
+       "parked, nothing in the jaws": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "jaws at 0.960 (target 0.960)",
+      "seconds": 2.94,
+      "attempt": 0,
+      "execution_id": "exec-4d74910ed3",
+      "obs_id": "obs-0b220c874e",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.04
+       },
+       "achieved": {
+        "gripper_norm": 0.96,
+        "load": 1,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 77), ('overview', 77)]",
+      "seconds": 0.28,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-7362b99534",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2487,
+          -0.1393,
+          0.0132
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 8.2,
+         "source": "overview seq 77: colour blue inside the table extent, fit 0.23 px, base z 0 mm",
+         "visible": true,
+         "t_seen": 160659.77038
+        }
+       ]
+      }
+     },
+     {
+      "step": "locate blue",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "[0.2487, -0.1393, 0.0132] sigma 8.2 mm (overview seq 77: colour blue inside the table extent, fit 0.23 px, base z 0 mm)",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-7362b99534",
+      "extra": {
+       "xyz": [
+        0.2487,
+        -0.1393,
+        0.0132
+       ],
+       "sigma_mm": 8.2
+      }
+     },
+     {
+      "step": "approach above",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.2225260758673421,
+        -0.12463965568283376,
+        0.0764
+       ],
+       "yaw_deg": -29.253737
+      },
+      "preconditions": {
+       "blue located": true,
+       "sigma_mm<=max": true,
+       "jaws open": true,
+       "grasp": {
+        "mode": "rim",
+        "tcp_xy": [
+         0.2225,
+         -0.1246
+        ],
+        "yaw_deg": -29.3,
+        "z_grasp": 0.0212,
+        "z_hover": 0.0764,
+        "object_offset_mm": [
+         26.2,
+         -14.7
+        ]
+       }
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 7.95,
+      "attempt": 1,
+      "execution_id": "exec-943c886d49",
+      "obs_id": "obs-3ab07f6e19",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.3,
+        "tcp_xyz_mm": [
+         0.9,
+         -0.9,
+         1.9
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2216,
+         -0.1237,
+         0.0745
+        ],
+        "joints_rad": [
+         -0.5862,
+         0.7513,
+         -0.8347,
+         -0.0947,
+         0.0283,
+         1.7358,
+         1.6594,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "re-observe above",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 79), ('overview', 79)]",
+      "seconds": 0.36,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-52946d822a",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2771,
+          -0.1292,
+          0.0402
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 16.5,
+         "source": "overview seq 79: colour blue inside the table extent, fit 0.06 px, base z 27 mm",
+         "visible": true,
+         "t_seen": 160668.006481
+        }
+       ]
+      }
+     },
+     {
+      "step": "descend (guarded)",
+      "skill": "descend_guarded",
+      "params": {
+       "xy_world": [
+        0.2225260758673421,
+        -0.12463965568283376
+       ],
+       "z_world": 0.0212,
+       "yaw_deg": -29.253737
+      },
+      "preconditions": {
+       "above the grasp point": true,
+       "jaws open": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 4.43,
+      "attempt": 1,
+      "execution_id": "exec-3dcbec9a77",
+      "obs_id": "obs-1ff7eff70f",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.5,
+        "tcp_xyz_mm": [
+         2.7,
+         -1.3,
+         3.4
+        ],
+        "tol_mm": 6.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2198,
+         -0.1234,
+         0.0178
+        ],
+        "joints_rad": [
+         -0.5924,
+         0.6771,
+         -0.5776,
+         0.1578,
+         0.0283,
+         1.3086,
+         1.6534,
+         0.0881
+        ],
+        "contact_z": null
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "close (verify hold)",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 0.0,
+       "force": 0.5
+      },
+      "preconditions": {
+       "at grasp height": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "closed fully: nothing between the jaws",
+      "seconds": 5.31,
+      "attempt": 1,
+      "execution_id": "exec-9dbaf3afe5",
+      "obs_id": "obs-bbe6f1bbd5",
+      "extra": {
+       "residuals": {
+        "gripper_norm": -0.001
+       },
+       "achieved": {
+        "gripper_norm": 0.001,
+        "load": 73,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "test lift",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.2225260758673421,
+        -0.12463965568283376,
+        0.0612
+       ],
+       "yaw_deg": -29.253737
+      },
+      "preconditions": {
+       "jaws closed": true,
+       "touch": "nothing felt (thin wall?): the camera decides"
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.73,
+      "attempt": 1,
+      "execution_id": "exec-0ddce7fe5a",
+      "obs_id": "obs-f20c29aec2",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.7,
+        "tcp_xyz_mm": [
+         1.0,
+         -1.1,
+         2.2
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2215,
+         -0.1235,
+         0.059
+        ],
+        "joints_rad": [
+         -0.5862,
+         0.6836,
+         -0.7079,
+         -0.014,
+         0.0283,
+         1.5945,
+         1.6534,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify hold (test lift): observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 83), ('overview', 83)]",
+      "seconds": 0.06,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-b0a68c29cc",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2495,
+          -0.135,
+          0.0551
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 17.8,
+         "source": "overview seq 83: colour blue inside the table extent, fit 0.08 px, base z 42 mm",
+         "visible": true,
+         "t_seen": 160679.793069
+        }
+       ]
+      }
+     },
+     {
+      "step": "verify hold (test lift)",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "LIFTED",
+      "termination": "touch False, jaws {'norm': 0.001, 'load': 25}, lid base z 42 mm",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": null,
+      "extra": {
+       "seen": {
+        "name": "blue_cap",
+        "xyz_world": [
+         0.2495,
+         -0.135,
+         0.0551
+        ],
+        "size": [
+         0.062,
+         0.062,
+         0.0264
+        ],
+        "yaw": null,
+        "uncertainty_mm": 17.8,
+        "source": "overview seq 83: colour blue inside the table extent, fit 0.08 px, base z 42 mm",
+        "visible": true,
+        "t_seen": 160679.793069
+       }
+      }
+     },
+     {
+      "step": "lift",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.2225260758673421,
+        -0.12463965568283376,
+        0.2
+       ],
+       "yaw_deg": -29.253737
+      },
+      "preconditions": {
+       "hold confirmed": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.25,
+      "attempt": 1,
+      "execution_id": "exec-0470cb745b",
+      "obs_id": "obs-8c2fc88e28",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.5,
+        "tcp_xyz_mm": [
+         0.5,
+         -0.0,
+         3.4
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.222,
+         -0.1246,
+         0.1966
+        ],
+        "joints_rad": [
+         -0.6328,
+         0.3095,
+         -1.0636,
+         0.0771,
+         -0.0539,
+         1.541,
+         1.6772,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify lifted: observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 85), ('overview', 85)]",
+      "seconds": 0.05,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-be59687d26",
+      "extra": {
+       "objects": []
+      }
+     },
+     {
+      "step": "verify lifted",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "NOT_SEEN",
+      "termination": "touch False, jaws {'norm': 0.001, 'load': 12}, lid base z None mm",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": null,
+      "extra": {
+       "seen": null
+      }
+     },
+     {
+      "step": "carry above bin",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.24141303793367105,
+        0.13073017215858312,
+        0.2
+       ],
+       "yaw_deg": -29.253737
+      },
+      "preconditions": {
+       "hold confirmed after the lift": true,
+       "jaws closed": true,
+       "at carry height": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 3.83,
+      "attempt": 1,
+      "execution_id": "exec-ef45013e5a",
+      "obs_id": "obs-e5a655eed8",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.4,
+        "tcp_xyz_mm": [
+         -0.4,
+         1.4,
+         3.1
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2418,
+         0.1293,
+         0.1969
+        ],
+        "joints_rad": [
+         0.6638,
+         0.4966,
+         -0.9263,
+         -0.3752,
+         0.1457,
+         1.7013,
+         0.3477,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "move above bin",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.241413,
+        0.13073,
+        0.1391
+       ],
+       "yaw_deg": -29.253737
+      },
+      "preconditions": {
+       "over the bin": true,
+       "release clears rim + margin": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 0.86,
+      "attempt": 1,
+      "execution_id": "exec-0713d510cc",
+      "obs_id": "obs-dbf5da5e57",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.3,
+        "tcp_xyz_mm": [
+         0.1,
+         0.1,
+         4.3
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2413,
+         0.1306,
+         0.1348
+        ],
+        "joints_rad": [
+         0.6235,
+         0.6384,
+         -0.8418,
+         -0.3331,
+         0.0752,
+         1.7641,
+         0.4427,
+         2.2006
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "lower into bin (guarded)",
+      "skill": "descend_guarded",
+      "params": {
+       "xy_world": [
+        0.241413,
+        0.13073
+       ],
+       "z_world": 0.0839,
+       "yaw_deg": -29.253737
+      },
+      "preconditions": {
+       "open jaws fit inside the rim": true,
+       "jaw fit": {
+        "jaw_reach_from_bin_centre_mm": 46.0,
+        "rim_inner_radius_mm": 52.7,
+        "fits": true
+       },
+       "above the release point": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.35,
+      "attempt": 1,
+      "execution_id": "exec-97a9b566b2",
+      "obs_id": "obs-b7e10ae370",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.5,
+        "tcp_xyz_mm": [
+         1.5,
+         0.3,
+         4.2
+        ],
+        "tol_mm": 6.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2399,
+         0.1304,
+         0.0797
+        ],
+        "joints_rad": [
+         0.608,
+         0.6513,
+         -0.6657,
+         -0.1648,
+         0.0459,
+         1.5882,
+         0.4546,
+         2.2006
+        ],
+        "contact_z": null
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "release",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 1.0
+      },
+      "preconditions": {
+       "TCP inside the rim": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "jaws at 0.960 (target 0.960)",
+      "seconds": 2.28,
+      "attempt": 1,
+      "execution_id": "exec-904e00776c",
+      "obs_id": "obs-9eca26f2b9",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.04
+       },
+       "achieved": {
+        "gripper_norm": 0.96,
+        "load": 9,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "retreat (straight up)",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.24105459298992318,
+        0.13028784144715302,
+        0.2
+       ],
+       "yaw_deg": -29.253737
+      },
+      "preconditions": {
+       "jaws open": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.46,
+      "attempt": 1,
+      "execution_id": "exec-e933e50162",
+      "obs_id": "obs-2cff96fb1a",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.4,
+        "tcp_xyz_mm": [
+         0.2,
+         -0.4,
+         4.4
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2408,
+         0.1307,
+         0.1956
+        ],
+        "joints_rad": [
+         0.6607,
+         0.4611,
+         -0.9545,
+         -0.2595,
+         0.1281,
+         1.6384,
+         0.3418,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "retreat (above park)",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.19,
+        0.0,
+        0.2
+       ]
+      },
+      "preconditions": {
+       "above the rim": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 2.85,
+      "attempt": 1,
+      "execution_id": "exec-c8e809d701",
+      "obs_id": "obs-c6a5dbf4c9",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.9,
+        "tcp_xyz_mm": [
+         0.2,
+         -0.4,
+         3.9
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1898,
+         0.0004,
+         0.1961
+        ],
+        "joints_rad": [
+         0.0806,
+         -0.2934,
+         -0.7291,
+         0.3226,
+         0.087,
+         1.585,
+         0.6682,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "park",
+      "skill": "park",
+      "params": {},
+      "preconditions": {
+       "above the park spot": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 2.0,
+      "attempt": 1,
+      "execution_id": "exec-38dde6c46c",
+      "obs_id": "obs-26b2adbe76",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.5,
+        "tcp_xyz_mm": [
+         1.4,
+         0.1,
+         2.1
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1886,
+         -0.0001,
+         0.0579
+        ],
+        "joints_rad": [
+         0.0186,
+         0.0419,
+         -0.3874,
+         0.554,
+         0.04,
+         1.3651,
+         0.5733,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify: observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 93), ('overview', 93)]",
+      "seconds": 0.47,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-1e635f1733",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2341,
+          0.1391,
+          0.0132
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 9.6,
+         "source": "overview seq 93: colour blue inside the table extent, fit 1.23 px, base z 0 mm",
+         "visible": true,
+         "t_seen": 160696.137185
+        }
+       ]
+      }
+     },
+     {
+      "step": "verify",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "SUCCESS",
+      "termination": "{'result': True, 'radial_mm': 25.7, 'rim_radius_mm': 54.7, 'top_z_mm': 26.4, 'rim_z_mm': 77.9, 'sigma_mm': 9.6, 'margin_mm': 29.0, 'confident': True, 'source': 'overview seq 93: colour blue inside the table extent, fit 1.23 px, base z 0 mm'}",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-1e635f1733",
+      "extra": {
+       "verdict": {
+        "success": true,
+        "overview": {
+         "result": true,
+         "radial_mm": 25.7,
+         "rim_radius_mm": 54.7,
+         "top_z_mm": 26.4,
+         "rim_z_mm": 77.9,
+         "sigma_mm": 9.6,
+         "margin_mm": 29.0,
+         "confident": true,
+         "source": "overview seq 93: colour blue inside the table extent, fit 1.23 px, base z 0 mm"
+        },
+        "gripper": {
+         "held_after_lift": true,
+         "open_after_release": true,
+         "empty_after_release": true,
+         "result": true
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "trial": 5,
+   "start_cap_world": [
+    0.2609,
+    -0.1429,
+    0.013
+   ],
+   "offset_mm": [
+    -1.0,
+    -13.1
+   ],
+   "perturbed": false,
+   "predicate_success": true,
+   "truth_in_bin": true,
+   "end_truth": {
+    "blue_cap": [
+     0.252,
+     0.1343,
+     0.015
+    ],
+    "bin_tub": [
+     0.2497,
+     0.1301,
+     0.039
+    ]
+   },
+   "bin_moved_mm": 8.2,
+   "attempts": 1,
+   "seconds": 67.3,
+   "proposals": 15,
+   "why": "in the bin",
+   "mode": "success",
+   "report": {
+    "goal": "Take the blue object (a jar lid on the table) and put it in the bin (the transparent tub).",
+    "mode": "full",
+    "success": true,
+    "stage_ok": null,
+    "verdict": {
+     "success": true,
+     "overview": {
+      "result": true,
+      "radial_mm": 14.5,
+      "rim_radius_mm": 54.7,
+      "top_z_mm": 26.4,
+      "rim_z_mm": 77.9,
+      "sigma_mm": 8.2,
+      "margin_mm": 40.2,
+      "confident": true,
+      "source": "overview seq 114: colour blue inside the table extent, fit 0.65 px, base z 0 mm"
+     },
+     "gripper": {
+      "held_after_lift": true,
+      "open_after_release": true,
+      "empty_after_release": true,
+      "result": true
+     }
+    },
+    "why": "in the bin",
+    "attempts": 1,
+    "seconds": 67.3,
+    "grasp_mode": "rim",
+    "proposals": 15,
+    "steps": [
+     {
+      "step": "park",
+      "skill": "park",
+      "params": {},
+      "preconditions": {
+       "no execution running": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 6.87,
+      "attempt": 0,
+      "execution_id": "exec-b6808b416b",
+      "obs_id": "obs-5ede53aa7e",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 1.8,
+        "tcp_xyz_mm": [
+         1.2,
+         -0.1,
+         1.4
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1888,
+         0.0001,
+         0.0586
+        ],
+        "joints_rad": [
+         0.0155,
+         0.0774,
+         -0.486,
+         0.6207,
+         0.0341,
+         1.3683,
+         -0.0737,
+         0.9384
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "jaw check: close empty",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 0.0
+      },
+      "preconditions": {
+       "parked, nothing in the jaws": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "closed fully: nothing between the jaws",
+      "seconds": 3.64,
+      "attempt": 0,
+      "execution_id": "exec-d3b3db1638",
+      "obs_id": "obs-c09576669e",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.0
+       },
+       "achieved": {
+        "gripper_norm": 0.0,
+        "load": 0,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "jaw check: open",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 1.0
+      },
+      "preconditions": {
+       "parked, nothing in the jaws": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "jaws at 0.960 (target 0.960)",
+      "seconds": 3.28,
+      "attempt": 0,
+      "execution_id": "exec-42010f4397",
+      "obs_id": "obs-bf1e996ae4",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.04
+       },
+       "achieved": {
+        "gripper_norm": 0.96,
+        "load": 0,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 98), ('overview', 98)]",
+      "seconds": 0.36,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-30b722ab28",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2621,
+          -0.1408,
+          0.0132
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 8.2,
+         "source": "overview seq 98: colour blue inside the table extent, fit 0.04 px, base z 0 mm",
+         "visible": true,
+         "t_seen": 160711.553985
+        }
+       ]
+      }
+     },
+     {
+      "step": "locate blue",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "[0.2621, -0.1408, 0.0132] sigma 8.2 mm (overview seq 98: colour blue inside the table extent, fit 0.04 px, base z 0 mm)",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-30b722ab28",
+      "extra": {
+       "xyz": [
+        0.2621,
+        -0.1408,
+        0.0132
+       ],
+       "sigma_mm": 8.2
+      }
+     },
+     {
+      "step": "approach above",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.23567195745317238,
+        -0.12660286764367293,
+        0.0764
+       ],
+       "yaw_deg": -28.244672
+      },
+      "preconditions": {
+       "blue located": true,
+       "sigma_mm<=max": true,
+       "jaws open": true,
+       "grasp": {
+        "mode": "rim",
+        "tcp_xy": [
+         0.2357,
+         -0.1266
+        ],
+        "yaw_deg": -28.2,
+        "z_grasp": 0.0212,
+        "z_hover": 0.0764,
+        "object_offset_mm": [
+         26.4,
+         -14.2
+        ]
+       }
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 7.17,
+      "attempt": 1,
+      "execution_id": "exec-6b6e04a662",
+      "obs_id": "obs-f3cfa15778",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.1,
+        "tcp_xyz_mm": [
+         0.8,
+         -1.1,
+         3.8
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2348,
+         -0.1255,
+         0.0726
+        ],
+        "joints_rad": [
+         -0.5707,
+         0.5836,
+         -0.722,
+         0.0807,
+         0.0107,
+         1.4468,
+         1.6534,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "re-observe above",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 100), ('overview', 100)]",
+      "seconds": 0.47,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-6a95efedb1",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2597,
+          -0.1412,
+          0.0132
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 8.2,
+         "source": "overview seq 100: colour blue inside the table extent, fit 0.38 px, base z 0 mm",
+         "visible": true,
+         "t_seen": 160719.222445
+        }
+       ]
+      }
+     },
+     {
+      "step": "descend (guarded)",
+      "skill": "descend_guarded",
+      "params": {
+       "xy_world": [
+        0.23567195745317238,
+        -0.12660286764367293
+       ],
+       "z_world": 0.0212,
+       "yaw_deg": -28.244672
+      },
+      "preconditions": {
+       "above the grasp point": true,
+       "jaws open": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 5.79,
+      "attempt": 1,
+      "execution_id": "exec-466134316c",
+      "obs_id": "obs-4f00ec4e48",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.0,
+        "tcp_xyz_mm": [
+         1.6,
+         -1.9,
+         3.1
+        ],
+        "tol_mm": 6.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2341,
+         -0.1247,
+         0.0181
+        ],
+        "joints_rad": [
+         -0.5645,
+         0.7997,
+         -0.6445,
+         0.021,
+         0.0224,
+         1.3871,
+         1.6475,
+         0.0881
+        ],
+        "contact_z": null
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "close (verify hold)",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 0.0,
+       "force": 0.5
+      },
+      "preconditions": {
+       "at grasp height": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "closed fully: nothing between the jaws",
+      "seconds": 6.86,
+      "attempt": 1,
+      "execution_id": "exec-a96781d705",
+      "obs_id": "obs-8bc272008d",
+      "extra": {
+       "residuals": {
+        "gripper_norm": -0.003
+       },
+       "achieved": {
+        "gripper_norm": 0.003,
+        "load": 190,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "test lift",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.23567195745317238,
+        -0.12660286764367293,
+        0.0612
+       ],
+       "yaw_deg": -28.244672
+      },
+      "preconditions": {
+       "jaws closed": true,
+       "touch": "nothing felt (thin wall?): the camera decides"
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 2.16,
+      "attempt": 1,
+      "execution_id": "exec-8f6ea98147",
+      "obs_id": "obs-2c66f2c899",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.8,
+        "tcp_xyz_mm": [
+         1.0,
+         -0.9,
+         2.5
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2347,
+         -0.1257,
+         0.0587
+        ],
+        "joints_rad": [
+         -0.5614,
+         0.8416,
+         -0.7924,
+         -0.1858,
+         0.0283,
+         1.6918,
+         1.6534,
+         2.1984
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify hold (test lift): observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 104), ('overview', 104)]",
+      "seconds": 0.07,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-f03b063417",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2663,
+          -0.1339,
+          0.0559
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 16.8,
+         "source": "overview seq 104: colour blue inside the table extent, fit 0.35 px, base z 43 mm",
+         "visible": true,
+         "t_seen": 160734.868616
+        }
+       ]
+      }
+     },
+     {
+      "step": "verify hold (test lift)",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "LIFTED",
+      "termination": "touch False, jaws {'norm': 0.002, 'load': 30}, lid base z 43 mm",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": null,
+      "extra": {
+       "seen": {
+        "name": "blue_cap",
+        "xyz_world": [
+         0.2663,
+         -0.1339,
+         0.0559
+        ],
+        "size": [
+         0.062,
+         0.062,
+         0.0264
+        ],
+        "yaw": null,
+        "uncertainty_mm": 16.8,
+        "source": "overview seq 104: colour blue inside the table extent, fit 0.35 px, base z 43 mm",
+        "visible": true,
+        "t_seen": 160734.868616
+       }
+      }
+     },
+     {
+      "step": "lift",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.23567195745317238,
+        -0.12660286764367293,
+        0.2
+       ],
+       "yaw_deg": -28.244672
+      },
+      "preconditions": {
+       "hold confirmed": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 2.0,
+      "attempt": 1,
+      "execution_id": "exec-20ba7d5d2d",
+      "obs_id": "obs-2fdec8d480",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.8,
+        "tcp_xyz_mm": [
+         -0.2,
+         -0.3,
+         3.8
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2358,
+         -0.1263,
+         0.1962
+        ],
+        "joints_rad": [
+         -0.5986,
+         0.4482,
+         -1.1165,
+         -0.0561,
+         -0.0481,
+         1.5882,
+         1.6653,
+         2.1984
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify lifted: observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 106), ('overview', 106)]",
+      "seconds": 0.42,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-c58f55d18d",
+      "extra": {
+       "objects": []
+      }
+     },
+     {
+      "step": "verify lifted",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "NOT_SEEN",
+      "termination": "touch False, jaws {'norm': 0.002, 'load': 17}, lid base z None mm",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": null,
+      "extra": {
+       "seen": null
+      }
+     },
+     {
+      "step": "carry above bin",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.2412859787265862,
+        0.13049856617816352,
+        0.2
+       ],
+       "yaw_deg": -28.244672
+      },
+      "preconditions": {
+       "hold confirmed after the lift": true,
+       "jaws closed": true,
+       "at carry height": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 5.59,
+      "attempt": 1,
+      "execution_id": "exec-a0d45caf9d",
+      "obs_id": "obs-a50fc38233",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.4,
+        "tcp_xyz_mm": [
+         -0.3,
+         -0.8,
+         3.3
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2416,
+         0.1313,
+         0.1967
+        ],
+        "joints_rad": [
+         0.6607,
+         0.5062,
+         -0.9791,
+         -0.3191,
+         0.1281,
+         1.6793,
+         0.3655,
+         2.1984
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "move above bin",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.241286,
+        0.130499,
+        0.1391
+       ],
+       "yaw_deg": -28.244672
+      },
+      "preconditions": {
+       "over the bin": true,
+       "release clears rim + margin": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 1.59,
+      "attempt": 1,
+      "execution_id": "exec-eb75f62089",
+      "obs_id": "obs-5b7442ce37",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.8,
+        "tcp_xyz_mm": [
+         0.4,
+         0.2,
+         3.8
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2409,
+         0.1303,
+         0.1353
+        ],
+        "joints_rad": [
+         0.6235,
+         0.6546,
+         -0.8981,
+         -0.2946,
+         0.0752,
+         1.7641,
+         0.4605,
+         2.1984
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "lower into bin (guarded)",
+      "skill": "descend_guarded",
+      "params": {
+       "xy_world": [
+        0.241286,
+        0.130499
+       ],
+       "z_world": 0.0839,
+       "yaw_deg": -28.244672
+      },
+      "preconditions": {
+       "open jaws fit inside the rim": true,
+       "jaw fit": {
+        "jaw_reach_from_bin_centre_mm": 46.0,
+        "rim_inner_radius_mm": 52.7,
+        "fits": true
+       },
+       "above the release point": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 2.63,
+      "attempt": 1,
+      "execution_id": "exec-564d16d8c0",
+      "obs_id": "obs-29f74e295c",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 2.7,
+        "tcp_xyz_mm": [
+         1.1,
+         0.8,
+         2.3
+        ],
+        "tol_mm": 6.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2402,
+         0.1297,
+         0.0816
+        ],
+        "joints_rad": [
+         0.6049,
+         0.661,
+         -0.722,
+         -0.1227,
+         0.0459,
+         1.585,
+         0.4724,
+         2.1984
+        ],
+        "contact_z": null
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "release",
+      "skill": "gripper",
+      "params": {
+       "open_fraction": 1.0
+      },
+      "preconditions": {
+       "TCP inside the rim": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "jaws at 0.960 (target 0.960)",
+      "seconds": 4.64,
+      "attempt": 1,
+      "execution_id": "exec-60356d3846",
+      "obs_id": "obs-5a9c8b8048",
+      "extra": {
+       "residuals": {
+        "gripper_norm": 0.04
+       },
+       "achieved": {
+        "gripper_norm": 0.96,
+        "load": 8,
+        "holding": false
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "retreat (straight up)",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.24095295808237657,
+        0.13022114061386506,
+        0.2
+       ],
+       "yaw_deg": -28.244672
+      },
+      "preconditions": {
+       "jaws open": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 3.26,
+      "attempt": 1,
+      "execution_id": "exec-086ec37434",
+      "obs_id": "obs-647cf7b985",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.8,
+        "tcp_xyz_mm": [
+         0.3,
+         -0.3,
+         3.8
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.2407,
+         0.1306,
+         0.1962
+        ],
+        "joints_rad": [
+         0.6607,
+         0.4837,
+         -1.0073,
+         -0.2384,
+         0.1281,
+         1.6447,
+         0.3596,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "retreat (above park)",
+      "skill": "move_tcp",
+      "params": {
+       "xyz_world": [
+        0.19,
+        0.0,
+        0.2
+       ]
+      },
+      "preconditions": {
+       "above the rim": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 4.64,
+      "attempt": 1,
+      "execution_id": "exec-44d1b7330e",
+      "obs_id": "obs-797d17f50f",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 4.3,
+        "tcp_xyz_mm": [
+         -0.1,
+         -0.9,
+         4.2
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1901,
+         0.0009,
+         0.1958
+        ],
+        "joints_rad": [
+         0.0837,
+         -0.2612,
+         -0.8136,
+         0.3787,
+         0.087,
+         1.5819,
+         0.686,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "park",
+      "skill": "park",
+      "params": {},
+      "preconditions": {
+       "above the park spot": true
+      },
+      "status": "SUCCEEDED",
+      "termination": "reached (measured within tolerance)",
+      "seconds": 3.38,
+      "attempt": 1,
+      "execution_id": "exec-e8e5e96a78",
+      "obs_id": "obs-479e7ec27c",
+      "extra": {
+       "residuals": {
+        "tcp_mm": 3.4,
+        "tcp_xyz_mm": [
+         2.3,
+         0.0,
+         2.5
+        ],
+        "tol_mm": 5.0
+       },
+       "achieved": {
+        "tcp_world": [
+         0.1877,
+         -0.0,
+         0.0575
+        ],
+        "joints_rad": [
+         0.0186,
+         0.0709,
+         -0.4684,
+         0.6172,
+         0.04,
+         1.3588,
+         0.5911,
+         0.0881
+        ]
+       },
+       "rejected": null
+      }
+     },
+     {
+      "step": "verify: observe",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "OK",
+      "termination": "frames [('wrist', 114), ('overview', 114)]",
+      "seconds": 0.45,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-eae75dd97d",
+      "extra": {
+       "objects": [
+        {
+         "name": "blue_cap",
+         "xyz_world": [
+          0.2456,
+          0.1349,
+          0.0132
+         ],
+         "size": [
+          0.062,
+          0.062,
+          0.0264
+         ],
+         "yaw": null,
+         "uncertainty_mm": 8.2,
+         "source": "overview seq 114: colour blue inside the table extent, fit 0.65 px, base z 0 mm",
+         "visible": true,
+         "t_seen": 160764.068914
+        }
+       ]
+      }
+     },
+     {
+      "step": "verify",
+      "skill": null,
+      "params": {},
+      "preconditions": {},
+      "status": "SUCCESS",
+      "termination": "{'result': True, 'radial_mm': 14.5, 'rim_radius_mm': 54.7, 'top_z_mm': 26.4, 'rim_z_mm': 77.9, 'sigma_mm': 8.2, 'margin_mm': 40.2, 'confident': True, 'source': 'overview seq 114: colour blue inside the table extent, fit 0.65 px, base z 0 mm'}",
+      "seconds": 0.0,
+      "attempt": 1,
+      "execution_id": null,
+      "obs_id": "obs-eae75dd97d",
+      "extra": {
+       "verdict": {
+        "success": true,
+        "overview": {
+         "result": true,
+         "radial_mm": 14.5,
+         "rim_radius_mm": 54.7,
+         "top_z_mm": 26.4,
+         "rim_z_mm": 77.9,
+         "sigma_mm": 8.2,
+         "margin_mm": 40.2,
+         "confident": true,
+         "source": "overview seq 114: colour blue inside the table extent, fit 0.65 px, base z 0 mm"
+        },
+        "gripper": {
+         "held_after_lift": true,
+         "open_after_release": true,
+         "empty_after_release": true,
+         "result": true
+        }
+       }
+      }
+     }
+    ]
+   }
+  }
+ ]
+}
