@@ -26,6 +26,10 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
   jaws stall, lift to z = 0.20. Says HOLDING or NOT holding, with fresh images. Needs a position from a CLOSE wrist
   view (step 2). For something FLAT pass object_height below 0.01: the fingertips then go down to the table.
   `yaw_deg` turns the jaws about vertical (at 0 they close along x); the gripped side must be narrower than 4 cm.
+- `pick_thin(x, y, yaw_deg=0)`: the pick for THIN soft things lying on the table (napkin, tissue, paper sheet, foil,
+  cloth): fingertips down to the table by touch, firm close, lift. It keeps the grip even when the feel is weak
+  and says HOLDING / PROBABLY holding / NOT holding: confirm in the wrist image that the sheet hangs from the jaws.
+  Use it instead of `pick_at` for anything thinner than about 3 mm. Aim at a wrinkle or raised edge.
 - **Touch sense.** Every grip reports a `touch:` line: the jaw gap in mm (the width of what is between the jaws),
   the motor load (0..1000: how hard it squeezes) and a verdict. `grip_state()` reads the same at any time: call it
   after a lift or a carry when you are not sure the object is still held. `pick_at(..., grip_force)` and
@@ -93,7 +97,7 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
 ## Wiping / cleaning the table
 - `wipe(x, y, to_x, to_y, strokes)` sweeps the fingertips back and forth along a straight line on the table with
   light pressure. It feels for the table itself, so you give only the two ends of the line (at most 25 cm).
-- Take a napkin first. A loose napkin lying on the table: `pick_at` (object_height 0.005, grip_force 0.50).
+- Take a napkin first. A loose napkin lying on the table: `pick_thin(x, y)` on a wrinkle or raised edge of it.
   A sheet sticking UP out of a pack or box: `grab_tip(x, y, z_top, z_min, pull_to=0.20)` on the top of the sheet.
   It closes from the top down, so it takes the sheet by its tip and not the pack, then pulls it straight up and
   out. Localize the sheet from a CLOSE view right above it first: 2 cm off and the jaws close beside it. Check
