@@ -14,7 +14,7 @@ def png(w, h, rgb):
     return b"\x89PNG\r\n\x1a\n" + ch(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + ch(b"IDAT", zlib.compress(raw)) + ch(b"IEND", b"")
 
 def queues():
-    log = (BASE / "station-run/station.log").read_text(errors="replace")
+    log = "".join(p.read_text(errors="replace") for p in (BASE / "station-run/station.log", BASE / "station-run/run-station.out") if p.exists())
     return sorted(set(re.findall(r"usbvideo/([0-9a-f]{32})", log)))
 
 async def grab(client, q, out):
