@@ -136,3 +136,28 @@ def test_genai_transport_without_key_fails_cleanly(monkeypatch, tmp_path, jpeg, 
     er = GeminiER(transport=GenAITransport(), log_dir=log_dir)
     with pytest.raises(GeminiError, match="no GEMINI_API_KEY"):
         er.point(Image(jpeg, role="overview"))
+
+
+def test_genai_client_uses_v1beta(monkeypatch):
+    """The preview ER models are only served on v1beta; SDK 3.3.0 defaults to v1 (404 NOT_FOUND)."""
+    genai = pytest.importorskip("google.genai")
+    seen = {}
+
+    class Client:
+        def __init__(self, **kw):
+            seen.update(kw)
+
+    monkeypatch.setattr(genai, "Client", Client)
+    GenAITransport(api_key=FAKE_KEY)._get()
+    assert seen["http_options"]["api_version"] == "v1beta"
+
+
+def test_retry_delay_parsed_from_429():
+    from models.gemini_er import retry_delay_s
+    msg = ("ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'message': 'limit: 5 ... Please retry in 21.1160414s.', "
+           "'details': [{'retryDelay': '21s'}]}}")
+    assert retry_delay_s(msg) == pytest.approx(22.116, abs=1e-3)
+    assert retry_delay_s("ClientError: 404 NOT_FOUND") is None
+    day = ("ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'message': 'limit: 20, description: Generate content "
+           "requests per day limit exceeded on Free Tier.\\nPlease retry in 7h26m56.08s.'}}")
+    assert retry_delay_s(day) is None

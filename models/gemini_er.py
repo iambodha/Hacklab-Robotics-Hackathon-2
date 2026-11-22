@@ -34,6 +34,8 @@ from ._secrets import gemini_key, redact, redact_obj
 
 DEFAULT_MODEL = os.environ.get("GEMINI_ER_MODEL", "gemini-robotics-er-2-preview")
 STREAMING_MODEL = "gemini-robotics-er-2-streaming-preview"
+# google-genai 3.3.0 defaults the Gemini API to v1, where the preview ER models answer 404 NOT_FOUND.
+API_VERSION = os.environ.get("GEMINI_API_VERSION", "v1beta")
 LOG_DIR = Path(os.environ.get("MODELS_LOG_DIR", Path(__file__).resolve().parent / "logs"))
 # USD per 1M tokens (input, output incl. thinking), paid tier, valid through 2026-12-31 (doubles 2027-01-01).
 PRICES = {DEFAULT_MODEL: (1.00, 5.00), "gemini-robotics-er-2-preview": (1.00, 5.00), STREAMING_MODEL: (1.00, 5.00)}
@@ -181,9 +183,12 @@ class Transport(Protocol):
 class GenAITransport:
     """google-genai `models.generate_content`. Imported lazily so tests and offline tools need no SDK."""
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None, wait_429_s: float = 0.0):
+        """wait_429_s > 0: on 429 RESOURCE_EXHAUSTED, sleep the server's retryDelay and retry, until
+        that much total waiting is used up. 0 (default) fails at once, which is what a live advisor wants."""
         self._key = api_key
         self._client = None
+        self.wait_429_s = wait_429_s
 
     def _get(self):
         if self._client is None:
@@ -191,7 +196,7 @@ class GenAITransport:
             if not key:
                 raise GeminiError("no GEMINI_API_KEY (env or secrets.env); use a fake transport or recorded replies")
             from google import genai
-            self._client = genai.Client(api_key=key)
+            self._client = genai.Client(api_key=key, http_options={"api_version": API_VERSION})
         return self._client
 
     def __call__(self, model: str, parts: list, config: dict) -> RawReply:
@@ -204,17 +209,38 @@ class GenAITransport:
             cfg["temperature"] = config["temperature"]
         if config.get("media_resolution"):
             cfg["media_resolution"] = config["media_resolution"]
-        try:
-            r = self._get().models.generate_content(model=model, contents=contents,
-                                                    config=types.GenerateContentConfig(**cfg))
-        except GeminiError:
-            raise
-        except Exception as e:  # the SDK raises many types; keep the message, never the key
-            raise GeminiError(redact(f"{type(e).__name__}: {e}", (self._key or "",))) from None
+        budget = self.wait_429_s
+        while True:
+            try:
+                r = self._get().models.generate_content(model=model, contents=contents,
+                                                        config=types.GenerateContentConfig(**cfg))
+                break
+            except GeminiError:
+                raise
+            except Exception as e:  # the SDK raises many types; keep the message, never the key
+                msg = f"{type(e).__name__}: {e}"
+                delay = retry_delay_s(msg)
+                if delay is None or delay > budget:
+                    raise GeminiError(redact(msg, (self._key or "",))) from None
+                budget -= delay
+                time.sleep(delay)
         u = r.usage_metadata
         return RawReply(text=r.text or "", usage={
             "prompt_tokens": getattr(u, "prompt_token_count", None), "output_tokens": getattr(u, "candidates_token_count", None),
-            "thinking_tokens": getattr(u, "thoughts_token_count", None), "total_tokens": getattr(u, "total_token_count", None)})
+            "thinking_tokens": getattr(u, "thoughts_token_count", None), "total_tokens": getattr(u, "total_token_count", None),
+            "rate_limit_wait_s": round(self.wait_429_s - budget, 2)})
+
+
+_RETRY = re.compile(r"retry in ([\d.]+)s|'retryDelay': '(\d+)s'")
+
+
+def retry_delay_s(message: str) -> float | None:
+    """Seconds to wait before retrying a 429 RESOURCE_EXHAUSTED error, or None if it is not one or it is the
+    free tier's daily cap (20 requests/day/model; waiting means hours)."""
+    if "429" not in message or "RESOURCE_EXHAUSTED" not in message or "per day" in message.lower():
+        return None
+    m = _RETRY.search(message)
+    return (float(m.group(1) or m.group(2)) if m else 30.0) + 1.0
 
 
 class FakeTransport:
@@ -448,7 +474,7 @@ class GeminiER:
             err = redact(f"{type(e).__name__}: {e}")
             raise GeminiError(err) from None
         finally:
-            lat = time.monotonic() - t0
+            lat = time.monotonic() - t0 - float(usage.get("rate_limit_wait_s") or 0)   # model time, not back-off
             self.last = CallInfo(call_id, kind, self.model, round(lat, 3), usage.get("prompt_tokens"),
                                  usage.get("output_tokens"), usage.get("thinking_tokens"), cost_usd(self.model, usage), err)
             self._log(call_id, kind, parts, config, text, parsed, lat, usage, err)
