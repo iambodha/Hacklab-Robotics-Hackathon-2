@@ -13,3 +13,7 @@ executor/logs/
 .scratch/
 skills/.loop/
 skills/data/
+models/logs/*.jsonl
+models/bench/data/frames/
+models/exports/
+models/labels/
