@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from learning.skillcfg import get as strategy
+
 from .contracts import Status
 from .motion import GripResult, MotionResult
 
@@ -46,10 +48,16 @@ def _vec(p, n=3, name="xyz_world"):
     return v
 
 
+class StrategyValue:
+    """Resolve class-level skill metadata from the current config on access."""
+    def __init__(self, key): self.key = key
+    def __get__(self, instance, owner): return strategy(self.key)
+
+
 class Skill:
     name = ""
     version = "1"
-    freshness_s = 2.0                      # max age of the observation a proposal is based on
+    freshness_s = StrategyValue("executor.freshness.default_s")                      # max age of the observation a proposal is based on
     cameras: tuple[str, ...] = ("overview", "wrist")   # must be fresh for this skill (those the backend has)
     moves = True
     params_doc: dict[str, str] = {}
@@ -187,7 +195,7 @@ class Park(MoveTcp):
 
 
 class Gripper(Skill):
-    name, version, freshness_s, cameras = "gripper", "1", 5.0, ()
+    name, version, freshness_s, cameras = "gripper", "1", StrategyValue("executor.freshness.gripper_s"), ()
     params_doc = {"open_fraction": "0 closed .. 1 open", "force": "optional 0.1..1 squeeze limit"}
     doc = "Open or close the jaws with a torque limit; reports touch (held / nothing)."
 
@@ -215,7 +223,7 @@ class Gripper(Skill):
 
 
 class Pick(Skill):
-    name, version, freshness_s = "pick", "1", 1.5
+    name, version, freshness_s = "pick", "1", StrategyValue("executor.freshness.pick_s")
     params_doc = {"xyz_world": "[x, y, z] object centre on the table, metres, world frame (z ignored: table)",
                   "object_height": "metres, default 0.02", "yaw_deg": "world yaw of the jaw closing axis (omit = keep current)",
                   "grip_force": "optional 0.1..1"}
@@ -400,7 +408,7 @@ class Stir(Skill):
         ach = {"tip_world": np.round(tip, 4).tolist()}
         if res.status != Status.SUCCEEDED:
             return Verdict(res.status, res.termination, ach, {"tip_to_exit_mm": round(err * 1000, 1), "joints_ticks": res.residual_ticks})
-        ok = err <= max(ctx.P.motion.off_target_note, 0.008)
+        ok = err <= max(ctx.P.motion.off_target_note, strategy("executor.stir.verify_m"))
         return Verdict(Status.SUCCEEDED if ok else Status.PARTIAL, "stirred and lifted out" if ok else
                        f"stirred; the tip ended {err * 1000:.0f} mm from the exit point", ach, {"tip_to_exit_mm": round(err * 1000, 1)})
 
@@ -413,7 +421,7 @@ class Stir(Skill):
         L = plan.target["tool_length"]
         tip = ctx.kin.tip_of(q, L)
         top = plan.target["centre"][2] + plan.target["clearance"]
-        if tip[2] >= top - 0.005:
+        if tip[2] >= top - strategy("executor.stir.recover_clear_m"):
             return "tip already above the exit height"
         steps = [np.array([tip[0], tip[1], z]) for z in np.linspace(tip[2], top, 4)[1:]]
         seed, path = q, []
@@ -501,7 +509,7 @@ def resolve_object(ctx, query: str | None, color: str | None = None, pixel=None,
     if f is not None and f.stale:
         raise PlanError(f"overview frame of {obs.obs_id} is stale: cannot localise {query or color}", {"perception": {"result": "fail"}})
     if color:
-        h = Hint(query or f"{color} object", color, height_m if height_m is not None else 0.02)
+        h = Hint(query or f"{color} object", color, height_m if height_m is not None else strategy("executor.pick.hint_height_m"))
         est, why = ctx.locator.locate_hint(jpeg, h, ctx.camera_info(), f.seq if f else None, f.t_capture if f else None)
         if est is not None:
             return est, f"perception colour {color} on {obs.obs_id}"
@@ -512,7 +520,7 @@ def resolve_object(ctx, query: str | None, color: str | None = None, pixel=None,
         r = ctx.locator.pixel_to_world(camera, pixel[0], pixel[1], z, ctx.camera_info())
         if not r.get("ok"):
             raise PlanError(f"cannot localise {camera} pixel {pixel}: {r.get('reason')}", {"perception": {"result": "fail", **r}})
-        hh = 0.02 if height_m is None else height_m
+        hh = strategy("executor.pick.hint_height_m") if height_m is None else height_m
         return ObjectEstimate(query or "pointed object", [r["xyz"][0], r["xyz"][1], hh / 2], None, None, r.get("sigma_mm"),
                               f"{camera} pixel {list(pixel)} -> table ({r.get('mm_per_px')} mm/px)", True,
                               f.t_capture if f else None), f"pixel {list(pixel)} on {obs.obs_id}"
@@ -525,8 +533,8 @@ class PickAt(Pick):
     An advisor's observation may be seconds old by the time its answer arrives (Gemini ~3-10 s): pick_at accepts
     observations up to `freshness_s`, and if the proposal's observation is older than `relocalise_after`, the object is
     localised again on a FRESH observation; moved more than max(20 mm, 3 sigma) since the proposal = rejected."""
-    name, version, freshness_s = "pick_at", "1", 20.0
-    relocalise_after = 1.5
+    name, version, freshness_s = "pick_at", "1", StrategyValue("executor.freshness.pick_at_s")
+    relocalise_after = StrategyValue("executor.pick.relocalise_after_s")
     params_doc = {"object": "name or colour hint, e.g. 'blue' / 'blue object' (from the observation's estimates or "
                             "perception.locate on its overview frame)",
                   "xyz_world": "optional [x, y, z] metres, world: skips localisation",
@@ -557,7 +565,7 @@ class PickAt(Pick):
         elif relocal and (params.get("color") or colour_in(params.get("object"))):
             est, how = resolve_object(ctx, params.get("object"), params.get("color"), None, "overview", params.get("object_height"))
             moved = float(np.linalg.norm(np.array(est.xyz_world[:2]) - np.array(given.xyz_world[:2]))) * 1000
-            tol = max(20.0, 3 * float(given.uncertainty_mm or 0))
+            tol = max(strategy("executor.pick.same_object_min_mm"), strategy("executor.pick.same_object_sigma") * float(given.uncertainty_mm or 0))
             relocal.update(moved_mm=round(moved, 1), tol_mm=round(tol, 1))
             if moved > tol:
                 raise PlanError(f"{given.name} moved {moved:.0f} mm since the proposal's observation (> {tol:.0f} mm): propose again",
@@ -565,14 +573,14 @@ class PickAt(Pick):
             how = f"re-localised on {ctx.obs.obs_id} ({moved:.0f} mm from the proposal's xyz_world)"
         else:
             est, how = given, "proposal xyz_world"
-        limit = float(params.get("max_uncertainty_mm", 25.0))
+        limit = float(params.get("max_uncertainty_mm", strategy("executor.pick.max_uncertainty_mm")))
         if est.uncertainty_mm is not None and est.uncertainty_mm > limit:
             raise PlanError(f"{est.name} position too uncertain: {est.uncertainty_mm} mm > {limit} mm",
                             {"perception": {"result": "fail", "object": _est_dict(est), "limit_mm": limit}})
         h = params.get("object_height")
         h = float(h) if h is not None else float(est.size[2]) if est.size and len(est.size) > 2 else ctx.P.pick.default_height
         yaw = params.get("yaw_deg")
-        if yaw is None and est.yaw is not None and est.size and est.size[1] and est.size[0] / est.size[1] > 1.3:
+        if yaw is None and est.yaw is not None and est.size and est.size[1] and est.size[0] / est.size[1] > strategy("executor.pick.elongation"):
             yaw = (np.degrees(est.yaw) + 90 + 90) % 180 - 90       # jaws close across the short side
         plan = super().plan(ctx, {"xyz_world": est.xyz_world, "object_height": h, "yaw_deg": yaw,
                                   "grip_force": params.get("grip_force")})
@@ -594,7 +602,7 @@ class DropAt(Place):
                   "region_world_xy": "optional [[x0, y0], [x1, y1]] metres, world: the opening to drop into",
                   "bin": "optional {xyz_world, size [w, d, h], yaw_deg}", "xyz_world": "optional [x, y, z]: centre on the table",
                   "camera / pixel": "optional: a pointed pixel on the overview frame of based_on_obs",
-                  "rim_height_m": "default: the bin's height, else 0.08", "clearance_m": "TCP above the rim, default 0.06",
+                  "rim_height_m": "default: the bin's height, else configured rim height", "clearance_m": "TCP above the rim, default 0.06",
                   "object": "optional: what is being dropped (the evaluator looks for it inside the region afterwards)"}
     doc = "Carry above the centre of the target region (rim + clearance), open, retreat. Twin preflight includes the bin walls."
 
@@ -603,28 +611,28 @@ class DropAt(Place):
         if params.get("region_world_xy"):
             (x0, y0), (x1, y1) = params["region_world_xy"]
             x0, x1, y0, y1 = min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1)
-            rim = float(params.get("rim_height_m", 0.08))
+            rim = float(params.get("rim_height_m", strategy("executor.drop.rim_m")))
             bin_ = {"xyz_world": [(x0 + x1) / 2, (y0 + y1) / 2, 0.0], "size": [x1 - x0, y1 - y0, rim], "yaw_deg": 0.0,
-                    "wall": 0.004, "from": "region_world_xy"}
+                    "wall": strategy("executor.drop.wall_m"), "from": "region_world_xy"}
             how = "region_world_xy"
         elif isinstance(params.get("bin"), dict):
             b = params["bin"]
-            bin_ = {"xyz_world": list(_vec(b["xyz_world"])), "size": list(b.get("size") or [0.2, 0.15, 0.08]),
-                    "yaw_deg": float(b.get("yaw_deg") or 0.0), "wall": float(b.get("wall") or 0.004), "from": "proposal bin"}
+            bin_ = {"xyz_world": list(_vec(b["xyz_world"])), "size": list(b.get("size") or [strategy("executor.drop.width_m"), strategy("executor.drop.depth_m"), strategy("executor.drop.rim_m")]),
+                    "yaw_deg": float(b.get("yaw_deg") or 0.0), "wall": float(b.get("wall") or strategy("executor.drop.wall_m")), "from": "proposal bin"}
             how = "bin"
         elif params.get("xyz_world") is not None and not params.get("needs_localisation"):
             c = _vec(params["xyz_world"])
-            rim = float(params.get("rim_height_m", 0.08))
+            rim = float(params.get("rim_height_m", strategy("executor.drop.rim_m")))
             bin_, how = {"xyz_world": c.tolist(), "size": [0.0, 0.0, rim], "yaw_deg": 0.0, "wall": 0.0, "from": "xyz_world"}, "xyz_world"
         else:
             est, how = resolve_object(ctx, params.get("target"), params.get("color"), params.get("pixel"),
                                       params.get("camera", "overview"), params.get("rim_height_m"), bin_like=True)
             s = list(est.size or [0.0, 0.0])
-            rim = float(params.get("rim_height_m") or (s[2] if len(s) > 2 else 0.08))
+            rim = float(params.get("rim_height_m") or (s[2] if len(s) > 2 else strategy("executor.drop.rim_m")))
             bin_ = {"xyz_world": list(est.xyz_world), "size": [s[0], s[1], rim], "yaw_deg": float(np.degrees(est.yaw or 0.0)),
-                    "wall": 0.004, "from": f"{how}: {est.source}", "uncertainty_mm": est.uncertainty_mm}
+                    "wall": strategy("executor.drop.wall_m"), "from": f"{how}: {est.source}", "uncertainty_mm": est.uncertainty_mm}
         rim = float(bin_["size"][2])
-        z = rim + float(params.get("clearance_m", 0.06))
+        z = rim + float(params.get("clearance_m", strategy("executor.drop.clearance_m")))
         x, y = bin_["xyz_world"][:2]
         plan = super().plan(ctx, {"xyz_world": [x, y, z], "yaw_deg": params.get("yaw_deg")})
         w, d = bin_["size"][:2]
@@ -664,7 +672,7 @@ class Wipe(Skill):
     to_xy_world, `passes` times there and back) with the FIXED contact settings of the hardware-validated wipe tool
     (sim/real_arm_mcp.wipe, values from the robot profile via skills/wipe/limits.py). The proposal's attached `limits`
     must equal the executor's own; a mismatch is rejected (nothing is adapted here)."""
-    name, version, freshness_s = "wipe", "1", 30.0
+    name, version, freshness_s = "wipe", "1", StrategyValue("executor.freshness.wipe_s")
     cameras = ()          # one plan's strokes share the inspection observation; the board is re-imaged after the park
     params_doc = {"from_xy_world": "[x, y] metres, world", "to_xy_world": "[x, y] metres, world", "passes": "1..max (there/back)",
                   "limits": "the fixed contact settings (skills/wipe/limits.py), must match the executor's",
@@ -743,7 +751,7 @@ class Wipe(Skill):
             ctx.remember_touch(*s["from"], hit)
             line = plan.paths[f"{self.contact_label} {i}"]
             z = max(TS.nominal_table_tcp_z - TS.max_below, hit - L["backoff_m"])
-            if abs(z - s["planned_contact_z"]) > 0.003:            # felt height differs from the plan: same line, at the felt height
+            if abs(z - s["planned_contact_z"]) > strategy("executor.wipe.replan_m"):            # felt height differs from the plan: same line, at the felt height
                 a, b = np.array(s["from"]), np.array(s["to"])
                 pts = [np.r_[a + (b - a) * k / (len(line) - 1), z] for k in range(len(line))]
                 try:
@@ -772,7 +780,7 @@ class Wipe(Skill):
                 start = end
                 run.data["passes_done"] += 1
             lift = plan.paths[f"lift {i}"]
-            if abs(z - s["planned_contact_z"]) > 0.003:
+            if abs(z - s["planned_contact_z"]) > strategy("executor.wipe.replan_m"):
                 lift, _ = self.solve_chain(ctx, [ctx.kin.fk(lift[-1])[0]], m.q_now(), plan.target["yaw"], f"stroke {i} lift")
             res = go_path(ctx, run, f"stroke {i} lift", lift)
             run.data["in_contact"] = False
@@ -806,7 +814,7 @@ class Wipe(Skill):
         p = ctx.kin.fk(m.q_now())[0]
         top = plan.data["limits"]["lift_after_m"]
         try:
-            path, _ = self.solve_chain(ctx, [np.r_[p[:2], z] for z in np.linspace(p[2], top, 4)[1:]], m.q_now(), plan.target["yaw"],
+            path, _ = self.solve_chain(ctx, [np.r_[p[:2], z] for z in np.linspace(p[2], top, strategy("executor.wipe.recover_points"))[1:]], m.q_now(), plan.target["yaw"],
                                        "recover lift", min_z=ctx.P.touch.nominal_table_tcp_z - ctx.P.touch.max_below)
         except PlanError as e:
             m.b.hold()
@@ -830,12 +838,12 @@ class WipeRegion(Wipe):
         (x0, y0), (x1, y1) = params["region_world_xy"]
         sk = WipeSkill()
         v = sk.seed_version(**{k: params[k] for k in ("w_hat", "beta") if k in params})
-        wp = sk.plan(v, {"region": Region(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)), "budget": int(params.get("budget", 6))})
+        wp = sk.plan(v, {"region": Region(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)), "budget": int(params.get("budget", strategy("executor.wipe.budget")))})
         return [(np.array(s.start), np.array(s.end)) for s in wp.strokes]
 
 
 class Inspect(Skill):
-    name, version, freshness_s, cameras, moves = "inspect", "1", 30.0, (), False
+    name, version, freshness_s, cameras, moves = "inspect", "1", StrategyValue("executor.freshness.inspect_s"), (), False
     params_doc = {"camera": "overview | wrist (informational)"}
     doc = "No motion: acknowledges a request for a fresh look; observe() returns the images."
 

@@ -1,0 +1,3813 @@
+[
+ {
+  "begin": {
+   "attempt": 1,
+   "params": {
+    "grip_close": 1.0,
+    "grip_torque_limit": 0.45,
+    "approach_z_offset_mm": 0.0,
+    "twist_deg_per_stroke": 20.0,
+    "strokes": 4,
+    "twist_speed": "slow",
+    "lift_per_turn_mm": 3.0,
+    "yaw_start_deg": 0.0,
+    "regrasp_backoff_deg": 0.0,
+    "j7_load_abort": 300.0
+   },
+   "hypothesis": "Baseline for measured 4.4 cm wide, 2.0 cm tall cap at [-0.006, 0.259, 0.206] m: a 0.45 torque grip with 4 x 20 deg slow strokes should grip the cap cleanly and turn it counter-clockwise without slipping, achieving ~70-80 deg total rotation and loosening the cap."
+  },
+  "end": {
+   "outcome": "loosened",
+   "rotation_achieved_deg": 80.2,
+   "cap_lift_mm": 9.5,
+   "lesson": "4 x 20 deg commanded and 80 deg achieved (20 deg/stroke, j7 peak 100-108, j8 change 0-4 ticks, gripper rose +6.9 mm). check_cap rose 9.5 of 15 mm (load_rise 116) and flagged cap_free, but overview camera shows zero gap (cap rim stayed at v=91): the jaws gripped high and slid up the cap while the cap remains on the thread and needs stronger/deeper purchase plus more total rotation."
+  },
+  "phases": [
+   {
+    "phase": "locate",
+    "status": "ok",
+    "measurements": {
+     "x": -0.006,
+     "y": 0.259,
+     "cap_top_z": 0.206,
+     "cap_height": 0.02
+    },
+    "note": "cap position given by the agent"
+   },
+   {
+    "phase": "approach",
+    "status": "ok",
+    "measurements": {
+     "mode": "top",
+     "tcp_z": 0.1987,
+     "z_grasp": 0.196,
+     "lean_deg": 40.7
+    },
+    "note": "reached z = 0.199 without touching anything"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 1,
+     "commanded_deg": 20.0,
+     "achieved_deg": 19.9,
+     "peak_j7_load": 108,
+     "mean_j7_load": 86.5,
+     "j8_change_ticks": 4,
+     "z_change_mm": 2.8,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 1,
+       "commanded_deg": 20.0,
+       "achieved_deg": 19.9,
+       "peak_j7_load": 108,
+       "mean_j7_load": 86.5,
+       "j8_change_ticks": 4,
+       "z_change_mm": 2.8,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 1: 20 of 20 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 2,
+     "commanded_deg": 20.0,
+     "achieved_deg": 20.2,
+     "peak_j7_load": 108,
+     "mean_j7_load": 72.5,
+     "j8_change_ticks": 2,
+     "z_change_mm": 1.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 2,
+       "commanded_deg": 20.0,
+       "achieved_deg": 20.2,
+       "peak_j7_load": 108,
+       "mean_j7_load": 72.5,
+       "j8_change_ticks": 2,
+       "z_change_mm": 1.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 2: 20 of 20 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 3,
+     "commanded_deg": 20.0,
+     "achieved_deg": 19.9,
+     "peak_j7_load": 100,
+     "mean_j7_load": 63.0,
+     "j8_change_ticks": 0,
+     "z_change_mm": 1.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 3,
+       "commanded_deg": 20.0,
+       "achieved_deg": 19.9,
+       "peak_j7_load": 100,
+       "mean_j7_load": 63.0,
+       "j8_change_ticks": 0,
+       "z_change_mm": 1.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 3: 20 of 20 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 4,
+     "commanded_deg": 20.0,
+     "achieved_deg": 20.2,
+     "peak_j7_load": 104,
+     "mean_j7_load": 70.5,
+     "j8_change_ticks": 0,
+     "z_change_mm": 0.6,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 4,
+       "commanded_deg": 20.0,
+       "achieved_deg": 20.2,
+       "peak_j7_load": 104,
+       "mean_j7_load": 70.5,
+       "j8_change_ticks": 0,
+       "z_change_mm": 0.6,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 4: 20 of 20 deg"
+   },
+   {
+    "phase": "check",
+    "status": "ok",
+    "measurements": {
+     "cap_free": true,
+     "cap_lift_mm": 9.5,
+     "resisted": false,
+     "holding_after": true
+    },
+    "note": "cap probably free: the gripper rose 10 mm still holding it, unhindered (the jaws could also have slid up the cap: confirm a gap between cap and bottle in the images)"
+   }
+  ]
+ },
+ {
+  "begin": {
+   "attempt": 2,
+   "params": {
+    "grip_close": 1.0,
+    "grip_torque_limit": 0.55,
+    "approach_z_offset_mm": -4.0,
+    "twist_deg_per_stroke": 20.0,
+    "strokes": 8,
+    "twist_speed": "slow",
+    "lift_per_turn_mm": 3.0,
+    "yaw_start_deg": 0.0,
+    "regrasp_backoff_deg": 0.0,
+    "j7_load_abort": 300.0
+   },
+   "hypothesis": "If I change approach_z_offset_mm from 0 to -4, grip_torque_limit from 0.45 to 0.55, and strokes from 4 to 8, then the jaws should maintain full purchase across 160 deg of counter-clockwise rotation without sliding up the cap during check_cap, because gripping 4 mm deeper with higher normal force prevents vertical creep while 8 x 20 deg doubles unscrewing progress."
+  },
+  "end": {
+   "outcome": "loosened",
+   "rotation_achieved_deg": 161.8,
+   "cap_lift_mm": 9.3,
+   "lesson": "8 x 20 deg strokes achieved 162 deg total (20-21 deg/stroke, j7 peak 96-108, j8 change 0-4 ticks, gripper rose +8.7 mm). Overview and wrist images after retreating show the cap clearly rose on the threads, exposing the full silver stainless-steel neck ring beneath the cap, though check_cap (9.3 of 15 mm, load_rise 112) confirmed the cap still has remaining thread engagement (~242 deg cumulative rotation so far)."
+  },
+  "phases": [
+   {
+    "phase": "locate",
+    "status": "ok",
+    "measurements": {
+     "x": 0.0,
+     "y": 0.262,
+     "cap_top_z": 0.209,
+     "cap_height": 0.02
+    },
+    "note": "cap position given by the agent"
+   },
+   {
+    "phase": "approach",
+    "status": "ok",
+    "measurements": {
+     "mode": "top",
+     "tcp_z": 0.1993,
+     "z_grasp": 0.195,
+     "lean_deg": 40.6
+    },
+    "note": "reached z = 0.199 without touching anything"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 1,
+     "commanded_deg": 20.0,
+     "achieved_deg": 20.7,
+     "peak_j7_load": 100,
+     "mean_j7_load": 67.5,
+     "j8_change_ticks": 4,
+     "z_change_mm": 2.5,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 1,
+       "commanded_deg": 20.0,
+       "achieved_deg": 20.7,
+       "peak_j7_load": 100,
+       "mean_j7_load": 67.5,
+       "j8_change_ticks": 4,
+       "z_change_mm": 2.5,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 1: 21 of 20 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 2,
+     "commanded_deg": 20.0,
+     "achieved_deg": 20.3,
+     "peak_j7_load": 104,
+     "mean_j7_load": 70.5,
+     "j8_change_ticks": 0,
+     "z_change_mm": 1.3,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 2,
+       "commanded_deg": 20.0,
+       "achieved_deg": 20.3,
+       "peak_j7_load": 104,
+       "mean_j7_load": 70.5,
+       "j8_change_ticks": 0,
+       "z_change_mm": 1.3,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 2: 20 of 20 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 3,
+     "commanded_deg": 20.0,
+     "achieved_deg": 20.4,
+     "peak_j7_load": 104,
+     "mean_j7_load": 58.5,
+     "j8_change_ticks": 4,
+     "z_change_mm": 1.3,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 3,
+       "commanded_deg": 20.0,
+       "achieved_deg": 20.4,
+       "peak_j7_load": 104,
+       "mean_j7_load": 58.5,
+       "j8_change_ticks": 4,
+       "z_change_mm": 1.3,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 3: 20 of 20 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 4,
+     "commanded_deg": 20.0,
+     "achieved_deg": 20.1,
+     "peak_j7_load": 108,
+     "mean_j7_load": 73.0,
+     "j8_change_ticks": 4,
+     "z_change_mm": 0.7,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 4,
+       "commanded_deg": 20.0,
+       "achieved_deg": 20.1,
+       "peak_j7_load": 108,
+       "mean_j7_load": 73.0,
+       "j8_change_ticks": 4,
+       "z_change_mm": 0.7,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 4: 20 of 20 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 5,
+     "commanded_deg": 20.0,
+     "achieved_deg": 20.2,
+     "peak_j7_load": 104,
+     "mean_j7_load": 69.5,
+     "j8_change_ticks": 0,
+     "z_change_mm": 0.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 5,
+       "commanded_deg": 20.0,
+       "achieved_deg": 20.2,
+       "peak_j7_load": 104,
+       "mean_j7_load": 69.5,
+       "j8_change_ticks": 0,
+       "z_change_mm": 0.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 5: 20 of 20 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 6,
+     "commanded_deg": 20.0,
+     "achieved_deg": 20.2,
+     "peak_j7_load": 96,
+     "mean_j7_load": 64.5,
+     "j8_change_ticks": 3,
+     "z_change_mm": 0.9,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 6,
+       "commanded_deg": 20.0,
+       "achieved_deg": 20.2,
+       "peak_j7_load": 96,
+       "mean_j7_load": 64.5,
+       "j8_change_ticks": 3,
+       "z_change_mm": 0.9,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 6: 20 of 20 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 7,
+     "commanded_deg": 20.0,
+     "achieved_deg": 19.9,
+     "peak_j7_load": 108,
+     "mean_j7_load": 72.0,
+     "j8_change_ticks": 4,
+     "z_change_mm": 1.3,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 7,
+       "commanded_deg": 20.0,
+       "achieved_deg": 19.9,
+       "peak_j7_load": 108,
+       "mean_j7_load": 72.0,
+       "j8_change_ticks": 4,
+       "z_change_mm": 1.3,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 7: 20 of 20 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 8,
+     "commanded_deg": 20.0,
+     "achieved_deg": 20.0,
+     "peak_j7_load": 108,
+     "mean_j7_load": 71.0,
+     "j8_change_ticks": 4,
+     "z_change_mm": 0.9,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 8,
+       "commanded_deg": 20.0,
+       "achieved_deg": 20.0,
+       "peak_j7_load": 108,
+       "mean_j7_load": 71.0,
+       "j8_change_ticks": 4,
+       "z_change_mm": 0.9,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 8: 20 of 20 deg"
+   },
+   {
+    "phase": "check",
+    "status": "ok",
+    "measurements": {
+     "cap_free": true,
+     "cap_lift_mm": 9.3,
+     "resisted": false,
+     "holding_after": true
+    },
+    "note": "cap probably free: the gripper rose 9 mm still holding it, unhindered (the jaws could also have slid up the cap: confirm a gap between cap and bottle in the images)"
+   }
+  ]
+ },
+ {
+  "begin": {
+   "attempt": 3,
+   "params": {
+    "grip_close": 1.0,
+    "grip_torque_limit": 0.6,
+    "approach_z_offset_mm": -5.0,
+    "twist_deg_per_stroke": 25.0,
+    "strokes": 8,
+    "twist_speed": "slow",
+    "lift_per_turn_mm": 3.0,
+    "yaw_start_deg": 0.0,
+    "regrasp_backoff_deg": 0.0,
+    "j7_load_abort": 300.0
+   },
+   "hypothesis": "If I change twist_deg_per_stroke from 20 to 25, grip_torque_limit from 0.55 to 0.60, and approach_z_offset_mm from -4 to -5, then 8 x 25 deg (200 deg) should bring cumulative rotation past 440 deg while holding the raised cap firmly 15 mm below its top so it clears the final threads and lifts free in check_cap."
+  },
+  "end": {
+   "outcome": "slip",
+   "rotation_achieved_deg": 201.0,
+   "cap_lift_mm": 0.0,
+   "lesson": "8 x 25 deg strokes achieved 201 deg of gripper rotation (j7 peak 92-104, mean 62-78, gripper rose +9.2 mm), but check_cap showed cap_free=false (load_rise 44, cap_lift_mm 0) and the bevel notch moved only ~12 deg. Starting at z=0.199 m and rising +9.2 mm put the jaws on the smooth top bevel where they slipped, and the close wrist view shows the gripper +6 mm too far +x so the left jaw brushed the cap on return strokes."
+  },
+  "phases": [
+   {
+    "phase": "locate",
+    "status": "ok",
+    "measurements": {
+     "x": 0.002,
+     "y": 0.268,
+     "cap_top_z": 0.214,
+     "cap_height": 0.02
+    },
+    "note": "cap position given by the agent"
+   },
+   {
+    "phase": "approach",
+    "status": "ok",
+    "measurements": {
+     "mode": "top",
+     "tcp_z": 0.2008,
+     "z_grasp": 0.199,
+     "lean_deg": 40.2
+    },
+    "note": "reached z = 0.201 without touching anything"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 1,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.4,
+     "peak_j7_load": 100,
+     "mean_j7_load": 78.4,
+     "j8_change_ticks": 4,
+     "z_change_mm": 3.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 1,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.4,
+       "peak_j7_load": 100,
+       "mean_j7_load": 78.4,
+       "j8_change_ticks": 4,
+       "z_change_mm": 3.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 1: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 2,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.9,
+     "peak_j7_load": 100,
+     "mean_j7_load": 75.6,
+     "j8_change_ticks": 4,
+     "z_change_mm": 1.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 2,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.9,
+       "peak_j7_load": 100,
+       "mean_j7_load": 75.6,
+       "j8_change_ticks": 4,
+       "z_change_mm": 1.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 2: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 3,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.8,
+     "peak_j7_load": 104,
+     "mean_j7_load": 75.6,
+     "j8_change_ticks": 0,
+     "z_change_mm": 1.6,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 3,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.8,
+       "peak_j7_load": 104,
+       "mean_j7_load": 75.6,
+       "j8_change_ticks": 0,
+       "z_change_mm": 1.6,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 3: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 4,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.3,
+     "peak_j7_load": 104,
+     "mean_j7_load": 73.6,
+     "j8_change_ticks": 4,
+     "z_change_mm": 0.9,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 4,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.3,
+       "peak_j7_load": 104,
+       "mean_j7_load": 73.6,
+       "j8_change_ticks": 4,
+       "z_change_mm": 0.9,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 4: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 5,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.2,
+     "peak_j7_load": 92,
+     "mean_j7_load": 67.2,
+     "j8_change_ticks": 4,
+     "z_change_mm": -0.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 5,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.2,
+       "peak_j7_load": 92,
+       "mean_j7_load": 67.2,
+       "j8_change_ticks": 4,
+       "z_change_mm": -0.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 5: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 6,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.2,
+     "peak_j7_load": 104,
+     "mean_j7_load": 68.0,
+     "j8_change_ticks": 5,
+     "z_change_mm": 0.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 6,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.2,
+       "peak_j7_load": 104,
+       "mean_j7_load": 68.0,
+       "j8_change_ticks": 5,
+       "z_change_mm": 0.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 6: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 7,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.1,
+     "peak_j7_load": 96,
+     "mean_j7_load": 62.4,
+     "j8_change_ticks": 4,
+     "z_change_mm": 0.6,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 7,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.1,
+       "peak_j7_load": 96,
+       "mean_j7_load": 62.4,
+       "j8_change_ticks": 4,
+       "z_change_mm": 0.6,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 7: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 8,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.1,
+     "peak_j7_load": 104,
+     "mean_j7_load": 66.8,
+     "j8_change_ticks": 4,
+     "z_change_mm": 0.5,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 8,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.1,
+       "peak_j7_load": 104,
+       "mean_j7_load": 66.8,
+       "j8_change_ticks": 4,
+       "z_change_mm": 0.5,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 8: 25 of 25 deg"
+   },
+   {
+    "phase": "check",
+    "status": "ok",
+    "measurements": {
+     "cap_free": false,
+     "cap_lift_mm": 0.0,
+     "resisted": false,
+     "holding_after": true
+    },
+    "note": "unclear: holding after lifting only 0 mm"
+   }
+  ]
+ },
+ {
+  "begin": {
+   "attempt": 4,
+   "params": {
+    "grip_close": 1.0,
+    "grip_torque_limit": 0.6,
+    "approach_z_offset_mm": -11.0,
+    "twist_deg_per_stroke": 25.0,
+    "strokes": 8,
+    "twist_speed": "slow",
+    "lift_per_turn_mm": 1.0,
+    "yaw_start_deg": 0.0,
+    "regrasp_backoff_deg": 0.0,
+    "j7_load_abort": 300.0
+   },
+   "hypothesis": "If I change approach_z_offset_mm from -5 to -11 and lift_per_turn_mm from 3 to 1 (at corrected centre [-0.004, 0.268, 0.207] m), then the serrated jaw pads will grip 15 mm deeper (z_grasp = 0.186 m) squarely around the cylindrical cap wall and stay below the slippery top bevel across all 8 x 25 deg strokes, transmitting real unscrewing torque without slipping."
+  },
+  "end": {
+   "outcome": "aborted",
+   "rotation_achieved_deg": 0.0,
+   "cap_lift_mm": null,
+   "lesson": "Pre-motion safety refusal (0 deg, nothing moved): approach_z_offset_mm=-11 put TCP at 0.186 m (fingertips at 0.176 m, 5 mm below lowest allowed TCP 0.191 m). Because fingertips extend 10 mm below TCP, approach_z_offset_mm=-5.5 already reaches the bottom of the cap; Attempt 3's loss of progress was instead return-stroke drag from x offset and full backoff on a loosened cap."
+  },
+  "phases": [
+   {
+    "phase": "approach",
+    "status": "fail",
+    "measurements": {
+     "z_grasp": 0.186,
+     "z_floor": 0.191
+    },
+    "note": "grasp height 0.186 puts the fingertips below the safety floor (cap lower edge - 5 mm; lowest TCP 0.191): raise approach_z_offset_mm or check cap_height. Nothing moved."
+   }
+  ]
+ },
+ {
+  "begin": {
+   "attempt": 5,
+   "params": {
+    "grip_close": 1.0,
+    "grip_torque_limit": 0.6,
+    "approach_z_offset_mm": -5.5,
+    "twist_deg_per_stroke": 25.0,
+    "strokes": 8,
+    "twist_speed": "slow",
+    "lift_per_turn_mm": 1.0,
+    "yaw_start_deg": -12.0,
+    "regrasp_backoff_deg": 22.0,
+    "j7_load_abort": 300.0
+   },
+   "hypothesis": "If I change approach_z_offset_mm from -11 to -5.5, regrasp_backoff_deg from 0 to 22 (< 25 deg stroke), and yaw_start_deg from 0 to -12 at centred [-0.005, 0.268] m, then the jaws will clear the safety floor (z_grasp = 0.1915 m, fingertips at 0.1815 m) and avoid dragging the loosened cap clockwise between strokes, accumulating full counter-clockwise unscrewing across 8 x 25 deg."
+  },
+  "end": {
+   "outcome": "fault",
+   "rotation_achieved_deg": 25.0,
+   "cap_lift_mm": null,
+   "lesson": "Reached z=0.195 m cleanly and completed stroke 1 (25 of 25 deg, j7 peak 100 mean 77.6, z change +4.3 mm), then released to 0.939, but during stroke-2 regrasp at grip_torque_limit=0.60 the gripper motor j8 tripped overload status 0x20 (raw 2364, goal 2191, load 200, 40 C) and twist_cap exited with an empty exception before opening/lifting. Lower grip_torque_limit to 0.45 to prevent j8 overload."
+  },
+  "phases": [
+   {
+    "phase": "locate",
+    "status": "ok",
+    "measurements": {
+     "x": -0.005,
+     "y": 0.268,
+     "cap_top_z": 0.207,
+     "cap_height": 0.022
+    },
+    "note": "cap position given by the agent"
+   },
+   {
+    "phase": "approach",
+    "status": "ok",
+    "measurements": {
+     "mode": "top",
+     "tcp_z": 0.1946,
+     "z_grasp": 0.1915,
+     "lean_deg": 40.8
+    },
+    "note": "reached z = 0.195 without touching anything"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 1,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.0,
+     "peak_j7_load": 100,
+     "mean_j7_load": 77.6,
+     "j8_change_ticks": 4,
+     "z_change_mm": 4.3,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 1,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.0,
+       "peak_j7_load": 100,
+       "mean_j7_load": 77.6,
+       "j8_change_ticks": 4,
+       "z_change_mm": 4.3,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 1: 25 of 25 deg"
+   }
+  ]
+ },
+ {
+  "begin": {
+   "attempt": 6,
+   "params": {
+    "grip_close": 1.0,
+    "grip_torque_limit": 0.4,
+    "approach_z_offset_mm": -5.5,
+    "twist_deg_per_stroke": 25.0,
+    "strokes": 8,
+    "twist_speed": "slow",
+    "lift_per_turn_mm": 4.0,
+    "yaw_start_deg": -12.0,
+    "regrasp_backoff_deg": 24.0,
+    "j7_load_abort": 300.0
+   },
+   "hypothesis": "If I change grip_torque_limit from 0.60 to 0.40, lift_per_turn_mm from 1.0 to 4.0, and regrasp_backoff_deg from 22.0 to 24.0, then j8 will regrasp all 8 strokes without overloading while 8 x 25 deg (200 deg) with maximum upward vertical pull (4.0 mm/turn) unscrews and extracts the loosened cap from the final threads."
+  },
+  "end": {
+   "outcome": "loosened",
+   "rotation_achieved_deg": 200.0,
+   "cap_lift_mm": 0.0,
+   "lesson": "8 x 25 deg achieved 200 deg cleanly with zero j8 faults at grip_torque_limit=0.40, but lift_per_turn_mm=4.0 raised the gripper +13.1 mm across the 8 strokes so the jaws crept up onto the cap's top lip (j8_norm widened to 0.704) and slid off during check_cap (load_rise 48, cap_lift_mm 0). Setting lift_per_turn_mm=0 with 0.52 torque and medium twist_speed will maintain downward vertical engagement on the cap body and keep j8 hold time short."
+  },
+  "phases": [
+   {
+    "phase": "locate",
+    "status": "ok",
+    "measurements": {
+     "x": -0.005,
+     "y": 0.268,
+     "cap_top_z": 0.21,
+     "cap_height": 0.022
+    },
+    "note": "cap position given by the agent"
+   },
+   {
+    "phase": "approach",
+    "status": "ok",
+    "measurements": {
+     "mode": "top",
+     "tcp_z": 0.1986,
+     "z_grasp": 0.1945,
+     "lean_deg": 41.2
+    },
+    "note": "reached z = 0.199 without touching anything"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 1,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.2,
+     "peak_j7_load": 96,
+     "mean_j7_load": 80.0,
+     "j8_change_ticks": 3,
+     "z_change_mm": 4.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 1,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.2,
+       "peak_j7_load": 96,
+       "mean_j7_load": 80.0,
+       "j8_change_ticks": 3,
+       "z_change_mm": 4.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 1: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 2,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.2,
+     "peak_j7_load": 100,
+     "mean_j7_load": 67.6,
+     "j8_change_ticks": 1,
+     "z_change_mm": 1.9,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 2,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.2,
+       "peak_j7_load": 100,
+       "mean_j7_load": 67.6,
+       "j8_change_ticks": 1,
+       "z_change_mm": 1.9,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 2: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 3,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.1,
+     "peak_j7_load": 104,
+     "mean_j7_load": 62.8,
+     "j8_change_ticks": 0,
+     "z_change_mm": 1.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 3,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.1,
+       "peak_j7_load": 104,
+       "mean_j7_load": 62.8,
+       "j8_change_ticks": 0,
+       "z_change_mm": 1.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 3: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 4,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.1,
+     "peak_j7_load": 104,
+     "mean_j7_load": 73.6,
+     "j8_change_ticks": 2,
+     "z_change_mm": 1.4,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 4,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.1,
+       "peak_j7_load": 104,
+       "mean_j7_load": 73.6,
+       "j8_change_ticks": 2,
+       "z_change_mm": 1.4,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 4: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 5,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.1,
+     "peak_j7_load": 100,
+     "mean_j7_load": 66.0,
+     "j8_change_ticks": 1,
+     "z_change_mm": 0.7,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 5,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.1,
+       "peak_j7_load": 100,
+       "mean_j7_load": 66.0,
+       "j8_change_ticks": 1,
+       "z_change_mm": 0.7,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 5: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 6,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.9,
+     "peak_j7_load": 108,
+     "mean_j7_load": 69.6,
+     "j8_change_ticks": 1,
+     "z_change_mm": 0.8,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 6,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.9,
+       "peak_j7_load": 108,
+       "mean_j7_load": 69.6,
+       "j8_change_ticks": 1,
+       "z_change_mm": 0.8,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 6: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 7,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.8,
+     "peak_j7_load": 100,
+     "mean_j7_load": 65.6,
+     "j8_change_ticks": 2,
+     "z_change_mm": 1.0,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 7,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.8,
+       "peak_j7_load": 100,
+       "mean_j7_load": 65.6,
+       "j8_change_ticks": 2,
+       "z_change_mm": 1.0,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 7: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 8,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.6,
+     "peak_j7_load": 112,
+     "mean_j7_load": 76.0,
+     "j8_change_ticks": 1,
+     "z_change_mm": 1.3,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 8,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.6,
+       "peak_j7_load": 112,
+       "mean_j7_load": 76.0,
+       "j8_change_ticks": 1,
+       "z_change_mm": 1.3,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 8: 25 of 25 deg"
+   },
+   {
+    "phase": "check",
+    "status": "ok",
+    "measurements": {
+     "cap_free": false,
+     "cap_lift_mm": 0.0,
+     "resisted": false,
+     "holding_after": true
+    },
+    "note": "unclear: holding after lifting only 0 mm"
+   }
+  ]
+ },
+ {
+  "begin": {
+   "attempt": 7,
+   "params": {
+    "grip_close": 1.0,
+    "grip_torque_limit": 0.5,
+    "approach_z_offset_mm": -5.5,
+    "twist_deg_per_stroke": 25.0,
+    "strokes": 8,
+    "twist_speed": "medium",
+    "lift_per_turn_mm": 0.0,
+    "yaw_start_deg": -12.0,
+    "regrasp_backoff_deg": 24.0,
+    "j7_load_abort": 300.0
+   },
+   "hypothesis": "If I change lift_per_turn_mm from 4.0 to 0.0, grip_torque_limit from 0.40 to 0.50, and twist_speed from slow to medium, then the gripper will stay seated low on the cap body with steady vertical engagement across 8 x 25 deg (200 deg) while keeping j8 hold duration short, allowing check_cap to pull the unscrewed cap cleanly off."
+  },
+  "end": {
+   "outcome": "aborted",
+   "rotation_achieved_deg": 196.0,
+   "cap_lift_mm": 9.3,
+   "lesson": "computer restarted after check_cap; top approach at 41 deg, 8 x 25 deg strokes all clean (196 deg), check_cap lifted 9 mm unhindered holding the cap: it may be nearly free"
+  },
+  "phases": [
+   {
+    "phase": "locate",
+    "status": "ok",
+    "measurements": {
+     "x": -0.007,
+     "y": 0.268,
+     "cap_top_z": 0.207,
+     "cap_height": 0.022
+    },
+    "note": "cap position given by the agent"
+   },
+   {
+    "phase": "approach",
+    "status": "ok",
+    "measurements": {
+     "mode": "top",
+     "tcp_z": 0.1955,
+     "z_grasp": 0.1915,
+     "lean_deg": 40.7
+    },
+    "note": "reached z = 0.196 without touching anything"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 1,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.3,
+     "peak_j7_load": 144,
+     "mean_j7_load": 119.3,
+     "j8_change_ticks": 3,
+     "z_change_mm": 5.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 1,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.3,
+       "peak_j7_load": 144,
+       "mean_j7_load": 119.3,
+       "j8_change_ticks": 3,
+       "z_change_mm": 5.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 1: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 2,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.7,
+     "peak_j7_load": 124,
+     "mean_j7_load": 96.7,
+     "j8_change_ticks": 0,
+     "z_change_mm": 2.3,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 2,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.7,
+       "peak_j7_load": 124,
+       "mean_j7_load": 96.7,
+       "j8_change_ticks": 0,
+       "z_change_mm": 2.3,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 2: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 3,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.6,
+     "peak_j7_load": 140,
+     "mean_j7_load": 106.7,
+     "j8_change_ticks": 4,
+     "z_change_mm": 1.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 3,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.6,
+       "peak_j7_load": 140,
+       "mean_j7_load": 106.7,
+       "j8_change_ticks": 4,
+       "z_change_mm": 1.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 3: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 4,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.4,
+     "peak_j7_load": 148,
+     "mean_j7_load": 114.0,
+     "j8_change_ticks": 3,
+     "z_change_mm": 0.8,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 4,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.4,
+       "peak_j7_load": 148,
+       "mean_j7_load": 114.0,
+       "j8_change_ticks": 3,
+       "z_change_mm": 0.8,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 4: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 5,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.6,
+     "peak_j7_load": 152,
+     "mean_j7_load": 114.7,
+     "j8_change_ticks": 0,
+     "z_change_mm": 1.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 5,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.6,
+       "peak_j7_load": 152,
+       "mean_j7_load": 114.7,
+       "j8_change_ticks": 0,
+       "z_change_mm": 1.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 5: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 6,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.5,
+     "peak_j7_load": 152,
+     "mean_j7_load": 119.3,
+     "j8_change_ticks": 5,
+     "z_change_mm": 0.6,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 6,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.5,
+       "peak_j7_load": 152,
+       "mean_j7_load": 119.3,
+       "j8_change_ticks": 5,
+       "z_change_mm": 0.6,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 6: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 7,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.4,
+     "peak_j7_load": 148,
+     "mean_j7_load": 115.3,
+     "j8_change_ticks": 0,
+     "z_change_mm": 0.5,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 7,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.4,
+       "peak_j7_load": 148,
+       "mean_j7_load": 115.3,
+       "j8_change_ticks": 0,
+       "z_change_mm": 0.5,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 7: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 8,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.5,
+     "peak_j7_load": 140,
+     "mean_j7_load": 108.0,
+     "j8_change_ticks": 3,
+     "z_change_mm": 0.6,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 8,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.5,
+       "peak_j7_load": 140,
+       "mean_j7_load": 108.0,
+       "j8_change_ticks": 3,
+       "z_change_mm": 0.6,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 8: 24 of 25 deg"
+   },
+   {
+    "phase": "check",
+    "status": "ok",
+    "measurements": {
+     "cap_free": true,
+     "cap_lift_mm": 9.3,
+     "resisted": false,
+     "holding_after": true
+    },
+    "note": "cap probably free: the gripper rose 9 mm still holding it, unhindered (the jaws could also have slid up the cap: confirm a gap between cap and bottle in the images)"
+   }
+  ]
+ },
+ {
+  "begin": {
+   "attempt": 8,
+   "params": {
+    "grip_close": 1.0,
+    "grip_torque_limit": 0.5,
+    "approach_z_offset_mm": -5.5,
+    "twist_deg_per_stroke": 25.0,
+    "strokes": 20,
+    "twist_speed": "medium",
+    "lift_per_turn_mm": 0.0,
+    "yaw_start_deg": -12.0,
+    "regrasp_backoff_deg": 24.0,
+    "j7_load_abort": 300.0
+   },
+   "hypothesis": "The top approach with 20 x 25 deg strokes (about 500 deg) spins the cap off its thread."
+  },
+  "end": {
+   "outcome": "slip",
+   "rotation_achieved_deg": 488.6,
+   "cap_lift_mm": 0.0,
+   "lesson": "20 x 25 deg commanded and 489 deg gripper rotation achieved (j7 peak 148-168 in strokes 1-13 as the cap rose on the threads, then dropped to 128-136 in strokes 14-19 after gripper rose +11.6 mm to z~0.211 m), and check_cap slipped off the top bevel (cap_free=false, cap_lift_mm=0.0, gripper_rose_mm=8.9). With the bottle now moved closer for a steeper top approach, grip deeper (-6.5 mm) at slow speed for 24 strokes so the jaws stay on the cylindrical cap wall."
+  },
+  "phases": [
+   {
+    "phase": "locate",
+    "status": "ok",
+    "measurements": {
+     "x": -0.006,
+     "y": 0.269,
+     "cap_top_z": 0.208,
+     "cap_height": 0.022
+    },
+    "note": "cap position given by the agent"
+   },
+   {
+    "phase": "approach",
+    "status": "ok",
+    "measurements": {
+     "mode": "top",
+     "tcp_z": 0.1993,
+     "z_grasp": 0.1925,
+     "lean_deg": 37.8
+    },
+    "note": "reached z = 0.199 without touching anything"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 1,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.1,
+     "peak_j7_load": 152,
+     "mean_j7_load": 99.3,
+     "j8_change_ticks": 3,
+     "z_change_mm": 5.6,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 1,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.1,
+       "peak_j7_load": 152,
+       "mean_j7_load": 99.3,
+       "j8_change_ticks": 3,
+       "z_change_mm": 5.6,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 1: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 2,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.2,
+     "peak_j7_load": 132,
+     "mean_j7_load": 107.3,
+     "j8_change_ticks": 4,
+     "z_change_mm": 1.5,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 2,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.2,
+       "peak_j7_load": 132,
+       "mean_j7_load": 107.3,
+       "j8_change_ticks": 4,
+       "z_change_mm": 1.5,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 2: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 3,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.3,
+     "peak_j7_load": 136,
+     "mean_j7_load": 104.7,
+     "j8_change_ticks": 2,
+     "z_change_mm": 0.5,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 3,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.3,
+       "peak_j7_load": 136,
+       "mean_j7_load": 104.7,
+       "j8_change_ticks": 2,
+       "z_change_mm": 0.5,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 3: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 4,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.3,
+     "peak_j7_load": 140,
+     "mean_j7_load": 105.3,
+     "j8_change_ticks": 1,
+     "z_change_mm": 0.3,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 4,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.3,
+       "peak_j7_load": 140,
+       "mean_j7_load": 105.3,
+       "j8_change_ticks": 1,
+       "z_change_mm": 0.3,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 4: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 5,
+     "commanded_deg": 25.0,
+     "achieved_deg": 23.9,
+     "peak_j7_load": 148,
+     "mean_j7_load": 120.7,
+     "j8_change_ticks": 3,
+     "z_change_mm": 0.4,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 5,
+       "commanded_deg": 25.0,
+       "achieved_deg": 23.9,
+       "peak_j7_load": 148,
+       "mean_j7_load": 120.7,
+       "j8_change_ticks": 3,
+       "z_change_mm": 0.4,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 5: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 6,
+     "commanded_deg": 25.0,
+     "achieved_deg": 23.5,
+     "peak_j7_load": 160,
+     "mean_j7_load": 129.3,
+     "j8_change_ticks": 4,
+     "z_change_mm": 1.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 6,
+       "commanded_deg": 25.0,
+       "achieved_deg": 23.5,
+       "peak_j7_load": 160,
+       "mean_j7_load": 129.3,
+       "j8_change_ticks": 4,
+       "z_change_mm": 1.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 6: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 7,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.2,
+     "peak_j7_load": 156,
+     "mean_j7_load": 130.7,
+     "j8_change_ticks": 4,
+     "z_change_mm": 0.7,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 7,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.2,
+       "peak_j7_load": 156,
+       "mean_j7_load": 130.7,
+       "j8_change_ticks": 4,
+       "z_change_mm": 0.7,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 7: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 8,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.7,
+     "peak_j7_load": 156,
+     "mean_j7_load": 117.3,
+     "j8_change_ticks": 3,
+     "z_change_mm": 0.7,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 8,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.7,
+       "peak_j7_load": 156,
+       "mean_j7_load": 117.3,
+       "j8_change_ticks": 3,
+       "z_change_mm": 0.7,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 8: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 9,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.3,
+     "peak_j7_load": 148,
+     "mean_j7_load": 110.0,
+     "j8_change_ticks": 1,
+     "z_change_mm": -0.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 9,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.3,
+       "peak_j7_load": 148,
+       "mean_j7_load": 110.0,
+       "j8_change_ticks": 1,
+       "z_change_mm": -0.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 9: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 10,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.4,
+     "peak_j7_load": 148,
+     "mean_j7_load": 115.3,
+     "j8_change_ticks": 3,
+     "z_change_mm": -0.4,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 10,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.4,
+       "peak_j7_load": 148,
+       "mean_j7_load": 115.3,
+       "j8_change_ticks": 3,
+       "z_change_mm": -0.4,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 10: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 11,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.6,
+     "peak_j7_load": 156,
+     "mean_j7_load": 104.0,
+     "j8_change_ticks": 1,
+     "z_change_mm": 0.0,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 11,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.6,
+       "peak_j7_load": 156,
+       "mean_j7_load": 104.0,
+       "j8_change_ticks": 1,
+       "z_change_mm": 0.0,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 11: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 12,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.3,
+     "peak_j7_load": 168,
+     "mean_j7_load": 120.7,
+     "j8_change_ticks": 0,
+     "z_change_mm": -0.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 12,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.3,
+       "peak_j7_load": 168,
+       "mean_j7_load": 120.7,
+       "j8_change_ticks": 0,
+       "z_change_mm": -0.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 12: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 13,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.4,
+     "peak_j7_load": 160,
+     "mean_j7_load": 125.3,
+     "j8_change_ticks": 2,
+     "z_change_mm": 0.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 13,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.4,
+       "peak_j7_load": 160,
+       "mean_j7_load": 125.3,
+       "j8_change_ticks": 2,
+       "z_change_mm": 0.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 13: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 14,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.6,
+     "peak_j7_load": 136,
+     "mean_j7_load": 106.0,
+     "j8_change_ticks": 2,
+     "z_change_mm": 0.8,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 14,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.6,
+       "peak_j7_load": 136,
+       "mean_j7_load": 106.0,
+       "j8_change_ticks": 2,
+       "z_change_mm": 0.8,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 14: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 15,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.6,
+     "peak_j7_load": 136,
+     "mean_j7_load": 100.0,
+     "j8_change_ticks": 1,
+     "z_change_mm": 0.4,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 15,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.6,
+       "peak_j7_load": 136,
+       "mean_j7_load": 100.0,
+       "j8_change_ticks": 1,
+       "z_change_mm": 0.4,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 15: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 16,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.8,
+     "peak_j7_load": 128,
+     "mean_j7_load": 102.7,
+     "j8_change_ticks": 1,
+     "z_change_mm": 0.5,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 16,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.8,
+       "peak_j7_load": 128,
+       "mean_j7_load": 102.7,
+       "j8_change_ticks": 1,
+       "z_change_mm": 0.5,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 16: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 17,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.9,
+     "peak_j7_load": 132,
+     "mean_j7_load": 105.3,
+     "j8_change_ticks": 1,
+     "z_change_mm": -0.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 17,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.9,
+       "peak_j7_load": 132,
+       "mean_j7_load": 105.3,
+       "j8_change_ticks": 1,
+       "z_change_mm": -0.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 17: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 18,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.9,
+     "peak_j7_load": 128,
+     "mean_j7_load": 102.7,
+     "j8_change_ticks": 0,
+     "z_change_mm": 0.5,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 18,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.9,
+       "peak_j7_load": 128,
+       "mean_j7_load": 102.7,
+       "j8_change_ticks": 0,
+       "z_change_mm": 0.5,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 18: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 19,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.1,
+     "peak_j7_load": 136,
+     "mean_j7_load": 105.3,
+     "j8_change_ticks": 0,
+     "z_change_mm": -0.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 19,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.1,
+       "peak_j7_load": 136,
+       "mean_j7_load": 105.3,
+       "j8_change_ticks": 0,
+       "z_change_mm": -0.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 19: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 20,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.5,
+     "peak_j7_load": 144,
+     "mean_j7_load": 116.0,
+     "j8_change_ticks": 1,
+     "z_change_mm": 0.6,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 20,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.5,
+       "peak_j7_load": 144,
+       "mean_j7_load": 116.0,
+       "j8_change_ticks": 1,
+       "z_change_mm": 0.6,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 20: 24 of 25 deg"
+   },
+   {
+    "phase": "check",
+    "status": "ok",
+    "measurements": {
+     "cap_free": false,
+     "cap_lift_mm": 0.0,
+     "resisted": false,
+     "holding_after": true
+    },
+    "note": "unclear: holding after lifting only 0 mm"
+   }
+  ]
+ },
+ {
+  "begin": {
+   "attempt": 9,
+   "params": {
+    "grip_close": 1.0,
+    "grip_torque_limit": 0.5,
+    "approach_z_offset_mm": -6.5,
+    "twist_deg_per_stroke": 25.0,
+    "strokes": 24,
+    "twist_speed": "slow",
+    "lift_per_turn_mm": 0.0,
+    "yaw_start_deg": -12.0,
+    "regrasp_backoff_deg": 24.0,
+    "j7_load_abort": 300.0
+   },
+   "hypothesis": "If I change approach_z_offset_mm from -5.5 to -6.5, twist_speed from medium to slow, and strokes from 20 to 24 (with the bottle closer for a steeper top-down wrist angle), then the jaws should stay seated on the cylindrical cap wall instead of riding up onto the top bevel and spin the cap ~600 deg completely off its threads, because steeper top-down geometry plus 3 deg/step tracking eliminates the +11.6 mm upward drift that caused late-stroke bevel slip in Attempt 8."
+  },
+  "end": {
+   "outcome": "opened",
+   "rotation_achieved_deg": 296.7,
+   "cap_lift_mm": null,
+   "lesson": "At closer bottle position [-0.003, 0.201, 0.208] m (33.0 deg wrist lean vs 38-41 deg earlier) with approach_z_offset_mm=-6.5 and slow twist_speed, 12 x 25 deg strokes achieved 296.7 deg cleanly (j7 peak 124 dropping to 80 by stroke 12 as the cap cleared the final thread, j8 change 0-6 ticks) before a transient relay/bus error after stroke-13 regrasp; lifting +60 mm straight up to [-0.004, 0.211, 0.270] m lifted the free cap completely off the bottle in the jaws (j8=0.699, load=80) with a clear ~35 mm air gap above the open silver bottle mouth."
+  },
+  "phases": [
+   {
+    "phase": "locate",
+    "status": "ok",
+    "measurements": {
+     "x": -0.003,
+     "y": 0.201,
+     "cap_top_z": 0.208,
+     "cap_height": 0.022
+    },
+    "note": "cap position given by the agent"
+   },
+   {
+    "phase": "approach",
+    "status": "ok",
+    "measurements": {
+     "mode": "top",
+     "tcp_z": 0.1961,
+     "z_grasp": 0.1915,
+     "lean_deg": 33.0
+    },
+    "note": "reached z = 0.196 without touching anything"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 1,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.0,
+     "peak_j7_load": 124,
+     "mean_j7_load": 83.2,
+     "j8_change_ticks": 2,
+     "z_change_mm": 5.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 1,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.0,
+       "peak_j7_load": 124,
+       "mean_j7_load": 83.2,
+       "j8_change_ticks": 2,
+       "z_change_mm": 5.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 1: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 2,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.8,
+     "peak_j7_load": 92,
+     "mean_j7_load": 80.8,
+     "j8_change_ticks": 0,
+     "z_change_mm": 2.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 2,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.8,
+       "peak_j7_load": 92,
+       "mean_j7_load": 80.8,
+       "j8_change_ticks": 0,
+       "z_change_mm": 2.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 2: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 3,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.1,
+     "peak_j7_load": 88,
+     "mean_j7_load": 68.8,
+     "j8_change_ticks": 4,
+     "z_change_mm": 0.4,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 3,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.1,
+       "peak_j7_load": 88,
+       "mean_j7_load": 68.8,
+       "j8_change_ticks": 4,
+       "z_change_mm": 0.4,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 3: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 4,
+     "commanded_deg": 25.0,
+     "achieved_deg": 25.1,
+     "peak_j7_load": 88,
+     "mean_j7_load": 74.8,
+     "j8_change_ticks": 5,
+     "z_change_mm": -0.4,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 4,
+       "commanded_deg": 25.0,
+       "achieved_deg": 25.1,
+       "peak_j7_load": 88,
+       "mean_j7_load": 74.8,
+       "j8_change_ticks": 5,
+       "z_change_mm": -0.4,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 4: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 5,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.9,
+     "peak_j7_load": 92,
+     "mean_j7_load": 73.2,
+     "j8_change_ticks": 4,
+     "z_change_mm": -0.3,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 5,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.9,
+       "peak_j7_load": 92,
+       "mean_j7_load": 73.2,
+       "j8_change_ticks": 4,
+       "z_change_mm": -0.3,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 5: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 6,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.8,
+     "peak_j7_load": 112,
+     "mean_j7_load": 80.0,
+     "j8_change_ticks": 5,
+     "z_change_mm": 0.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 6,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.8,
+       "peak_j7_load": 112,
+       "mean_j7_load": 80.0,
+       "j8_change_ticks": 5,
+       "z_change_mm": 0.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 6: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 7,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.3,
+     "peak_j7_load": 88,
+     "mean_j7_load": 77.2,
+     "j8_change_ticks": 0,
+     "z_change_mm": -0.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 7,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.3,
+       "peak_j7_load": 88,
+       "mean_j7_load": 77.2,
+       "j8_change_ticks": 0,
+       "z_change_mm": -0.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 7: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 8,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.7,
+     "peak_j7_load": 108,
+     "mean_j7_load": 79.6,
+     "j8_change_ticks": 3,
+     "z_change_mm": 0.0,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 8,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.7,
+       "peak_j7_load": 108,
+       "mean_j7_load": 79.6,
+       "j8_change_ticks": 3,
+       "z_change_mm": 0.0,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 8: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 9,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.9,
+     "peak_j7_load": 84,
+     "mean_j7_load": 68.0,
+     "j8_change_ticks": 5,
+     "z_change_mm": 0.3,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 9,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.9,
+       "peak_j7_load": 84,
+       "mean_j7_load": 68.0,
+       "j8_change_ticks": 5,
+       "z_change_mm": 0.3,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 9: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 10,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.8,
+     "peak_j7_load": 100,
+     "mean_j7_load": 68.4,
+     "j8_change_ticks": 6,
+     "z_change_mm": 0.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 10,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.8,
+       "peak_j7_load": 100,
+       "mean_j7_load": 68.4,
+       "j8_change_ticks": 6,
+       "z_change_mm": 0.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 10: 25 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 11,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.1,
+     "peak_j7_load": 92,
+     "mean_j7_load": 68.8,
+     "j8_change_ticks": 3,
+     "z_change_mm": -1.0,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 11,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.1,
+       "peak_j7_load": 92,
+       "mean_j7_load": 68.8,
+       "j8_change_ticks": 3,
+       "z_change_mm": -1.0,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 11: 24 of 25 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 12,
+     "commanded_deg": 25.0,
+     "achieved_deg": 24.2,
+     "peak_j7_load": 80,
+     "mean_j7_load": 64.0,
+     "j8_change_ticks": 5,
+     "z_change_mm": 0.6,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 12,
+       "commanded_deg": 25.0,
+       "achieved_deg": 24.2,
+       "peak_j7_load": 80,
+       "mean_j7_load": 64.0,
+       "j8_change_ticks": 5,
+       "z_change_mm": 0.6,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 12: 24 of 25 deg"
+   }
+  ]
+ },
+ {
+  "begin": {
+   "attempt": 10,
+   "params": {
+    "grip_close": 1.0,
+    "grip_torque_limit": 0.5,
+    "approach_z_offset_mm": -6.5,
+    "twist_deg_per_stroke": 32.0,
+    "strokes": 24,
+    "twist_speed": "slow",
+    "lift_per_turn_mm": 1.0,
+    "yaw_start_deg": -12.0,
+    "regrasp_backoff_deg": 31.0,
+    "j7_load_abort": 300.0
+   },
+   "hypothesis": "If I change twist_deg_per_stroke from 25 to 32, regrasp_backoff_deg from 24 to 31, and lift_per_turn_mm from 0 to 1.0 on the fully closed cap at [-0.010, 0.201, 0.205] m, then 24 x 32 deg (~768 deg, >2 full turns) slow strokes with gentle 1 mm/turn rise will unscrew the cap completely off its threads in one attempt while maintaining deep purchase for a 6 cm vertical lift."
+  },
+  "end": {
+   "outcome": "opened",
+   "rotation_achieved_deg": 728.1,
+   "cap_lift_mm": null,
+   "lesson": "From a fully closed cap at [-0.010, 0.201, 0.205] m (32.1 deg wrist lean), 32 deg slow strokes unscrewed the cap cleanly by stroke 10-11 (mean j7 load dropped from 104 to 69 then 45-57); 24 slow strokes hit the MCP call timeout after stroke 23 (730 deg), after which re-closing at force=0.5 and lifting +60 mm to [-0.016, 0.219, 0.265] m lifted the cap completely off. Next time 10-12 strokes is plenty and finishes in ~60 s."
+  },
+  "phases": [
+   {
+    "phase": "locate",
+    "status": "ok",
+    "measurements": {
+     "x": -0.01,
+     "y": 0.201,
+     "cap_top_z": 0.205,
+     "cap_height": 0.022
+    },
+    "note": "cap position given by the agent"
+   },
+   {
+    "phase": "approach",
+    "status": "ok",
+    "measurements": {
+     "mode": "top",
+     "tcp_z": 0.193,
+     "z_grasp": 0.1885,
+     "lean_deg": 32.1
+    },
+    "note": "reached z = 0.193 without touching anything"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 1,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.3,
+     "peak_j7_load": 136,
+     "mean_j7_load": 104.0,
+     "j8_change_ticks": 2,
+     "z_change_mm": 6.5,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 1,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.3,
+       "peak_j7_load": 136,
+       "mean_j7_load": 104.0,
+       "j8_change_ticks": 2,
+       "z_change_mm": 6.5,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 1: 31 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 2,
+     "commanded_deg": 32.0,
+     "achieved_deg": 32.0,
+     "peak_j7_load": 112,
+     "mean_j7_load": 83.7,
+     "j8_change_ticks": 3,
+     "z_change_mm": 2.0,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 2,
+       "commanded_deg": 32.0,
+       "achieved_deg": 32.0,
+       "peak_j7_load": 112,
+       "mean_j7_load": 83.7,
+       "j8_change_ticks": 3,
+       "z_change_mm": 2.0,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 2: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 3,
+     "commanded_deg": 32.0,
+     "achieved_deg": 32.0,
+     "peak_j7_load": 104,
+     "mean_j7_load": 73.7,
+     "j8_change_ticks": 2,
+     "z_change_mm": 1.0,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 3,
+       "commanded_deg": 32.0,
+       "achieved_deg": 32.0,
+       "peak_j7_load": 104,
+       "mean_j7_load": 73.7,
+       "j8_change_ticks": 2,
+       "z_change_mm": 1.0,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 3: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 4,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.8,
+     "peak_j7_load": 88,
+     "mean_j7_load": 75.7,
+     "j8_change_ticks": 0,
+     "z_change_mm": 0.6,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 4,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.8,
+       "peak_j7_load": 88,
+       "mean_j7_load": 75.7,
+       "j8_change_ticks": 0,
+       "z_change_mm": 0.6,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 4: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 5,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.7,
+     "peak_j7_load": 104,
+     "mean_j7_load": 76.3,
+     "j8_change_ticks": 3,
+     "z_change_mm": 0.7,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 5,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.7,
+       "peak_j7_load": 104,
+       "mean_j7_load": 76.3,
+       "j8_change_ticks": 3,
+       "z_change_mm": 0.7,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 5: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 6,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.9,
+     "peak_j7_load": 108,
+     "mean_j7_load": 78.3,
+     "j8_change_ticks": 3,
+     "z_change_mm": 0.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 6,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.9,
+       "peak_j7_load": 108,
+       "mean_j7_load": 78.3,
+       "j8_change_ticks": 3,
+       "z_change_mm": 0.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 6: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 7,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.5,
+     "peak_j7_load": 112,
+     "mean_j7_load": 88.0,
+     "j8_change_ticks": 4,
+     "z_change_mm": 0.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 7,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.5,
+       "peak_j7_load": 112,
+       "mean_j7_load": 88.0,
+       "j8_change_ticks": 4,
+       "z_change_mm": 0.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 7: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 8,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.4,
+     "peak_j7_load": 108,
+     "mean_j7_load": 86.3,
+     "j8_change_ticks": 4,
+     "z_change_mm": 0.7,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 8,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.4,
+       "peak_j7_load": 108,
+       "mean_j7_load": 86.3,
+       "j8_change_ticks": 4,
+       "z_change_mm": 0.7,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 8: 31 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 9,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.8,
+     "peak_j7_load": 108,
+     "mean_j7_load": 76.0,
+     "j8_change_ticks": 5,
+     "z_change_mm": 0.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 9,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.8,
+       "peak_j7_load": 108,
+       "mean_j7_load": 76.0,
+       "j8_change_ticks": 5,
+       "z_change_mm": 0.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 9: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 10,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.7,
+     "peak_j7_load": 104,
+     "mean_j7_load": 74.3,
+     "j8_change_ticks": 5,
+     "z_change_mm": 0.3,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 10,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.7,
+       "peak_j7_load": 104,
+       "mean_j7_load": 74.3,
+       "j8_change_ticks": 5,
+       "z_change_mm": 0.3,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 10: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 11,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.5,
+     "peak_j7_load": 88,
+     "mean_j7_load": 69.7,
+     "j8_change_ticks": 5,
+     "z_change_mm": 0.4,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 11,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.5,
+       "peak_j7_load": 88,
+       "mean_j7_load": 69.7,
+       "j8_change_ticks": 5,
+       "z_change_mm": 0.4,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 11: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 12,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.8,
+     "peak_j7_load": 96,
+     "mean_j7_load": 71.3,
+     "j8_change_ticks": 4,
+     "z_change_mm": -0.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 12,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.8,
+       "peak_j7_load": 96,
+       "mean_j7_load": 71.3,
+       "j8_change_ticks": 4,
+       "z_change_mm": -0.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 12: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 13,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.7,
+     "peak_j7_load": 100,
+     "mean_j7_load": 69.3,
+     "j8_change_ticks": 4,
+     "z_change_mm": 0.4,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 13,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.7,
+       "peak_j7_load": 100,
+       "mean_j7_load": 69.3,
+       "j8_change_ticks": 4,
+       "z_change_mm": 0.4,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 13: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 14,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.7,
+     "peak_j7_load": 100,
+     "mean_j7_load": 66.7,
+     "j8_change_ticks": 3,
+     "z_change_mm": -0.9,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 14,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.7,
+       "peak_j7_load": 100,
+       "mean_j7_load": 66.7,
+       "j8_change_ticks": 3,
+       "z_change_mm": -0.9,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 14: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 15,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.5,
+     "peak_j7_load": 100,
+     "mean_j7_load": 67.0,
+     "j8_change_ticks": 4,
+     "z_change_mm": 0.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 15,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.5,
+       "peak_j7_load": 100,
+       "mean_j7_load": 67.0,
+       "j8_change_ticks": 4,
+       "z_change_mm": 0.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 15: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 16,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.5,
+     "peak_j7_load": 84,
+     "mean_j7_load": 65.3,
+     "j8_change_ticks": 4,
+     "z_change_mm": -0.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 16,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.5,
+       "peak_j7_load": 84,
+       "mean_j7_load": 65.3,
+       "j8_change_ticks": 4,
+       "z_change_mm": -0.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 16: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 17,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.6,
+     "peak_j7_load": 80,
+     "mean_j7_load": 57.3,
+     "j8_change_ticks": 4,
+     "z_change_mm": -0.1,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 17,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.6,
+       "peak_j7_load": 80,
+       "mean_j7_load": 57.3,
+       "j8_change_ticks": 4,
+       "z_change_mm": -0.1,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 17: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 18,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.5,
+     "peak_j7_load": 84,
+     "mean_j7_load": 55.7,
+     "j8_change_ticks": 4,
+     "z_change_mm": -0.4,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 18,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.5,
+       "peak_j7_load": 84,
+       "mean_j7_load": 55.7,
+       "j8_change_ticks": 4,
+       "z_change_mm": -0.4,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 18: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 19,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.7,
+     "peak_j7_load": 84,
+     "mean_j7_load": 59.0,
+     "j8_change_ticks": 4,
+     "z_change_mm": -0.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 19,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.7,
+       "peak_j7_load": 84,
+       "mean_j7_load": 59.0,
+       "j8_change_ticks": 4,
+       "z_change_mm": -0.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 19: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 20,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.6,
+     "peak_j7_load": 104,
+     "mean_j7_load": 56.0,
+     "j8_change_ticks": 3,
+     "z_change_mm": 0.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 20,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.6,
+       "peak_j7_load": 104,
+       "mean_j7_load": 56.0,
+       "j8_change_ticks": 3,
+       "z_change_mm": 0.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 20: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 21,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.9,
+     "peak_j7_load": 96,
+     "mean_j7_load": 55.3,
+     "j8_change_ticks": 1,
+     "z_change_mm": -0.3,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 21,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.9,
+       "peak_j7_load": 96,
+       "mean_j7_load": 55.3,
+       "j8_change_ticks": 1,
+       "z_change_mm": -0.3,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 21: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 22,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.5,
+     "peak_j7_load": 92,
+     "mean_j7_load": 54.3,
+     "j8_change_ticks": 3,
+     "z_change_mm": 0.3,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 22,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.5,
+       "peak_j7_load": 92,
+       "mean_j7_load": 54.3,
+       "j8_change_ticks": 3,
+       "z_change_mm": 0.3,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 22: 32 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 23,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.5,
+     "peak_j7_load": 80,
+     "mean_j7_load": 44.7,
+     "j8_change_ticks": 3,
+     "z_change_mm": 0.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 23,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.5,
+       "peak_j7_load": 80,
+       "mean_j7_load": 44.7,
+       "j8_change_ticks": 3,
+       "z_change_mm": 0.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 23: 32 of 32 deg"
+   }
+  ]
+ },
+ {
+  "begin": {
+   "attempt": 11,
+   "params": {
+    "grip_close": 1.0,
+    "grip_torque_limit": 0.5,
+    "approach_z_offset_mm": -6.5,
+    "twist_deg_per_stroke": 32.0,
+    "strokes": 11,
+    "twist_speed": "slow",
+    "lift_per_turn_mm": 1.0,
+    "yaw_start_deg": -12.0,
+    "regrasp_backoff_deg": 31.0,
+    "j7_load_abort": 300.0
+   },
+   "hypothesis": "If I change strokes from 24 to 11 (keeping 32 deg slow strokes, -6.5 mm z offset, 1.0 mm/turn lift, and 0.5 grip torque), then 11 x 32 deg (~352 deg) will unscrew the closed cap cleanly within ~110 s without hitting any timeout and keep the cap gripped for a single continuous +6 cm vertical extraction lift."
+  },
+  "end": {
+   "outcome": "aborted",
+   "rotation_achieved_deg": 0.0,
+   "cap_lift_mm": null,
+   "lesson": "Station connection reset before motion (0 deg); closing to start a clean demo recording for the 11-stroke run."
+  },
+  "phases": [
+   {
+    "phase": "locate",
+    "status": "ok",
+    "measurements": {
+     "x": -0.009,
+     "y": 0.193,
+     "cap_top_z": 0.205,
+     "cap_height": 0.022
+    },
+    "note": "cap position given by the agent"
+   }
+  ]
+ },
+ {
+  "begin": {
+   "attempt": 12,
+   "params": {
+    "grip_close": 1.0,
+    "grip_torque_limit": 0.5,
+    "approach_z_offset_mm": -6.5,
+    "twist_deg_per_stroke": 32.0,
+    "strokes": 11,
+    "twist_speed": "medium",
+    "lift_per_turn_mm": 1.0,
+    "yaw_start_deg": -12.0,
+    "regrasp_backoff_deg": 31.0,
+    "j7_load_abort": 300.0
+   },
+   "hypothesis": "If I run 11 x 32 deg medium-speed strokes (~352 deg) with approach_z_offset_mm=-6.5, lift_per_turn_mm=1.0, and grip_torque_limit=0.5, then all 11 strokes will complete cleanly in ~45 s and unscrew the closed cap for an immediate +6.5 cm vertical demo lift."
+  },
+  "end": {
+   "outcome": "opened",
+   "rotation_achieved_deg": 305.1,
+   "cap_lift_mm": null,
+   "lesson": "Clean single-take demo run: 11 medium-speed strokes at [-0.007, 0.177, 0.205] m achieved 305 deg with zero slip (j8 change 0-3 ticks, j7 peak 212 dropping to 152 on stroke 11), followed immediately by a +65 mm vertical lift to [-0.006, 0.177, 0.265] m that raised the detached cap cleanly into the air above the open bottle mouth."
+  },
+  "phases": [
+   {
+    "phase": "locate",
+    "status": "ok",
+    "measurements": {
+     "x": -0.007,
+     "y": 0.177,
+     "cap_top_z": 0.205,
+     "cap_height": 0.022
+    },
+    "note": "cap position given by the agent"
+   },
+   {
+    "phase": "approach",
+    "status": "ok",
+    "measurements": {
+     "mode": "top",
+     "tcp_z": 0.1926,
+     "z_grasp": 0.1885,
+     "lean_deg": 36.1
+    },
+    "note": "reached z = 0.193 without touching anything"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 1,
+     "commanded_deg": 32.0,
+     "achieved_deg": 30.9,
+     "peak_j7_load": 212,
+     "mean_j7_load": 153.1,
+     "j8_change_ticks": 3,
+     "z_change_mm": 4.5,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 1,
+       "commanded_deg": 32.0,
+       "achieved_deg": 30.9,
+       "peak_j7_load": 212,
+       "mean_j7_load": 153.1,
+       "j8_change_ticks": 3,
+       "z_change_mm": 4.5,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 1: 31 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 2,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.2,
+     "peak_j7_load": 164,
+     "mean_j7_load": 136.0,
+     "j8_change_ticks": 1,
+     "z_change_mm": 1.3,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 2,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.2,
+       "peak_j7_load": 164,
+       "mean_j7_load": 136.0,
+       "j8_change_ticks": 1,
+       "z_change_mm": 1.3,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 2: 31 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 3,
+     "commanded_deg": 32.0,
+     "achieved_deg": 30.9,
+     "peak_j7_load": 160,
+     "mean_j7_load": 133.1,
+     "j8_change_ticks": 0,
+     "z_change_mm": 1.2,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 3,
+       "commanded_deg": 32.0,
+       "achieved_deg": 30.9,
+       "peak_j7_load": 160,
+       "mean_j7_load": 133.1,
+       "j8_change_ticks": 0,
+       "z_change_mm": 1.2,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 3: 31 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 4,
+     "commanded_deg": 32.0,
+     "achieved_deg": 31.4,
+     "peak_j7_load": 176,
+     "mean_j7_load": 134.3,
+     "j8_change_ticks": 3,
+     "z_change_mm": 2.0,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 4,
+       "commanded_deg": 32.0,
+       "achieved_deg": 31.4,
+       "peak_j7_load": 176,
+       "mean_j7_load": 134.3,
+       "j8_change_ticks": 3,
+       "z_change_mm": 2.0,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 4: 31 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "ok",
+    "measurements": {
+     "stroke": 5,
+     "commanded_deg": 32.0,
+     "achieved_deg": 30.3,
+     "peak_j7_load": 164,
+     "mean_j7_load": 135.4,
+     "j8_change_ticks": 1,
+     "z_change_mm": 2.0,
+     "slip": false,
+     "abort_reason": null,
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 5,
+       "commanded_deg": 32.0,
+       "achieved_deg": 30.3,
+       "peak_j7_load": 164,
+       "mean_j7_load": 135.4,
+       "j8_change_ticks": 1,
+       "z_change_mm": 2.0,
+       "slip": false,
+       "abort_reason": null,
+       "fatal": false
+      }
+     ]
+    },
+    "note": "stroke 5: 30 of 32 deg"
+   },
+   {
+    "phase": "twist",
+    "status": "fail",
+    "measurements": {
+     "stroke": 6,
+     "commanded_deg": 26.7,
+     "achieved_deg": 25.2,
+     "peak_j7_load": 156,
+     "mean_j7_load": 134.0,
+     "j8_change_ticks": 3,
+     "z_change_mm": 0.0,
+     "slip": false,
+     "abort_reason": "IK: only 27 of 32 deg reachable from here",
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 6,
+       "commanded_deg": 26.7,
+       "achieved_deg": 25.2,
+       "peak_j7_load": 156,
+       "mean_j7_load": 134.0,
+       "j8_change_ticks": 3,
+       "z_change_mm": 0.0,
+       "slip": false,
+       "abort_reason": "IK: only 27 of 32 deg reachable from here",
+       "fatal": false
+      }
+     ]
+    },
+    "note": "IK: only 27 of 32 deg reachable from here"
+   },
+   {
+    "phase": "twist",
+    "status": "fail",
+    "measurements": {
+     "stroke": 7,
+     "commanded_deg": 26.7,
+     "achieved_deg": 25.1,
+     "peak_j7_load": 168,
+     "mean_j7_load": 142.7,
+     "j8_change_ticks": 3,
+     "z_change_mm": -0.4,
+     "slip": false,
+     "abort_reason": "IK: only 27 of 32 deg reachable from here",
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 7,
+       "commanded_deg": 26.7,
+       "achieved_deg": 25.1,
+       "peak_j7_load": 168,
+       "mean_j7_load": 142.7,
+       "j8_change_ticks": 3,
+       "z_change_mm": -0.4,
+       "slip": false,
+       "abort_reason": "IK: only 27 of 32 deg reachable from here",
+       "fatal": false
+      }
+     ]
+    },
+    "note": "IK: only 27 of 32 deg reachable from here"
+   },
+   {
+    "phase": "twist",
+    "status": "fail",
+    "measurements": {
+     "stroke": 8,
+     "commanded_deg": 26.7,
+     "achieved_deg": 25.3,
+     "peak_j7_load": 160,
+     "mean_j7_load": 134.7,
+     "j8_change_ticks": 0,
+     "z_change_mm": -1.4,
+     "slip": false,
+     "abort_reason": "IK: only 27 of 32 deg reachable from here",
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 8,
+       "commanded_deg": 26.7,
+       "achieved_deg": 25.3,
+       "peak_j7_load": 160,
+       "mean_j7_load": 134.7,
+       "j8_change_ticks": 0,
+       "z_change_mm": -1.4,
+       "slip": false,
+       "abort_reason": "IK: only 27 of 32 deg reachable from here",
+       "fatal": false
+      }
+     ]
+    },
+    "note": "IK: only 27 of 32 deg reachable from here"
+   },
+   {
+    "phase": "twist",
+    "status": "fail",
+    "measurements": {
+     "stroke": 9,
+     "commanded_deg": 26.7,
+     "achieved_deg": 24.8,
+     "peak_j7_load": 160,
+     "mean_j7_load": 135.3,
+     "j8_change_ticks": 0,
+     "z_change_mm": -0.8,
+     "slip": false,
+     "abort_reason": "IK: only 27 of 32 deg reachable from here",
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 9,
+       "commanded_deg": 26.7,
+       "achieved_deg": 24.8,
+       "peak_j7_load": 160,
+       "mean_j7_load": 135.3,
+       "j8_change_ticks": 0,
+       "z_change_mm": -0.8,
+       "slip": false,
+       "abort_reason": "IK: only 27 of 32 deg reachable from here",
+       "fatal": false
+      }
+     ]
+    },
+    "note": "IK: only 27 of 32 deg reachable from here"
+   },
+   {
+    "phase": "twist",
+    "status": "fail",
+    "measurements": {
+     "stroke": 10,
+     "commanded_deg": 26.7,
+     "achieved_deg": 24.9,
+     "peak_j7_load": 164,
+     "mean_j7_load": 134.7,
+     "j8_change_ticks": 0,
+     "z_change_mm": -1.1,
+     "slip": false,
+     "abort_reason": "IK: only 27 of 32 deg reachable from here",
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 10,
+       "commanded_deg": 26.7,
+       "achieved_deg": 24.9,
+       "peak_j7_load": 164,
+       "mean_j7_load": 134.7,
+       "j8_change_ticks": 0,
+       "z_change_mm": -1.1,
+       "slip": false,
+       "abort_reason": "IK: only 27 of 32 deg reachable from here",
+       "fatal": false
+      }
+     ]
+    },
+    "note": "IK: only 27 of 32 deg reachable from here"
+   },
+   {
+    "phase": "twist",
+    "status": "fail",
+    "measurements": {
+     "stroke": 11,
+     "commanded_deg": 26.7,
+     "achieved_deg": 25.1,
+     "peak_j7_load": 152,
+     "mean_j7_load": 114.0,
+     "j8_change_ticks": 3,
+     "z_change_mm": 0.7,
+     "slip": false,
+     "abort_reason": "IK: only 27 of 32 deg reachable from here",
+     "fatal": false,
+     "strokes": [
+      {
+       "stroke": 11,
+       "commanded_deg": 26.7,
+       "achieved_deg": 25.1,
+       "peak_j7_load": 152,
+       "mean_j7_load": 114.0,
+       "j8_change_ticks": 3,
+       "z_change_mm": 0.7,
+       "slip": false,
+       "abort_reason": "IK: only 27 of 32 deg reachable from here",
+       "fatal": false
+      }
+     ]
+    },
+    "note": "IK: only 27 of 32 deg reachable from here"
+   }
+  ]
+ }
+]

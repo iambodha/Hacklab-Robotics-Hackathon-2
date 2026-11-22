@@ -8,6 +8,8 @@ lanes needed do not fit, the budget's lanes are spread evenly over the region an
 """
 from __future__ import annotations
 
+from ..config import get as strategy
+
 import math
 from dataclasses import dataclass, field
 
@@ -96,7 +98,8 @@ def lane_offsets(cross: float, spacing: float, max_lanes: int | None = None) -> 
 
 
 def plan_coverage(region: Region, w_hat: float, beta: float, budget: int, limits: dict, axis: str = "auto",
-                  overshoot: float = 0.01, passes: int = 1) -> WipePlan:
+                  overshoot: float | None = None, passes: int = 1) -> WipePlan:
+    overshoot = strategy("wipe.plan.overshoot_m") if overshoot is None else overshoot
     sx, sy = region.size
     max_len, min_len = limits["max_stroke_m"], limits["min_stroke_m"]
     if axis == "auto":                            # strokes along the longer side, unless only the shorter one fits

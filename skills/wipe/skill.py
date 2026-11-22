@@ -5,6 +5,8 @@ attached to every proposal so the executor applies the hardware-validated settin
 """
 from __future__ import annotations
 
+from ..config import get as strategy
+
 import json
 from pathlib import Path
 
@@ -63,8 +65,9 @@ class WipeSkill(Skill):
         return ValidationResult(not reasons, reasons, checks)
 
     def execute(self, plan: WipePlan, *, based_on_obs: str, setup_id: str, now: float, source: str = "script",
-                ttl_s: float = 30.0, version: str = "", plan_id: str = "") -> list[ActionProposal]:
+                ttl_s: float | None = None, version: str = "", plan_id: str = "") -> list[ActionProposal]:
         """One proposal per stroke, then a retreat (park) so the overview camera sees the board for inspection."""
+        ttl_s = strategy("wipe.proposal.ttl_s") if ttl_s is None else ttl_s
         props = []
         for s in plan.strokes:
             props.append(ActionProposal(

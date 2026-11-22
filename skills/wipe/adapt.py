@@ -7,6 +7,8 @@ parameter's bounds. Every attempt, accepted or not, returns a record with its ev
 """
 from __future__ import annotations
 
+from ..config import get as strategy
+
 from dataclasses import dataclass, field
 
 from ..model import Param, SkillVersion
@@ -24,7 +26,8 @@ class WidthMeasurement:
 
 
 def update_width(version: SkillVersion, spec: Param, m: WidthMeasurement, visible: bool,
-                 alpha: float = ALPHA) -> tuple[SkillVersion | None, dict]:
+                 alpha: float | None = None) -> tuple[SkillVersion | None, dict]:
+    alpha = strategy("wipe.adapt.alpha") if alpha is None else alpha
     old = float(version.params[spec.name])
     rec = {"param": spec.name, "old": old, "observed": m.w_observed, "alpha": alpha, "visible": visible,
            "valid": m.valid, "why": m.why, "interval": m.interval, "evidence": list(m.evidence),

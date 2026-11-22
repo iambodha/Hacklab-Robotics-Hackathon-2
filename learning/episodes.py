@@ -11,6 +11,7 @@ phase; when it is down or busy the attempt still runs and the record says so.
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 import urllib.error
@@ -21,7 +22,7 @@ from . import skillcfg
 
 DEFAULT_DIR = Path("/Users/bodha/Documents/b0dha/Robotics-Hackathon/logs/learning/bottle")
 OUTCOMES = ("opened", "loosened", "no_progress", "slip", "misaligned", "aborted", "fault")
-PHASES = ("locate", "approach", "grasp", "twist", "release", "regrasp", "check", "retreat")
+PHASES = ("locate", "approach", "grasp", "twist", "release", "regrasp", "check", "extract", "retreat")
 STATUSES = ("ok", "fail", "abort")
 MAX_CHANGES = 3            # parameters an attempt may change against the previous one (attempt 1: free)
 
@@ -36,7 +37,9 @@ SAFETY = {
     "slip_ticks": 25,               # j8 closing further than this during a twist = the jaws slid on the cap
 }
 
-# Learnable parameters: (kind, lo, hi, default, meaning). kind: float | int | enum (lo = the choices).
+# Learnable parameters: (kind, lo, hi, baseline default, meaning). kind: float | int | enum (lo = the choices).
+# The defaults in force come from the skill config (params.default.<name>): the learned profile
+# learning/profiles/bottle_cap.json, else the baseline column here (the values before 22 Nov's attempts).
 PARAMS: dict[str, tuple] = {
     "grip_close": ("float", 0.0, 1.0, 1.0,
                    "jaw target as closed fraction: 1 = close until the jaws stall on the cap"),
@@ -57,17 +60,37 @@ PARAMS: dict[str, tuple] = {
 }
 
 
-def defaults() -> dict:
+def baseline() -> dict:
+    """The code defaults (PARAMS): what attempt 1 of 22 Nov would have started from."""
     return {k: spec[3] for k, spec in PARAMS.items()}
 
 
+def defaults(values: dict | None = None) -> dict:
+    """The episode defaults in force: skill-config keys params.default.<name> (the learned profile, else baseline)."""
+    v = skillcfg.active()["values"] if values is None else values
+    return {k: v.get(f"params.default.{k}", spec[3]) for k, spec in PARAMS.items()}
+
+
 def params_table() -> dict[str, tuple]:
-    """PARAMS with the bounds of the active skill config (keys params.bounds.<name>.lo/hi; the code values above are
-    their defaults, each capped by a hard envelope in skillcfg.PARAM_ENVELOPE)."""
+    """PARAMS with the bounds and defaults of the active skill config (params.bounds.<name>.lo/hi,
+    params.default.<name>; each capped by a hard envelope in skillcfg.PARAM_ENVELOPE)."""
     v = skillcfg.active()["values"]
-    return {k: (kind, lo, hi, d, about) if kind == "enum" else
-            (kind, v[f"params.bounds.{k}.lo"], v[f"params.bounds.{k}.hi"], d, about)
-            for k, (kind, lo, hi, d, about) in PARAMS.items()}
+    d = defaults(v)
+    return {k: (kind, lo, hi, d[k], about) if kind == "enum" else
+            (kind, v[f"params.bounds.{k}.lo"], v[f"params.bounds.{k}.hi"], d[k], about)
+            for k, (kind, lo, hi, _, about) in PARAMS.items()}
+
+
+def config_changes_since(begin: dict | None, values: dict | None = None) -> dict:
+    """{name: {"before", "after"}} for the episode defaults (params.default.*) that changed in the skill config since
+    the attempt `begin` ran (its stamped version and overrides): an applied proposal reaches the next attempt."""
+    if not begin or not begin.get("skillcfg"):
+        return {}
+    now = defaults(values)
+    then = begin.get("skill_defaults") or defaults({**skillcfg.defaults(), **(begin["skillcfg"].get("overrides") or {})})
+    if begin["skillcfg"].get("version") == skillcfg.version() and then == now:
+        return {}
+    return {k: {"before": then[k], "after": now[k]} for k in PARAMS if then[k] != now[k]}
 
 
 def bounds_text() -> str:
@@ -94,7 +117,7 @@ def validate(params: dict, base: dict | None = None) -> tuple[dict, list[str], l
                 errors.append(f"{k}={v!r} must be one of {list(lo)}")
                 continue
         else:
-            if isinstance(v, bool) or not isinstance(v, (int, float)):
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
                 errors.append(f"{k}={v!r} must be a number")
                 continue
             if kind == "int" and float(v) != int(v):
@@ -239,7 +262,16 @@ class EpisodeStore:
             n = self.open_attempt()
             return {"ok": False, "errors": [f"attempt {n} is still open: call episode_end for it first"]}
         prev = self.last_params()
-        full, changed, errors = validate(params, prev)
+        from_cfg = {}
+        if prev is not None:
+            last = [a["begin"] for a in self.attempts().values() if a["begin"]][-1]
+            from_cfg = config_changes_since(last)          # an applied proposal changed these defaults: take them over
+            base = {**prev, **{k: c["after"] for k, c in from_cfg.items()}}
+            full, _, errors = validate(params, base)
+            changed = [k for k in PARAMS if full.get(k) != prev.get(k)]
+            from_cfg = {k: c for k, c in from_cfg.items() if k not in (params or {}) and full[k] != prev.get(k)}
+        else:
+            full, changed, errors = validate(params, prev)
         if prev is not None and len(changed) > MAX_CHANGES:
             errors.append(f"{len(changed)} parameters changed ({', '.join(changed)}); change at most {MAX_CHANGES} "
                           f"per attempt so the effect can be attributed")
@@ -256,11 +288,12 @@ class EpisodeStore:
         self.save_images(n, "before", images or {})
         self._append({"type": "episode_begin", "attempt": n, "params": full, "hypothesis": hypothesis.strip(),
                       "based_on": list(based_on), "recording_id": rec_id, "changed": changed,
-                      "skillcfg": cfg,
+                      "skillcfg": cfg, "skill_profile": skillcfg.profile_label(), "skill_defaults": defaults(),
+                      **({"from_config": from_cfg} if from_cfg else {}),
                       **({"recording_note": note} if note else {})})
         self.write_report(n)
         return {"ok": True, "attempt": n, "params": full, "changed": changed, "recording_id": rec_id, "note": note,
-                "skillcfg": cfg}
+                "skillcfg": cfg, "from_config": from_cfg}
 
     def phase(self, n: int, phase: str, status: str = "ok", measurements: dict | None = None, note: str = "") -> dict:
         if phase not in PHASES or status not in STATUSES:
@@ -324,6 +357,9 @@ class EpisodeStore:
             lines.append("params: " + ", ".join(f"{k}={_fmt(v)}" for k, v in (b.get("params") or {}).items()))
             if ch:
                 lines.append("changed vs previous: " + ", ".join(ch))
+            if b.get("from_config"):
+                lines.append("taken over from the skill config: " + ", ".join(
+                    f"{k} {_fmt(c['before'])} -> {_fmt(c['after'])}" for k, c in b["from_config"].items()))
             if b.get("skillcfg"):
                 lines.append("skill config: " + cfg_label(b))
             lines.append(f"hypothesis: {b.get('hypothesis', '')}")
@@ -356,7 +392,8 @@ class EpisodeStore:
                f"**Hypothesis:** {b['hypothesis']}", "",
                f"Based on attempts: {', '.join(map(str, b.get('based_on') or [])) or 'none'}. "
                f"Changed: {', '.join(b.get('changed') or []) or 'nothing'}.", "",
-               f"Skill config: {cfg_label(b)}.", "",
+               f"Skill config: {cfg_label(b)}" + (f"; learned profile {b['skill_profile']}"
+                                                  if b.get("skill_profile") else "") + ".", "",
                "| parameter | value |", "|---|---|"]
         out += [f"| {k}{' *' if k in (b.get('changed') or []) else ''} | {_fmt(v)} |" for k, v in b["params"].items()]
         out += ["", "## Phases", "", "| t (s) | phase | status | measurements | note |", "|---|---|---|---|---|"]
@@ -465,10 +502,12 @@ def aggregate(phases: list[dict]) -> dict:
         out["z_change_mm"] = round(sum(float(s.get("z_change_mm") or 0) for s in strokes), 1)
     for p in phases:
         m = p.get("measurements") or {}
-        if p["phase"] == "check" and m.get("cap_lift_mm") is not None:
-            out["cap_lift_mm"] = m["cap_lift_mm"]
-        if p["phase"] == "check" and m.get("cap_free") is not None:
+        if p["phase"] in ("check", "extract") and m.get("cap_lift_mm") is not None:
+            out["cap_lift_mm"] = m["cap_lift_mm"]                 # the later lift (extract after check) counts
+        if p["phase"] in ("check", "extract") and m.get("cap_free") is not None:
             out["cap_free"] = m["cap_free"]
+        if p["phase"] == "twist" and m.get("summary"):
+            out.update({k: m[k] for k in ("stopped_by", "strokes_needed", "free_signal") if k in m})
         if p["status"] == "abort":
             out.setdefault("aborts", []).append(f"{p['phase']}: {p.get('note', '')}"[:160])
     return out
