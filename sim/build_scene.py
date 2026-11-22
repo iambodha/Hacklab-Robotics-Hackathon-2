@@ -139,7 +139,10 @@ def add_gripper_parts(root, layout):
                                       ('Gripper_Jaw_01_v1_1', [.308573, -.243367, -.049391], [.035, .09, 0], 'right_pad')]:
         body = root.find(f'.//body[@name="{name}"]')
         for geom in body.findall('geom'): geom.attrib.update(NO_CONTACT)
-        ET.SubElement(body, 'geom', name=label, type='box', pos=fmt(np.subtract(desired, pos)), size='.006 .016 .018',
+        # pad half-sizes: closing-axis thickness, along the approach, across (layout 'pad_half_size' overrides,
+        # e.g. narrow fingertips that fit inside a part for an internal grip)
+        ET.SubElement(body, 'geom', name=label, type='box', pos=fmt(np.subtract(desired, pos)),
+                      size=fmt(layout.get('pad_half_size', [.006, .016, .018])),
                       rgba='.15 .15 .16 1', friction='1.2 .02 .002', condim='4', solref='.004 1', solimp='.95 .99 .001',
                       mass='.005', **PAD_CONTACT)
     cam = layout['wrist_camera']
@@ -289,6 +292,8 @@ def build_xml(layout, out_dir):
             add_part(body, part, f"{spec['name']}_g{i}", None if part.get('visual_only') else spec['mass']/len(physical))
         for site_name, pos in sites.items():
             ET.SubElement(body, 'site', name=site_name, pos=fmt(pos), size='.003', rgba='1 0 1 1', group='3')
+    if layout.get('cap_puzzle'):
+        add_cap_puzzle(root, layout['cap_puzzle'])
     if layout.get('markers'):
         add_markers(root, layout['markers'], out_dir)
     for cam in layout['cameras']:
@@ -299,6 +304,97 @@ def build_xml(layout, out_dir):
             pos, axes = cam['pos'], camera_axes(cam['pos'], cam['lookat'])
         ET.SubElement(world, 'camera', name=cam['name'], pos=fmt(pos), xyaxes=fmt(axes), fovy=str(cam['fovy']))
     return root
+
+
+def add_ring(body, name, r_in, r_out, z0, z1, n, rgba, contact, mass=None, group='3', friction='0.9 0.02 0.002'):
+    """Collision ring (tube) from n boxes between radii r_in..r_out and heights z0..z1 in the body frame."""
+    rc, half_w = (r_in + r_out) / 2, math.pi * r_out / n * 1.08
+    for k in range(n):
+        a = 2 * math.pi * k / n
+        attrs = dict(name=f'{name}_{k}', type='box', size=fmt([(r_out - r_in) / 2, half_w, (z1 - z0) / 2]),
+                     pos=fmt([rc * math.cos(a), rc * math.sin(a), (z0 + z1) / 2]), euler=fmt([0, 0, a]),
+                     rgba=fmt(rgba), group=group, friction=friction, condim='4', **contact)
+        if mass is not None: attrs['mass'] = f'{mass / n:.6g}'
+        ET.SubElement(body, 'geom', attrs)
+
+
+def add_cap_puzzle(root, spec):
+    """Threaded-cap puzzle from the Onshape STLs (assets/meshes/cap_puzzle, mm): a fixture box on the table, the
+    'bottom' part fixed on it with its thread up, the 'inner' part standing in the bottom's bore with its hollow
+    skirt (inner Ø35) up, and the 'cap' ring screwed on the thread. Meshes are visual only; collisions are
+    primitive rings sized from mesh sections (units below in mm, heights from the fixture top).
+    Cap joints: slide x/y (+-4 mm play on a spring) / z + hinge z. Equality 'cap_thread' (lift = pitch * turn) holds
+    it on the thread; the simulator drops it and frees the slides once it has turned turns_to_free (sim_arm_mcp.py)."""
+    asset, world = root.find('asset'), root.find('worldbody')
+    size = root.find('size')
+    if size is None: size = ET.SubElement(root, 'size')
+    size.set('memory', '256M')  # ring-in-ring box contacts need far more arena than the default
+    mesh_dir = (HERE / spec.get('mesh_dir', 'assets/meshes/cap_puzzle')).resolve()
+    for name in ('box', 'bottom', 'top_cap', 'inner'):
+        ET.SubElement(asset, 'mesh', name=f'cp_{name}', file=str(mesh_dir / f'{name}.stl'), scale='0.001 0.001 0.001')
+    mm = 0.001
+    x, y = spec['pos']
+    flip = '0 1 0 0'  # 180 deg about x: mesh z -> body -z
+    vis = dict(NO_CONTACT, group='0', mass='0')
+    fixture_h = spec.get('fixture_height_mm', 30) * mm
+    # Fixture box (mesh is y-up, 100 x 30 x 100) with a 40 mm square hole for the inner part's shaft.
+    fx = ET.SubElement(world, 'body', name='cp_fixture', pos=fmt([x, y, 0]))
+    ET.SubElement(fx, 'geom', name='cp_fixture_vis', type='mesh', mesh='cp_box', quat=fmt([math.sqrt(.5), math.sqrt(.5), 0, 0]),
+                  rgba=fmt(spec.get('fixture_rgba', [0.35, 0.36, 0.38, 1])), **vis)
+    half, hole = 0.05, 0.02
+    for k, (px, py, sx, sy) in enumerate([(0, (half + hole) / 2, half, (half - hole) / 2), (0, -(half + hole) / 2, half, (half - hole) / 2),
+                                          ((half + hole) / 2, 0, (half - hole) / 2, hole), (-(half + hole) / 2, 0, (half - hole) / 2, hole)]):
+        ET.SubElement(fx, 'geom', name=f'cp_fixture_c{k}', type='box', pos=fmt([px, py, fixture_h / 2]),
+                      size=fmt([sx, sy, fixture_h / 2]), rgba='.3 .3 .3 1', group='3', friction='0.8 0.01 0.001', **STATIC_CONTACT)
+    # Bottom: fixed, thread up. Body origin = its foot on the fixture top; mesh z 30 -> h 0.
+    b = ET.SubElement(world, 'body', name='cp_bottom', pos=fmt([x, y, fixture_h]))
+    ET.SubElement(b, 'geom', name='cp_bottom_vis', type='mesh', mesh='cp_bottom', quat=flip, pos=fmt([0, 0, 30 * mm]),
+                  rgba=fmt(spec.get('bottom_rgba', [0.25, 0.45, 0.8, 1])), **vis)
+    n = spec.get('segments', 28)
+    for label, (ri, ro, z0, z1) in {'flange': (24.0, 37.5, 0, 21), 'neck': (24.0, 33.5, 21, 30),
+                                    'thread': (32.5, 33.5, 30, 37)}.items():
+        # Slippery top faces: jaw pads resting on the fixed part while they grip the cap must not brake the turn.
+        add_ring(b, f'cp_bottom_{label}', ri * mm, ro * mm, z0 * mm, z1 * mm, n, [.2, .4, .8, 1], STATIC_CONTACT,
+                 friction='0.9 0.02 0.002' if label == 'flange' else '0.05 0.005 0.0005')
+    # Shelf the inner part's floor rests on (h 0..9): a square frame of 4 boxes keeps the contact count low.
+    s_in, s_out = 15 * mm, 24 * mm
+    for k, (px, py, sx, sy) in enumerate([(0, (s_in + s_out) / 2, s_out, (s_out - s_in) / 2), (0, -(s_in + s_out) / 2, s_out, (s_out - s_in) / 2),
+                                          ((s_in + s_out) / 2, 0, (s_out - s_in) / 2, s_in), (-(s_in + s_out) / 2, 0, (s_out - s_in) / 2, s_in)]):
+        ET.SubElement(b, 'geom', name=f'cp_bottom_shelf{k}', type='box', pos=fmt([px, py, 4.5 * mm]), size=fmt([sx, sy, 4.5 * mm]),
+                      rgba='.2 .4 .8 1', group='3', friction='0.9 0.02 0.002', **STATIC_CONTACT)
+    if spec.get('with_inner', True):  # optional: cap only (layout cap_puzzle.with_inner = false)
+        # Inner: skirt up. Body origin = skirt rim (mesh z 0); it rests on the shelf at h 9 (mesh z 17).
+        inner_top = fixture_h + 28 * mm  # floor (body z -19) on the shelf top (h 9)
+        i = ET.SubElement(world, 'body', name='cp_inner', pos=fmt([x, y, inner_top]))
+        ET.SubElement(i, 'freejoint', name='cp_inner_free')
+        ET.SubElement(i, 'geom', name='cp_inner_vis', type='mesh', mesh='cp_inner', quat=flip,
+                      rgba=fmt(spec.get('inner_rgba', [0.93, 0.93, 0.9, 1])), **vis)
+        m_inner = spec.get('inner_mass', 0.03)
+        add_ring(i, 'cp_inner_skirt', 17.5 * mm, 21 * mm, -16.5 * mm, 0, 24, [.9, .9, .9, 1], OBJECT_CONTACT, m_inner * 0.6)
+        ET.SubElement(i, 'geom', name='cp_inner_floor', type='cylinder', size=fmt([18.5 * mm, 1 * mm]), pos=fmt([0, 0, -18 * mm]),
+                      rgba='.9 .9 .9 1', group='3', mass=f'{m_inner * 0.15:.6g}', friction='0.9 0.02 0.002', condim='4', **OBJECT_CONTACT)
+        ET.SubElement(i, 'geom', name='cp_inner_shaft', type='cylinder', size=fmt([12.5 * mm, 10.75 * mm]), pos=fmt([0, 0, -29.75 * mm]),
+                      rgba='.9 .9 .9 1', group='3', mass=f'{m_inner * 0.25:.6g}', friction='0.9 0.02 0.002', condim='4', **OBJECT_CONTACT)
+        ET.SubElement(i, 'site', name='cp_inner_rim', pos='0 0 0', size='.003', rgba='1 0 1 1', group='3')
+    # Cap: lip up, seated on the flange (h 21 + 0.5 mm). Body origin = mesh origin; mesh z 8 -> h 21.5.
+    c = ET.SubElement(world, 'body', name='cp_cap', pos=fmt([x, y, fixture_h + 29.5 * mm]))
+    # Sideways play on the thread (+-4 mm on a soft spring), so a gripper slightly off the cap axis keeps both pads on it.
+    for ax, axis in (('x', '1 0 0'), ('y', '0 1 0')):
+        ET.SubElement(c, 'joint', name=f'cp_cap_s{ax}', type='slide', axis=axis, limited='true', range='-0.004 0.004',
+                      stiffness='60', damping='0.5')
+    ET.SubElement(c, 'joint', name='cp_cap_sz', type='slide', axis='0 0 1', limited='true', range='0 0.006', damping='0.5')
+    ET.SubElement(c, 'joint', name='cp_cap_hinge', type='hinge', axis='0 0 1', limited='true', range='0 100',
+                  frictionloss=str(spec.get('friction_torque', 0.05)), damping='0.02', armature='0.0005')
+    ET.SubElement(c, 'geom', name='cp_cap_vis', type='mesh', mesh='cp_top_cap', quat=flip,
+                  rgba=fmt(spec.get('cap_rgba', [0.85, 0.4, 0.25, 1])), **vis)
+    m_cap = spec.get('cap_mass', 0.04)
+    add_ring(c, 'cp_cap_lip', 30.5 * mm, 38 * mm, 13 * mm, 17 * mm, n, [.8, .4, .2, 1], OBJECT_CONTACT, m_cap * 0.3)
+    add_ring(c, 'cp_cap_wall', 35.0 * mm, 38 * mm, -8 * mm, 13 * mm, n, [.8, .4, .2, 1], OBJECT_CONTACT, m_cap * 0.7)
+    ET.SubElement(c, 'site', name='cp_cap_top', pos=fmt([0, 0, 17 * mm]), size='.003', rgba='1 0 1 1', group='3')
+    equality = root.find('equality')
+    if equality is None: equality = ET.SubElement(root, 'equality')
+    ET.SubElement(equality, 'joint', name='cap_thread', joint1='cp_cap_sz', joint2='cp_cap_hinge',
+                  polycoef=f"0 {spec.get('pitch_mm', 4) * mm / (2 * math.pi):.8f} 0 0 0", solref='0.004 1')
 
 
 def marker_pose(item):

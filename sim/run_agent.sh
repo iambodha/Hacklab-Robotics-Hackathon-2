@@ -7,9 +7,10 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 export ROBOT_SIM_GUI="${ROBOT_SIM_GUI:-1}"
+export MCP_CONNECTION_NONBLOCKING=false  # wait for the sim tools before the first turn (an inherited true would start without them)
 export ROBOT_SIM_TRUTH_LOG="${ROBOT_SIM_TRUTH_LOG:-$HOME/.cache/elrobot-sim/truth.jsonl}"
 mkdir -p "$(dirname "$ROBOT_SIM_TRUTH_LOG")"
-config="$(mktemp --suffix=.json)"
+config="$(mktemp "${TMPDIR:-/tmp}/elrobot-mcp.XXXXXX")"  # portable (BSD mktemp has no --suffix)
 trap 'rm -f "$config"' EXIT
 cat > "$config" <<EOF
 {"mcpServers": {"elrobot-sim": {"command": "bash", "args": ["$here/run_server.sh"]}}}
@@ -23,5 +24,6 @@ claude --tools "" --strict-mcp-config --mcp-config "$config" \
   --append-system-prompt "$(cat "${ROBOT_SIM_PROMPT:-$here/OPERATOR.md}")" "$@" || status=$?
 sleep 2  # Claude kills the server on exit; build the replay for the newest session here
 session="$(ls -1d "$ROBOT_SIM_RECORD_DIR"/*/ 2>/dev/null | sort | tail -1)"
-if [ -n "$session" ]; then "${ROBOT_SIM_PYTHON:-python3}" "$here/make_replay.py" "$session" || true; fi
+py="${ROBOT_SIM_PYTHON:-}"; [ -z "$py" ] && [ -x "$here/../.venv/bin/python" ] && py="$here/../.venv/bin/python"
+if [ -n "$session" ]; then "${py:-python3}" "$here/make_replay.py" "$session" || true; fi
 exit $status

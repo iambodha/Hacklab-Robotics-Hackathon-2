@@ -36,7 +36,8 @@ import time
 from pathlib import Path
 
 GUI = os.environ.get('ROBOT_SIM_GUI') == '1'
-os.environ.setdefault('MUJOCO_GL', 'glfw' if GUI else ('cgl' if sys.platform == 'darwin' else 'osmesa'))
+# macOS: offscreen cameras on CGL (a GLFW context off the main thread kills the app); the viewer needs mjpython.
+os.environ.setdefault('MUJOCO_GL', 'cgl' if sys.platform == 'darwin' else ('glfw' if GUI else 'osmesa'))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import mujoco  # noqa: E402
@@ -57,6 +58,7 @@ IMG_SCALE = int(os.environ.get('ROBOT_SIM_IMG_SCALE', '2'))  # upscale 299x224 f
 GRID = os.environ.get('ROBOT_SIM_GRID', '1') == '1'          # labelled pixel grid on look() images
 KINEMATICS = os.environ.get('ROBOT_SIM_KINEMATICS', '1') == '1'  # tcp_pose / move_tcp / pixel_to_table tools
 SKILLS = os.environ.get('ROBOT_SIM_SKILLS', '1') == '1'          # task skills (stir_spoon)
+LEARN_TOOLS = os.environ.get('ROBOT_SIM_LEARN_TOOLS', '1') == '1'  # 0 hides the bottle-cap learning tools (twist_cap, episode_*, ...)
 NAMES = [f'j{i}' for i in range(1, 9)]
 TICKS_PER_RAD = 4096 / (2 * np.pi)
 # Hashes of the real Station camera queues (camera_pose/HANDOFF.md), so prompts carry over.
@@ -113,6 +115,14 @@ class SimArm:
             self.cap_hinge, self.cap_slide = m.joint('cap_hinge'), m.joint('cap_slide')
             self.cap_eq = m.equality('cap_thread').id
             self.cap_free_rad = 2 * np.pi * self.screw['turns_to_free']
+        self.puzzle = self.layout.get('cap_puzzle')
+        if self.puzzle:
+            self.pz_hinge, self.pz_sz = m.joint('cp_cap_hinge'), m.joint('cp_cap_sz')
+            self.pz_eqs = [m.equality('cap_thread').id]
+            self.pz_sxy = [m.joint('cp_cap_sx'), m.joint('cp_cap_sy')]
+            self.pz_free_rad = 2 * np.pi * self.puzzle.get('turns_to_free', 0.5)
+            self.pz_has_inner = self.puzzle.get('with_inner', True)
+            self.pz_inner_rest_z = float(m.body('cp_inner').pos[2]) if self.pz_has_inner else 0.0
         self.qids = m.jnt_qposadr[m.actuator_trnid[:, 0]]
         self.dofs = m.jnt_dofadr[m.actuator_trnid[:, 0]]
         self.lo_rad, self.hi_rad = m.actuator_ctrlrange.T.copy()
@@ -153,6 +163,7 @@ class SimArm:
                     if steps % 10 == 0: self._servo_protection(10 * m.opt.timestep)
                     self._track_stir(m.opt.timestep)
                     if self.screw: self._track_screw()
+                    if self.puzzle: self._track_puzzle()
                 if target - d.time > 0.5:  # fell behind: accept a slower-than-real-time clock
                     wall0, sim0 = time.monotonic(), d.time
             if self.viewer is not None and time.monotonic() - last_sync > 1 / 30:
@@ -209,6 +220,37 @@ class SimArm:
             self.data.eq_active[self.cap_eq] = 0
             self.model.dof_frictionloss[self.cap_hinge.dofadr[0]] = 0.002
             self.model.jnt_range[self.cap_slide.id] = [0.0, 0.15]
+
+    def _set_puzzle_thread(self, on):
+        """on: the cap sits on the thread (turn and lift coupled, a few mm of play, turning takes friction_torque).
+        off: it has come off the thread and is a loose ring (it can be lifted, carried and set down; it stays level)."""
+        m, d = self.model, self.data
+        for e in self.pz_eqs: d.eq_active[e] = int(on)
+        m.dof_frictionloss[self.pz_hinge.dofadr[0]] = self.puzzle.get('friction_torque', 0.05) if on else 0.002
+        m.jnt_range[self.pz_sz.id] = [0.0, 0.006] if on else [-0.06, 0.4]
+        m.jnt_range[self.pz_hinge.id] = [0.0, 100.0] if on else [-100.0, 100.0]
+        for j in self.pz_sxy:
+            m.jnt_range[j.id] = [-0.004, 0.004] if on else [-0.6, 0.6]
+            m.jnt_stiffness[j.id] = 60.0 if on else 0.0
+
+    def _track_puzzle(self):
+        if self.data.eq_active[self.pz_eqs[0]] and self.data.qpos[self.pz_hinge.qposadr[0]] >= self.pz_free_rad:
+            self._set_puzzle_thread(False)
+
+    def puzzle_state(self):
+        d = self.data
+        bottom = d.body('cp_bottom').xpos
+        cap = d.body('cp_cap').xpos
+        out = {'cap_turned_deg': round(float(np.degrees(d.qpos[self.pz_hinge.qposadr[0]])), 1),
+               'cap_off_thread': not bool(d.eq_active[self.pz_eqs[0]]),
+               'cap_xyz': [round(float(v), 4) for v in cap],
+               'cap_away': bool(np.hypot(*(cap[:2] - bottom[:2])) > 0.1)}
+        if self.pz_has_inner:
+            inner = d.body('cp_inner').xpos
+            lifted = float(inner[2] - self.pz_inner_rest_z)
+            out.update(inner_xyz=[round(float(v), 4) for v in inner], inner_lift_mm=round(lifted * 1000, 1),
+                       inner_out=bool(lifted > 0.03 or np.hypot(*(inner[:2] - bottom[:2])) > 0.05))
+        return out
 
     def screw_state(self):
         d = self.data
@@ -320,6 +362,8 @@ class SimArm:
                 self.data.eq_active[self.cap_eq] = 1
                 self.model.dof_frictionloss[self.cap_hinge.dofadr[0]] = self.screw['friction_torque']
                 self.model.jnt_range[self.cap_slide.id] = [0.0, 0.012]
+            if self.puzzle:
+                self._set_puzzle_thread(True)
             for i in range(self.model.nu): self._set_torque(i, True)
             self.status[:] = 0; self.saturated_s[:] = 0
             self.stir = {'signed_rad': 0.0, 'abs_rad': 0.0, 'path_m': 0.0, 'inside_s': 0.0, 'cup_tilt_deg': 0.0,
@@ -369,6 +413,8 @@ class SimArm:
                 res['stir'] = self.stir_summary()
             if self.screw:
                 res['screw_cap'] = self.screw_state()
+            if self.puzzle:
+                res['cap_puzzle'] = self.puzzle_state()
             return res
 
 
@@ -376,7 +422,11 @@ arm = SimArm()
 server = FastMCP('elrobot-sim')
 recorder = None
 if os.environ.get('ROBOT_SIM_RECORD', '1') == '1':
-    from recorder import Recorder
+    # By path: build_scene puts the repo root first on sys.path, where the recorder/ package would shadow this file.
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location('sim_recorder', HERE / 'recorder.py')
+    _rec = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(_rec)
+    Recorder = _rec.Recorder
     recorder = Recorder(arm, Path(os.environ.get('ROBOT_SIM_RECORD_DIR', HERE / 'sessions')),
                         fps=float(os.environ.get('ROBOT_SIM_RECORD_FPS', '10')),
                         port=int(os.environ.get('ROBOT_SIM_DASHBOARD_PORT', '8891')))
@@ -480,6 +530,9 @@ async def _move(targets: dict[str, float], step: float, dt: float, track_tol: in
         plan[NAMES.index(name)] = (m['norm'], want)
     with arm.lock:
         hold = arm.data.qpos[arm.qids].copy()
+        # The jaws keep their goal when not commanded (as on the servo bus): a stalled grip keeps squeezing while
+        # the arm moves, instead of relaxing to wherever the jaws stopped.
+        hold[7] = arm.data.ctrl[7]
     n = max([1] + [int(abs(b - a) / step + 0.999) for a, b in plan.values()])
     for k in range(1, n + 1):
         goals = hold.copy()
@@ -490,7 +543,8 @@ async def _move(targets: dict[str, float], step: float, dt: float, track_tol: in
         await asyncio.sleep(dt)
         now = arm.state()
         bad = [(name, now[name]['goal'], now[name]['raw'], now[name]['status']) for name in NAMES
-               if now[name]['status'] or abs(now[name]['goal'] - now[name]['raw']) > track_tol]
+               if now[name]['status'] or (abs(now[name]['goal'] - now[name]['raw']) > track_tol
+                                          and name != GRIPPER)]  # stalled jaws = a grip, not a tracking error
         if bad:
             with arm.lock:
                 tripped = arm.status != 0
@@ -615,6 +669,53 @@ if KINEMATICS:
     server.tool(annotations={'destructiveHint': True})(recorded(move_tcp))
     server.tool(annotations={'readOnlyHint': True})(recorded(pixel_to_table))
     server.tool(annotations={'readOnlyHint': True})(recorded(camera_info))
+
+
+async def twist_wrist(degrees: float) -> str:
+    """Turn the gripper about the vertical line through the TCP by `degrees` relative to now, keeping the TCP where
+    it is (IK on the commanded pose, in 10 deg steps). Positive = counter-clockwise seen from above (the way you
+    unscrew a cap), negative = clockwise. It stops early at a joint limit; the result says how far it actually turned.
+    The jaws are not changed, so whatever they hold turns with them. Use it after move_tcp (move_tcp resets the roll)."""
+    with arm.lock:
+        q_cmd = arm.data.ctrl.copy()
+    p0, R0 = arm.ik.fk(q_cmd)
+    total, step = float(degrees), 10.0
+    n = max(1, int(np.ceil(abs(total) / step)))
+    seed, done, out, stop = q_cmd.copy(), 0.0, 'reached', ''
+    for k in range(1, n + 1):
+        a = np.radians(total * k / n)
+        Rz = np.array([[np.cos(a), -np.sin(a), 0], [np.sin(a), np.cos(a), 0], [0, 0, 1]])
+        sol = await asyncio.to_thread(arm.ik.solve_rot, p0, Rz @ R0, seed)
+        if sol is None or np.abs(sol[:7] - seed[:7]).max() > 0.6:
+            # No IK pose turns further (other wrist joints at a limit): roll the rest on j7 alone (+j7 = +yaw).
+            span = float(np.degrees(arm.hi_rad[6] - arm.lo_rad[6]))
+            j7_0 = arm.state()['j7']['norm']
+            want = (total - done) / span
+            goal7 = min(1.0, max(0.0, j7_0 + want))
+            while abs(goal7 - arm.state()['j7']['norm']) > 0.003:
+                now7 = arm.state()['j7']['norm']
+                out = await _move({'j7': now7 + float(np.clip(goal7 - now7, -0.3, 0.3))}, 0.02, 0.12, TRACK_TOL)
+                if out.startswith('ABORTED'):
+                    break
+            done += (arm.state()['j7']['norm'] - j7_0) * span
+            if abs(goal7 - (j7_0 + want)) > 1e-6:
+                stop = ' (stopped at the wrist joint limit)'
+            break
+        seed = sol
+        goal = arm.norm(sol)
+        now = arm.norm(arm.measured_q())
+        out = await _move({NAMES[i]: float(goal[i]) for i in range(7) if abs(goal[i] - now[i]) > 1e-4} or {'j7': float(now[6])},
+                          0.02, 0.06, TRACK_TOL)
+        if out.startswith('ABORTED'):
+            break
+        done = total * k / n
+    j7 = arm.state()['j7']['norm']
+    return (f"{'ABORTED: ' + out.splitlines()[0] + chr(10) if out.startswith('ABORTED') else ''}"
+            f"turned {done:+.0f} deg of {total:+.0f}{stop}; wrist roll j7 now at {j7:.2f} of its range (0..1).\n"
+            + arm.table())
+
+
+server.tool(annotations={'destructiveHint': True})(recorded(twist_wrist))
 
 
 @server.tool(annotations={'destructiveHint': True})
@@ -862,6 +963,12 @@ async def operator_reset_scene(randomize: bool = True) -> str:
     arm.reset(randomize)
     await asyncio.sleep(0.5)
     return arm.table()
+
+
+if not LEARN_TOOLS:
+    for _name in ('episode_begin', 'episode_history', 'twist_cap', 'check_cap', 'extract_cap', 'episode_end',
+                  'skill_config', 'propose_skill_change'):
+        server.remove_tool(_name)
 
 
 if __name__ == '__main__':
