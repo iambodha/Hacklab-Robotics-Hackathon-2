@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from sites import get_site
 
 HERE = Path(__file__).resolve().parent
+REPO = HERE.parent
 RZ90 = np.array([[0, -1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1.0]])
 PRIORITY = {"fixed": 0, "estimate": 1, "scene_calib": 2}
 # Legacy layout token retained for old scene-contract producers; build_scene resolves it through SITE.
@@ -186,7 +187,8 @@ def main():
     a = p.parse_args()
     layout = json.loads(a.layout.read_text())
     layout, changes = apply_calib(json.loads(a.calib.read_text()), layout, a.src, a.force)
-    layout.setdefault("_synced_from", []).append(str(a.calib))
+    calib = a.calib.resolve()
+    layout.setdefault("_synced_from", []).append(str(calib.relative_to(REPO) if calib.is_relative_to(REPO) else calib))
     layout["_synced_from"] = layout["_synced_from"][-3:]
     a.layout.write_text(dumps(layout) + "\n")
     print("\n".join(changes) or "nothing changed")

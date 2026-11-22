@@ -29,10 +29,13 @@ import numpy as np
 
 from . import accuracy, arm_base, aruco, geometry as g, scene_fit, wrist
 from sites import get_site
-from .scene import CALIB_DIR, CONFIG_PATH, SCENE_PATH, intrinsics_file, load_intrinsics
+from .scene import CONFIG_PATH, SCENE_PATH, intrinsics_file, load_intrinsics
 from .station_io import QUEUES, ROOT
 
 W, H = 299, 224
+# The far base markers (22/23, ~2.5 px bits) decode in only 30-50 % of the overview frames (office capture: 23 in
+# 4 of the 10 saved frames); an id that is stable over >= 30 % of the frames is not a false positive.
+OVERVIEW_MIN_FRAC = 0.3
 
 
 # ---- capture ------------------------------------------------------------------------------------------
@@ -146,7 +149,7 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
         log(f"dictionary candidates: { {k: sorted(v) for k, v in seen.items()} } -> {name}")
     if not name:
         raise SystemExit("no ArUco markers visible in the overview camera")
-    med, std, cnt = aruco.average_corners(ov, name)
+    med, std, cnt = aruco.average_corners(ov, name, min_frac=OVERVIEW_MIN_FRAC, destripe=aruco.DESTRIPE_OVERVIEW_PX)
     log(f"overview: {len(ov)} frames; markers " + ", ".join(f"{i} (in {cnt[i]} frames, corner jitter "
                                                             f"{std[i].max():.2f} px)" for i in sorted(med)))
     if len(med) < 2:
@@ -183,7 +186,7 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
     joints = data.get("joints")
     wr_med = {}
     if wr_frames:
-        wr_med, wr_std, wr_cnt = aruco.average_corners(wr_frames, name)
+        wr_med, wr_std, wr_cnt = aruco.average_corners(wr_frames, name, destripe=aruco.DESTRIPE_WRIST_PX)
         log(f"wrist: {len(wr_frames)} frames; markers {sorted(wr_med)}")
     moved = _joints_moved(joints, data.get("joints_after"))
     T_base_wcam = wrist.T_base_wristcam(joints) if joints else None
@@ -196,7 +199,7 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
         w_T.append(T_base_wcam)
         w_src.append(f"current pose, markers {sorted(w_obs[-1])}")
     for k, pose in enumerate(data.get("wrist_poses") or []):
-        pm, _, _ = aruco.average_corners([f for f in pose["frames"] if f is not None], name)
+        pm, _, _ = aruco.average_corners([f for f in pose["frames"] if f is not None], name, destripe=aruco.DESTRIPE_WRIST_PX)
         pm = {i: c for i, c in pm.items() if i in T_tm}
         if pm:
             w_obs.append(pm)
@@ -265,6 +268,18 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
                      "wrist_rms_px": est["rms_px"], "wrist_sigma_px_used": sigma_px,
                      "caveat": "sigma assumes the foot edge to 0.5 px and the wrist model error = its own rms; joint "
                                "signs of j1/j5/j7 unverified. The tape procedure (README) pins it to ~2 mm."}
+        if len(w_obs) >= 2:
+            per = _per_pose_bases(w_obs, w_T, w_src, T_tm, size, it_w, base_z, foot_pt, sigma_px, T_table_base)
+            base_info["per_pose"] = per
+            # FK-chain errors differ per pose (single-pose yaws spread by several degrees): the mean of n such
+            # poses is no better than spread / sqrt(n), whatever the pooled fit's covariance says
+            spread = float(np.std([p["dyaw_deg"] for p in per], ddof=1))
+            floor = spread / math.sqrt(len(per))
+            base_info["per_pose_yaw_spread_deg"] = round(spread, 2)
+            if floor > base_info["sigma_yaw_deg"]:
+                base_info["sigma_yaw_fit_deg"] = base_info["sigma_yaw_deg"]
+                base_info["sigma_yaw_deg"] = floor
+                base_info["sigma_yaw_note"] = "raised to the between-pose spread / sqrt(poses)"
     elif src in ("foot", "auto") and foot_pt is not None:
         mid, perp, _ = _base_axes(fit, base_ids)
         yaw, s_yaw = math.atan2(perp[1], perp[0]) - math.pi / 2, math.radians(3.0)
@@ -402,6 +417,21 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
             "obs": med, "wr_obs": wr_med, "foot": foot, "T_cam_base": fit.T_cam_table @ T_table_base}
 
 
+def _per_pose_bases(w_obs, w_T, w_src, T_tm, size, intr, base_z, foot_pt, sigma_px, T_ref) -> list[dict]:
+    """Arm base from the foot + each wrist pose alone, relative to T_ref (the pooled estimate): the wrist chain's
+    consistency across poses."""
+    out = []
+    yaw_ref = wrist.planar_of(T_ref)[2]
+    for obs, T, src in zip(w_obs, w_T, w_src):
+        e = wrist.solve_base_from_wrist(obs, T_tm, T, size, W, H, intr=intr, base_z=base_z, sigma_px=sigma_px,
+                                        point_priors=[(arm_base.FOOT_FRONT_CENTRE, foot_pt[0], foot_pt[1])])
+        Tb = e["T_table_base"]
+        out.append({"pose": src, "rms_px": round(e["rms_px"], 2),
+                    "d_mm": round(float(np.linalg.norm(Tb[:2, 3] - T_ref[:2, 3])) * 1000, 1),
+                    "dyaw_deg": round(math.degrees(math.remainder(wrist.planar_of(Tb)[2] - yaw_ref, 2 * math.pi)), 2)})
+    return out
+
+
 def _joints_moved(a, b, tol: int = 8):
     if not a or not b:
         return None
@@ -445,12 +475,15 @@ def main():
     a = ap.parse_args()
     cfg = json.loads(a.config.read_text())
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-    data = capture_live(a.frames, ROOT / "frames" / f"calib-{stamp}", a.wrist_poses) if a.live else load_dir(a.frames_dir)
+    capture_dir = ROOT / "frames" / f"calib-{stamp}" if a.live else a.frames_dir
+    data = capture_live(a.frames, capture_dir, a.wrist_poses) if a.live else load_dir(a.frames_dir)
     for d in a.extra_wrist_dir:
         old = load_dir(d)
         data["wrist_poses"] = data.get("wrist_poses", []) + [{"joints": old["joints"], "frames": old["wrist"], "source": str(d)}]
     res = calibrate(data, cfg, fit_k1=a.fit_k1)
     c = res["calib"]
+    c["capture"] = {"dir": capture_dir.name, "mode": "live" if a.live else "offline (--frames-dir)",
+                    "extra_wrist_dirs": [Path(d).name for d in a.extra_wrist_dir]}
     from .annotate import annotate_overview, annotate_wrist
     from .scene import Scene
     sc = Scene.from_dict(c)
@@ -462,20 +495,21 @@ def main():
         raise SystemExit(f"NOT written: the arm base would degrade from '{prev[:40]}...' to '{new[:40]}...'. Is something "
                          "standing in front of the arm foot, or did the base move? Clear it and rerun, or pass --force.")
     if not a.dry_run:
-        a.out.parent.mkdir(parents=True, exist_ok=True)
+        img_dir = a.out.parent          # the annotated images go next to the json (default: the site's folder)
+        img_dir.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(c, indent=1))
-        cv2.imwrite(str(CALIB_DIR / "overview_annotated.jpg"), annotate_overview(sc, res["frame"], res["obs"]),
+        cv2.imwrite(str(img_dir / "overview_annotated.jpg"), annotate_overview(sc, res["frame"], res["obs"]),
                     [cv2.IMWRITE_JPEG_QUALITY, 90])
         if res["wrist_frame"] is not None and data.get("joints"):
-            cv2.imwrite(str(CALIB_DIR / "wrist_annotated.jpg"),
+            cv2.imwrite(str(img_dir / "wrist_annotated.jpg"),
                         annotate_wrist(sc, res["wrist_frame"], data["joints"], res["wr_obs"]), [cv2.IMWRITE_JPEG_QUALITY, 90])
-        cv2.imwrite(str(CALIB_DIR / "arm_base_overview.jpg"),
+        cv2.imwrite(str(img_dir / "arm_base_overview.jpg"),
                     arm_base.annotate_foot(res["frame"], res["foot"], res["T_cam_base"], res["fit"].intr),
                     [cv2.IMWRITE_JPEG_QUALITY, 85])
         if c["arm"]["tape_segments"]:
-            cv2.imwrite(str(CALIB_DIR / "tape_guide.jpg"), arm_base.annotate_tape(sc, res["frame"], c["arm"]["tape_segments"]),
+            cv2.imwrite(str(img_dir / "tape_guide.jpg"), arm_base.annotate_tape(sc, res["frame"], c["arm"]["tape_segments"]),
                         [cv2.IMWRITE_JPEG_QUALITY, 80])
-        print(f"wrote {a.out} and {CALIB_DIR}/{{overview_annotated,wrist_annotated,arm_base_overview,tape_guide}}.jpg")
+        print(f"wrote {a.out} and {img_dir}/{{overview_annotated,wrist_annotated,arm_base_overview,tape_guide}}.jpg")
 
 
 def print_report(c: dict):
@@ -491,6 +525,8 @@ def print_report(c: dict):
     print(f"overview: f = {ov['K_normalized']['fx'] * 299:.1f} px ({ov['intrinsics_source']}), fovy {ov['fovy_deg']} deg, "
           f"position {np.round(np.array(ov['T_world_cam'])[:3, 3], 4).tolist()} m")
     print(f"arm base: {c['arm']['base_on_table']['source']}")
+    for p in c["arm"]["base_on_table"].get("per_pose") or []:
+        print(f"  foot + {p['pose']} alone: {p['d_mm']} mm, {p['dyaw_deg']:+.2f} deg from the pooled base, rms {p['rms_px']} px")
     for key, title in (("held_out", "held-out"), ("held_out_fixed_intrinsics", "held-out, f fixed")):
         for r in q.get(key) or []:
             print(f"  {title} marker {r['held_out']}: sides {r['side_err_mm']} mm, diagonals {r['diag_err_mm']} mm, "

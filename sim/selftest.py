@@ -59,15 +59,14 @@ def detect_markers(rgb, dictionary):
 
 
 def model_corners(cam, mid, d=None):
-    """Projected corner sites of marker mid in camera cam (pinhole from fovy, as MuJoCo renders)."""
+    """Projected corner sites of marker mid in camera cam (the pinhole MuJoCo renders it with)."""
     import build_scene
     m, d = srv.arm.model, (d if d is not None else srv.arm.data)
     W, H = srv.arm.layout['image_size']
     cid = m.camera(cam).id
     R = d.cam_xmat[cid].reshape(3, 3) @ build_scene.CV_TO_MJ
     pc = (np.array([d.site_xpos[m.site(f'aruco_{mid}_c{k}').id] for k in range(4)]) - d.cam_xpos[cid]) @ R
-    f = H / 2 / np.tan(np.radians(m.cam_fovy[cid]) / 2)
-    return pc[:, :2] / pc[:, 2:3] * f + [W / 2, H / 2]
+    return (build_scene.camera_K(m, cid, W, H) @ (pc / pc[:, 2:3]).T).T[:, :2]
 
 
 def arm_near(seg, px, arm_geoms, grow=1.5):

@@ -1,0 +1,395 @@
+{
+ "time": "2026-11-22T11:08:40",
+ "raw_ticks": {
+  "1": 1990,
+  "2": 3030,
+  "3": 1561,
+  "4": 1505,
+  "5": 2165,
+  "6": 2354,
+  "7": 2207,
+  "8": 1275
+ },
+ "q_rad": [
+  -0.0907,
+  1.4755,
+  -0.7336,
+  -0.8151,
+  0.4947,
+  0.6541,
+  0.0094,
+  2.1359
+ ],
+ "joint_mapping": {
+  "mode": "range_fraction"
+ },
+ "undistorted_real": true,
+ "sources": {
+  "table": "office: marker bounding box + 15 cm margin, extended 15 cm behind the arm base (real edges not measured yet)",
+  "markers": [
+   "scene_calib"
+  ],
+  "overview_cam": "scene_calib",
+  "wrist_camera": "scene_calib"
+ },
+ "overview": {
+  "markers_real": [
+   20,
+   21,
+   22,
+   23
+  ],
+  "markers_twin_render": [
+   20,
+   21,
+   22,
+   23
+  ],
+  "markers_model_in_view": [
+   20,
+   21,
+   22,
+   23
+  ],
+  "corner_px_error_mean": 0.46,
+  "corner_px_error_max": 0.95,
+  "corner_px_error_per_marker": {
+   "20": 0.3,
+   "21": 0.64,
+   "22": 0.57,
+   "23": 0.34
+  },
+  "centre_px_offset_per_marker": {
+   "20": [
+    -0.11,
+    -0.1
+   ],
+   "21": [
+    0.1,
+    -0.1
+   ],
+   "22": [
+    0.04,
+    -0.07
+   ],
+   "23": [
+    -0.04,
+    -0.1
+   ]
+  },
+  "corner_px_error_render_detection": {
+   "20": 0.3,
+   "21": 0.8,
+   "22": 0.45,
+   "23": 0.55
+  },
+  "table_colour": {
+   "mean_rgb_real": [
+    147.1,
+    152.4,
+    154.1
+   ],
+   "mean_rgb_twin": [
+    223.8,
+    223.8,
+    218.7
+   ],
+   "mean_rgb_error": 123.18,
+   "mean_delta_e": 26.97,
+   "pixels": 29990
+  },
+  "arm_silhouette": {
+   "iou": 0.642,
+   "real_to_twin_px": 5.36,
+   "twin_to_real_px": 1.83
+  }
+ },
+ "wrist": {
+  "markers_real": [],
+  "markers_twin_render": [
+   20
+  ],
+  "markers_model_in_view": [
+   20
+  ],
+  "corner_px_error_mean": null,
+  "corner_px_error_max": null,
+  "corner_px_error_per_marker": {},
+  "centre_px_offset_per_marker": {},
+  "corner_px_error_render_detection": {},
+  "table_colour": {
+   "mean_rgb_real": [
+    152.3,
+    151.0,
+    146.9
+   ],
+   "mean_rgb_twin": [
+    223.5,
+    223.5,
+    218.4
+   ],
+   "mean_rgb_error": 124.26,
+   "mean_delta_e": 26.88,
+   "pixels": 30120
+  },
+  "q_rad": [
+   -0.0907,
+   1.4755,
+   -0.7336,
+   -0.8151,
+   0.4947,
+   0.6541,
+   0.0094,
+   2.1359
+  ]
+ },
+ "wrist_pose01": {
+  "markers_real": [],
+  "markers_twin_render": [
+   20
+  ],
+  "markers_model_in_view": [
+   20
+  ],
+  "corner_px_error_mean": null,
+  "corner_px_error_max": null,
+  "corner_px_error_per_marker": {},
+  "centre_px_offset_per_marker": {},
+  "corner_px_error_render_detection": {},
+  "table_colour": {
+   "mean_rgb_real": [
+    151.6,
+    150.6,
+    146.7
+   ],
+   "mean_rgb_twin": [
+    223.5,
+    223.5,
+    218.4
+   ],
+   "mean_rgb_error": 125.06,
+   "mean_delta_e": 27.06,
+   "pixels": 30120
+  },
+  "q_rad": [
+   -0.0907,
+   1.4755,
+   -0.7336,
+   -0.8151,
+   0.4947,
+   0.6541,
+   0.0094,
+   2.1359
+  ]
+ },
+ "wrist_pose02": {
+  "markers_real": [
+   17,
+   20
+  ],
+  "markers_twin_render": [],
+  "markers_model_in_view": [
+   20
+  ],
+  "corner_px_error_mean": 4.61,
+  "corner_px_error_max": 5.46,
+  "corner_px_error_per_marker": {
+   "20": 4.61
+  },
+  "centre_px_offset_per_marker": {
+   "20": [
+    -2.52,
+    -3.61
+   ]
+  },
+  "corner_px_error_render_detection": {},
+  "table_colour": {
+   "mean_rgb_real": [
+    162.2,
+    163.5,
+    162.2
+   ],
+   "mean_rgb_twin": [
+    224.0,
+    224.0,
+    219.0
+   ],
+   "mean_rgb_error": 103.48,
+   "mean_delta_e": 22.46,
+   "pixels": 21204
+  },
+  "q_rad": [
+   -0.6066,
+   1.3387,
+   -0.94,
+   -0.8706,
+   -0.1392,
+   1.0126,
+   0.014,
+   2.1372
+  ]
+ },
+ "wrist_pose03": {
+  "markers_real": [
+   23
+  ],
+  "markers_twin_render": [],
+  "markers_model_in_view": [
+   23
+  ],
+  "corner_px_error_mean": 30.23,
+  "corner_px_error_max": 31.82,
+  "corner_px_error_per_marker": {
+   "23": 30.23
+  },
+  "centre_px_offset_per_marker": {
+   "23": [
+    26.54,
+    -14.45
+   ]
+  },
+  "corner_px_error_render_detection": {},
+  "table_colour": {
+   "mean_rgb_real": [
+    139.2,
+    141.8,
+    138.7
+   ],
+   "mean_rgb_twin": [
+    224.5,
+    224.5,
+    219.4
+   ],
+   "mean_rgb_error": 143.57,
+   "mean_delta_e": 31.53,
+   "pixels": 35028
+  },
+  "q_rad": [
+   -1.5149,
+   0.5755,
+   -0.946,
+   0.2072,
+   -0.1362,
+   1.3108,
+   0.0171,
+   2.1372
+  ]
+ },
+ "wrist_pose04": {
+  "markers_real": [],
+  "markers_twin_render": [],
+  "markers_model_in_view": [],
+  "corner_px_error_mean": null,
+  "corner_px_error_max": null,
+  "corner_px_error_per_marker": {},
+  "centre_px_offset_per_marker": {},
+  "corner_px_error_render_detection": {},
+  "table_colour": {
+   "mean_rgb_real": [
+    118.8,
+    123.7,
+    124.2
+   ],
+   "mean_rgb_twin": [
+    222.1,
+    222.1,
+    217.0
+   ],
+   "mean_rgb_error": 170.14,
+   "mean_delta_e": 37.86,
+   "pixels": 19575
+  },
+  "q_rad": [
+   -1.5134,
+   0.0706,
+   -1.6962,
+   -1.5942,
+   -0.1438,
+   -0.745,
+   0.0156,
+   2.1372
+  ]
+ },
+ "wrist_pose05": {
+  "markers_real": [
+   21
+  ],
+  "markers_twin_render": [],
+  "markers_model_in_view": [
+   21
+  ],
+  "corner_px_error_mean": 24.69,
+  "corner_px_error_max": 27.89,
+  "corner_px_error_per_marker": {
+   "21": 24.69
+  },
+  "centre_px_offset_per_marker": {
+   "21": [
+    -18.9,
+    15.86
+   ]
+  },
+  "corner_px_error_render_detection": {},
+  "table_colour": {
+   "mean_rgb_real": [
+    166.4,
+    164.7,
+    163.3
+   ],
+   "mean_rgb_twin": [
+    224.0,
+    224.0,
+    219.0
+   ],
+   "mean_rgb_error": 99.73,
+   "mean_delta_e": 21.59,
+   "pixels": 12861
+  },
+  "q_rad": [
+   0.5206,
+   0.8925,
+   -0.2968,
+   -0.7566,
+   -0.1392,
+   0.6195,
+   0.0156,
+   2.1372
+  ]
+ },
+ "wrist_pose06": {
+  "markers_real": [],
+  "markers_twin_render": [],
+  "markers_model_in_view": [],
+  "corner_px_error_mean": null,
+  "corner_px_error_max": null,
+  "corner_px_error_per_marker": {},
+  "centre_px_offset_per_marker": {},
+  "corner_px_error_render_detection": {},
+  "table_colour": {
+   "mean_rgb_real": [
+    129.6,
+    132.8,
+    133.1
+   ],
+   "mean_rgb_twin": [
+    216.2,
+    216.2,
+    211.2
+   ],
+   "mean_rgb_error": 143.36,
+   "mean_delta_e": 33.41,
+   "pixels": 32905
+  },
+  "q_rad": [
+   1.4071,
+   0.0421,
+   -0.2968,
+   0.2282,
+   -0.1407,
+   1.5683,
+   0.0186,
+   2.1372
+  ]
+ },
+ "layout": "/Users/bodha/Documents/b0dha/Robotics-Hackathon/ws/r7-calib/sites/office/layout.json"
+}
