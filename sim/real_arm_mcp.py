@@ -104,7 +104,16 @@ async def _bus_frame_once(cli):
         _state_queues[id(cli)] = q
     while not q.empty():                 # drop entries that arrived while nobody was reading
         q.get_nowait()
-    e = await asyncio.wait_for(q.get(), 5)
+    try:
+        e = await asyncio.wait_for(q.get(), 5)
+    except asyncio.TimeoutError:
+        # The subscription went silent (22 Nov: after the event loop was blocked for ~15 s under CPU load, every read
+        # timed out until restart). Subscribe again once; if that is silent too, the next call retries again.
+        _state_queues.clear()
+        q = asyncio.Queue()
+        cli.follow(stn.ST3215_QUEUE, q)
+        _state_queues[id(cli)] = q
+        e = await asyncio.wait_for(q.get(), 5)
     st = stn.st3215.InferenceStateReader(memoryview(bytes(e.Data)))
     for bs in st.get_buses() or []:
         if stn.as_str(bs.get_bus().get_serial_number()) == stn.BUS:
@@ -696,7 +705,8 @@ async def move_tcp(x: float, y: float, z: float, top_down: bool = True, yaw_deg:
     seed, log, notes = q, [], []
     for wp in waypoints:
         if top_down:
-            sol, lean = _solve_tcp(np.array(wp), seed, yaw_deg)
+            # worker thread: the least-lean search takes 1-2 s, and blocking the event loop stalls the Station stream
+            sol, lean = await asyncio.to_thread(_solve_tcp, np.array(wp), seed, yaw_deg)
             if sol is not None and lean:
                 notes.append(f"jaws-down unreachable at {np.round(wp, 3).tolist()}: gripper leans {abs(lean)} deg from "
                              f"vertical ({'away from' if lean > 0 else 'toward'} the base)")
