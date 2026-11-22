@@ -36,27 +36,46 @@ def detector(name: str, refine: bool = True) -> cv2.aruco.ArucoDetector:
 
 
 PAD_PX, UPSCALE = 4, 3
+# The printed markers' black is banded by thin bright horizontal streaks (toner), which the adaptive threshold splits
+# into fragments once a marker is large in the image (wrist close-ups: 23 at office pose 3 never decodes). A vertical
+# box blur bridges the streaks; being symmetric it leaves a straight edge's mid-level crossing in place, so the
+# blurred image is also used for that marker's edge refinement (office capture: corners within 0.2-0.4 px of the
+# plain detection where both decode). 3 px keeps the far overview markers' ~2.5 px bits (5 px moves their corners
+# ~0.6 px); 5 px clears the wrist close-ups.
+DESTRIPE_OVERVIEW_PX = (3,)
+DESTRIPE_WRIST_PX = (3, 5)
 
 
-def detect(img: np.ndarray, name: str, edge_refine: bool = True) -> dict[int, np.ndarray]:
-    """-> {id: (4,2) corners in OpenCV order TL, TR, BR, BL of the marker's own frame}.
-    Detection runs on a white-padded (a marker touching the frame edge still closes its contour: marker 21)
-    and 3x cubic-upscaled copy (the far markers' 4x4 bits are ~2.5 px wide at 299x224 and decode unreliably).
-    edge_refine: replace OpenCV's corners (biased 0.2-0.7 px inward on small, blurred markers) by
-    intersections of lines fitted to sub-pixel edge points along each side (see refine_edges), at the
-    original resolution."""
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+def _detect_raw(gray: np.ndarray, name: str) -> dict[int, np.ndarray]:
     big = cv2.copyMakeBorder(gray, PAD_PX, PAD_PX, PAD_PX, PAD_PX, cv2.BORDER_CONSTANT, value=255)
     big = cv2.resize(big, None, fx=UPSCALE, fy=UPSCALE, interpolation=cv2.INTER_CUBIC)
     corners, ids, _ = detector(name).detectMarkers(big)
     if ids is None:
         return {}
     # pixel centres: x_big = (x + PAD + 0.5) * UPSCALE - 0.5
-    out = {int(i): (c.reshape(4, 2).astype(float) + 0.5) / UPSCALE - 0.5 - PAD_PX for i, c in zip(ids.ravel(), corners)}
+    return {int(i): (c.reshape(4, 2).astype(float) + 0.5) / UPSCALE - 0.5 - PAD_PX for i, c in zip(ids.ravel(), corners)}
+
+
+def detect(img: np.ndarray, name: str, edge_refine: bool = True, destripe: tuple[int, ...] = ()) -> dict[int, np.ndarray]:
+    """-> {id: (4,2) corners in OpenCV order TL, TR, BR, BL of the marker's own frame}.
+    Detection runs on a white-padded (a marker touching the frame edge still closes its contour: marker 21)
+    and 3x cubic-upscaled copy (the far markers' 4x4 bits are ~2.5 px wide at 299x224 and decode unreliably).
+    edge_refine: replace OpenCV's corners (biased 0.2-0.7 px inward on small, blurred markers) by
+    intersections of lines fitted to sub-pixel edge points along each side (see refine_edges), at the
+    original resolution.
+    destripe: markers the plain image misses are also looked for in copies blurred vertically by these heights
+    (px; DESTRIPE_OVERVIEW_PX / DESTRIPE_WRIST_PX); the plain detection wins when both find an id."""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+    src = {i: (c, gray) for i, c in _detect_raw(gray, name).items()}
+    for h in destripe:
+        blurred = cv2.blur(gray, (1, h))
+        for i, c in _detect_raw(blurred, name).items():
+            src.setdefault(i, (c, blurred))
+    out = {i: c for i, (c, _) in src.items()}
     if edge_refine:
-        g32 = gray.astype(np.float32)
         H, W = gray.shape[:2]
-        for i, c in list(out.items()):
+        for i, (c, im) in src.items():
+            g32 = im.astype(np.float32)
             if _at_border(c, W, H):
                 # clipped by the frame edge: OpenCV's quad is cut off there, so the refined corner (an intersection of
                 # the fitted side lines, possibly just outside the frame) legitimately moves further. No refinement,
@@ -175,11 +194,11 @@ def autodetect_dictionary(frames: list[np.ndarray], min_frac: float = 0.3) -> tu
     return best, seen
 
 
-def average_corners(frames: list[np.ndarray], name: str, min_frac: float = 0.5):
+def average_corners(frames: list[np.ndarray], name: str, min_frac: float = 0.5, destripe: tuple[int, ...] = ()):
     """Detect in every frame and take the per-corner median. -> ({id: (4,2) median}, {id: (4,2) std}, {id: count})."""
     per: dict[int, list[np.ndarray]] = {}
     for f in frames:
-        for i, c in detect(f, name).items():
+        for i, c in detect(f, name, destripe=destripe).items():
             per.setdefault(i, []).append(c)
     need = max(1, int(min_frac * len(frames)))
     med, std, cnt = {}, {}, {}

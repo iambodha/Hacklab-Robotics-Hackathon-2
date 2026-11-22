@@ -29,10 +29,13 @@ import numpy as np
 
 from . import accuracy, arm_base, aruco, geometry as g, scene_fit, wrist
 from sites import get_site
-from .scene import CALIB_DIR, CONFIG_PATH, SCENE_PATH, intrinsics_file, load_intrinsics
+from .scene import CONFIG_PATH, SCENE_PATH, intrinsics_file, load_intrinsics
 from .station_io import QUEUES, ROOT
 
 W, H = 299, 224
+# The far base markers (22/23, ~2.5 px bits) decode in only 30-50 % of the overview frames (office capture: 23 in
+# 4 of the 10 saved frames); an id that is stable over >= 30 % of the frames is not a false positive.
+OVERVIEW_MIN_FRAC = 0.3
 
 
 # ---- capture ------------------------------------------------------------------------------------------
@@ -146,7 +149,7 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
         log(f"dictionary candidates: { {k: sorted(v) for k, v in seen.items()} } -> {name}")
     if not name:
         raise SystemExit("no ArUco markers visible in the overview camera")
-    med, std, cnt = aruco.average_corners(ov, name)
+    med, std, cnt = aruco.average_corners(ov, name, min_frac=OVERVIEW_MIN_FRAC, destripe=aruco.DESTRIPE_OVERVIEW_PX)
     log(f"overview: {len(ov)} frames; markers " + ", ".join(f"{i} (in {cnt[i]} frames, corner jitter "
                                                             f"{std[i].max():.2f} px)" for i in sorted(med)))
     if len(med) < 2:
@@ -183,7 +186,7 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
     joints = data.get("joints")
     wr_med = {}
     if wr_frames:
-        wr_med, wr_std, wr_cnt = aruco.average_corners(wr_frames, name)
+        wr_med, wr_std, wr_cnt = aruco.average_corners(wr_frames, name, destripe=aruco.DESTRIPE_WRIST_PX)
         log(f"wrist: {len(wr_frames)} frames; markers {sorted(wr_med)}")
     moved = _joints_moved(joints, data.get("joints_after"))
     T_base_wcam = wrist.T_base_wristcam(joints) if joints else None
@@ -196,7 +199,7 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
         w_T.append(T_base_wcam)
         w_src.append(f"current pose, markers {sorted(w_obs[-1])}")
     for k, pose in enumerate(data.get("wrist_poses") or []):
-        pm, _, _ = aruco.average_corners([f for f in pose["frames"] if f is not None], name)
+        pm, _, _ = aruco.average_corners([f for f in pose["frames"] if f is not None], name, destripe=aruco.DESTRIPE_WRIST_PX)
         pm = {i: c for i, c in pm.items() if i in T_tm}
         if pm:
             w_obs.append(pm)
@@ -462,20 +465,21 @@ def main():
         raise SystemExit(f"NOT written: the arm base would degrade from '{prev[:40]}...' to '{new[:40]}...'. Is something "
                          "standing in front of the arm foot, or did the base move? Clear it and rerun, or pass --force.")
     if not a.dry_run:
-        a.out.parent.mkdir(parents=True, exist_ok=True)
+        img_dir = a.out.parent          # the annotated images go next to the json (default: the site's folder)
+        img_dir.mkdir(parents=True, exist_ok=True)
         a.out.write_text(json.dumps(c, indent=1))
-        cv2.imwrite(str(CALIB_DIR / "overview_annotated.jpg"), annotate_overview(sc, res["frame"], res["obs"]),
+        cv2.imwrite(str(img_dir / "overview_annotated.jpg"), annotate_overview(sc, res["frame"], res["obs"]),
                     [cv2.IMWRITE_JPEG_QUALITY, 90])
         if res["wrist_frame"] is not None and data.get("joints"):
-            cv2.imwrite(str(CALIB_DIR / "wrist_annotated.jpg"),
+            cv2.imwrite(str(img_dir / "wrist_annotated.jpg"),
                         annotate_wrist(sc, res["wrist_frame"], data["joints"], res["wr_obs"]), [cv2.IMWRITE_JPEG_QUALITY, 90])
-        cv2.imwrite(str(CALIB_DIR / "arm_base_overview.jpg"),
+        cv2.imwrite(str(img_dir / "arm_base_overview.jpg"),
                     arm_base.annotate_foot(res["frame"], res["foot"], res["T_cam_base"], res["fit"].intr),
                     [cv2.IMWRITE_JPEG_QUALITY, 85])
         if c["arm"]["tape_segments"]:
-            cv2.imwrite(str(CALIB_DIR / "tape_guide.jpg"), arm_base.annotate_tape(sc, res["frame"], c["arm"]["tape_segments"]),
+            cv2.imwrite(str(img_dir / "tape_guide.jpg"), arm_base.annotate_tape(sc, res["frame"], c["arm"]["tape_segments"]),
                         [cv2.IMWRITE_JPEG_QUALITY, 80])
-        print(f"wrote {a.out} and {CALIB_DIR}/{{overview_annotated,wrist_annotated,arm_base_overview,tape_guide}}.jpg")
+        print(f"wrote {a.out} and {img_dir}/{{overview_annotated,wrist_annotated,arm_base_overview,tape_guide}}.jpg")
 
 
 def print_report(c: dict):

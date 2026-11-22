@@ -65,7 +65,7 @@ def load(frames_dir: Path, extra_dirs: list[Path], old_calib: Path | None, cfg: 
     size, name = float(cfg["marker_size_m"]), cfg["dictionary"]
     data = calib_scene.load_dir(frames_dir)
     ov = [f for f in data["overview"] if f is not None]
-    med, std, cnt = aruco.average_corners(ov, name, min_frac=0.3)
+    med, std, cnt = aruco.average_corners(ov, name, min_frac=calib_scene.OVERVIEW_MIN_FRAC, destripe=aruco.DESTRIPE_OVERVIEW_PX)
     sig = {i: float(np.sqrt(np.mean(std[i] ** 2))) for i in med}
     base_ids = list(cfg["base_marker_ids"])
     ref = next((i for i in base_ids if i in med), min(med))
@@ -106,7 +106,7 @@ def load(frames_dir: Path, extra_dirs: list[Path], old_calib: Path | None, cfg: 
         o = calib_scene.load_dir(d)
         poses.append({"name": d.name, "joints": o["joints"], "frames": [f for f in o["wrist"] if f is not None]})
     for p in poses:
-        m, _, _ = aruco.average_corners(p["frames"], name) if p["frames"] else ({}, None, None)
+        m, _, _ = aruco.average_corners(p["frames"], name, destripe=aruco.DESTRIPE_WRIST_PX) if p["frames"] else ({}, None, None)
         p["obs"] = {i: c for i, c in m.items() if i in T_tm}
         del p["frames"]
     return {"W": W, "H": H, "size": size, "T_tm": T_tm, "foot_pt": foot_pt, "poses": poses, "info": info,
