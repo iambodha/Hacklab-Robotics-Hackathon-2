@@ -6,6 +6,8 @@
 It runs sim/run_agent_real.sh (Claude with only the elrobot-real tools) with the task typed into the page, shows both
 cameras, every tool call as it happens (sim/real_sessions/actions.jsonl), the agent's short notes and its final
 report. Stop kills the agent; the servos then hold their last goal. Park sends move_tcp(0.0, 0.19, 0.06).
+Resume starts a new run that is told what the last run did. Open gripper, Relax arm (torque off: it goes limp) and
+Hold arm (torque on again) act on the arm directly while no run is in progress.
 Needs Station (:8888) and the camera relay (:8890) running, like run_agent_real.sh. Stdlib only; `uv` for Park.
 Transcripts go to sim/real_sessions/ui_run_<time>.jsonl. The page has no login: keep it on loopback.
 """
@@ -161,7 +163,7 @@ def _profile() -> dict:
     return operator_prompt.profile()
 
 
-PARK = """
+CALL = """
 import asyncio, json, os, sys
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -170,19 +172,76 @@ async def main():
     async with stdio_client(p) as (r, w):
         async with ClientSession(r, w) as s:
             await s.initialize()
-            res = await s.call_tool("move_tcp", dict(zip("xyz", json.loads(sys.argv[2]))))
+            res = await s.call_tool(sys.argv[2], json.loads(sys.argv[3]))
             print(res.content[0].text.splitlines()[0])
 asyncio.run(main())
 """
 
 
-def park():
-    if running() or other_agent_running():
-        return "stop the run first"
-    r = subprocess.run(["uv", "run", "-q", "--no-project", "--with", "mcp>=1.12,<2", "python", "-c", PARK, str(HERE / "run_real_server.sh"), json.dumps(_profile()["poses"]["park"])],
-                       cwd=REPO, env=env(), capture_output=True, text=True, timeout=120)
+def arm_call(tool: str, args: dict) -> str:
+    """One tool call on the real arm, outside a run (Park, Open gripper, Relax, Hold)."""
+    with LOCK:
+        if running() or other_agent_running():
+            return "stop the run first"
+        r = subprocess.run(["uv", "run", "-q", "--no-project", "--with", "mcp>=1.12,<2", "python", "-c", CALL,
+                            str(HERE / "run_real_server.sh"), tool, json.dumps(args)],
+                           cwd=REPO, env=env(), capture_output=True, text=True, timeout=120)
     lines = [l for l in r.stdout.splitlines() if l.strip()]
-    return lines[-1] if lines else ("park failed: " + r.stderr.strip()[-200:])
+    return lines[-1] if lines else (f"{tool} failed: " + r.stderr.strip()[-200:])
+
+
+def park():
+    return arm_call("move_tcp", dict(zip("xyz", _profile()["poses"]["park"])))
+
+
+def last_transcript():
+    """The transcript to resume from: this page's last run, else the newest run file in real_sessions."""
+    if RUN["file"] and Path(RUN["file"]).exists():
+        return Path(RUN["file"])
+    files = [f for pat in ("ui_run_*.jsonl", "agent_*.jsonl") for f in SESS.glob(pat) if f.stat().st_size]
+    return max(files, key=lambda f: f.stat().st_mtime) if files else None
+
+
+def run_history(f, limit=40):
+    """What a run did, as text: its tool calls with the first line of each result, and its closing words."""
+    calls, notes, report = [], [], ""
+    for line in open(f):
+        try:
+            d = json.loads(line)
+        except ValueError:
+            continue
+        if d.get("type") == "assistant":
+            for b in d["message"].get("content", []):
+                if b.get("type") == "tool_use":
+                    calls.append([b["name"].split("__")[-1] + "(" + json.dumps(b.get("input", {}))[1:-1][:110] + ")", ""])
+                elif b.get("type") == "text" and b.get("text", "").strip():
+                    notes.append(b["text"].strip()[:300])
+        elif d.get("type") == "user" and calls and isinstance(d["message"].get("content"), list):
+            for b in d["message"]["content"]:
+                if b.get("type") == "tool_result" and isinstance(b.get("content"), list):
+                    text = next((c.get("text", "") for c in b["content"] if c.get("type") == "text"), "")
+                    calls[-1][1] = (text.strip().splitlines() or ["done"])[0][:170]
+        elif d.get("type") == "result":
+            report = (d.get("result") or "")[:1500]
+    skip = ("look", "survey", "pixel_to_table", "tcp_pose", "joint_state", "camera_info")
+    acts = [f"- {c} -> {r or '(no reply: the run was stopped during this call)'}" for c, r in calls if c.split("(")[0] not in skip]
+    return acts[-limit:], (report or "\n".join(notes[-2:]))
+
+
+def resume(task, model, effort):
+    f = last_transcript()
+    if f is None:
+        return "there is no earlier run to resume"
+    acts, closing = run_history(f)
+    text = ("CONTINUE a task that an earlier run left unfinished. The task:\n" + task + "\n\n"
+            "What the earlier run did, in order (positions may have changed since, and people may have moved "
+            "things or the arm by hand: start with survey() and check in the images what is already done):\n"
+            + ("\n".join(acts) or "- nothing yet") + "\n\n"
+            + ("How the earlier run ended:\n" + closing + "\n\n" if closing else "The earlier run was stopped by the operator.\n\n")
+            + "Do only what is still missing. Do not repeat an approach that failed above in the same way. If a "
+            "move is refused because torque is off, call set_torque(true) once and go on. If the gripper holds "
+            "something you do not need, put it down first.")
+    return start(text, model, effort)
 
 
 def read_transcript():
@@ -213,13 +272,13 @@ def read_actions():
     try:
         for line in open(SESS / "actions.jsonl").read().splitlines()[-400:]:
             d = json.loads(line)
-            if d["t"] < since:
+            if "tool" not in d or d["t"] < since:
                 continue
             args = {k: (round(v, 3) if isinstance(v, float) else v) for k, v in d["args"].items() if k not in ("step", "dt", "top_down")}
             res = d["error"] or d["result"]
             rows.append({"t": d["t"], "tool": d["tool"], "args": json.dumps(args)[:90], "s": d["s"],
                          "result": (res.splitlines()[0] if res else "")[:160] if d["tool"] != "look" else "(images)", "error": bool(d["error"])})
-    except (OSError, ValueError):
+    except (OSError, ValueError, KeyError):
         pass
     return rows[-60:]
 
@@ -262,9 +321,10 @@ th{color:var(--mut)}.bad{color:var(--bad)}.ok{color:var(--ok)}#state{font-weight
 <h1>Arm operator <span id=state class=mut></span></h1>
 <div class=grid>
 <div class=card><h2>Task</h2><textarea id=task></textarea>
- <div class=row><select id=model><option value=sonnet>Sonnet</option><option value=haiku>Haiku</option><option value=opus>Opus</option><option value=endpoint>Model endpoint (Gemma, see model_endpoint.env)</option></select>
+ <div class=row><select id=model><option value=sonnet>Sonnet</option><option value=haiku>Haiku</option><option value=opus>Opus</option><option value=claude-fable-5-2>Fable</option><option value=endpoint>Model endpoint (Gemma, see model_endpoint.env)</option></select>
  <select id=effort><option value=low>effort: low</option><option value="">effort: default</option><option value=medium>effort: medium</option></select>
- <button id=enh>Enhance</button><button id=start>Start</button><button id=stop>Stop</button><button id=park>Park arm</button><span id=msg class=mut></span></div><div id=orig class=mut style="margin-top:6px"></div></div>
+ <button id=enh>Enhance</button><button id=start>Start</button><button id=resume title="Start a new run that is told what the last run did">Resume task</button><button id=stop>Stop</button></div>
+ <div class=row><span class=mut>Arm:</span><button id=open>Open gripper</button><button id=park>Park arm</button><button id=relax title="Torque off: the arm goes limp">Relax arm</button><button id=hold title="Torque on again, holding where it is">Hold arm</button><span id=msg class=mut></span></div><div id=orig class=mut style="margin-top:6px"></div></div>
 <div class=card><h2>Cameras (wrist, overview)</h2><div class=cams><img id=cw alt="wrist camera"><img id=co alt="overview camera"></div></div>
 <div class="card wide"><h2>Result</h2><pre id=result class=mut>No run yet.</pre></div>
 <div class="card wide"><h2>Agent notes</h2><pre id=notes class=mut>-</pre></div>
@@ -275,6 +335,10 @@ let filled=false;
 async function post(p,b){const r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})});const j=await r.json();$('msg').textContent=j.message||'';tick();}
 $('start').onclick=()=>post('/api/start',{task:$('task').value,model:$('model').value,effort:$('effort').value});
 $('stop').onclick=()=>post('/api/stop');
+$('resume').onclick=()=>post('/api/resume',{task:$('task').value,model:$('model').value,effort:$('effort').value});
+$('open').onclick=()=>{$('msg').textContent='opening the gripper...';post('/api/open');};
+$('relax').onclick=()=>{if(confirm('Torque off: the arm goes limp and DROPS if it is raised. Hold it or make sure it is near the table. Relax now?')){$('msg').textContent='relaxing...';post('/api/relax');}};
+$('hold').onclick=()=>{$('msg').textContent='torque on...';post('/api/hold');};
 let rough='';
 $('enh').onclick=async()=>{rough=$('task').value;$('enh').disabled=true;$('msg').textContent='enhancing (looks at the cameras, about 15 s)...';
  try{const r=await fetch('/api/enhance',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task:rough})});const j=await r.json();
@@ -285,7 +349,7 @@ async function tick(){let s;try{s=await (await fetch('/api/status')).json();}cat
  if(!filled){$('task').value=s.task||s.default_task;filled=true;}
  const busy=s.running||s.other;
  $('state').innerHTML=s.running?`<span class=ok>running ${s.elapsed}s (${esc(s.model)})</span>`:s.other?'<span class=bad>another run is in progress (started outside this page)</span>':'<span class=mut>idle</span>';
- $('start').disabled=busy;$('stop').disabled=!s.running;$('park').disabled=busy;
+ $('start').disabled=busy;$('stop').disabled=!s.running;for(const b of ['park','resume','open','relax','hold'])$(b).disabled=busy;
  if(s.result)$('result').innerHTML=`<b>${s.result.seconds} s, ${s.result.turns} turns, $${s.result.cost}</b>\n`+esc(s.result.text),$('result').className='';
  else if(s.running)$('result').textContent='Running...';else if(s.stopped)$('result').textContent='Stopped by the operator. The servos hold their last goal.';
  $('notes').textContent=s.notes.length?s.notes.join('\n\n'):'-';
@@ -329,7 +393,7 @@ class Handler(BaseHTTPRequestHandler):
             body = {}
         if self.path == "/api/start":
             task = (body.get("task") or "").strip()
-            model = body.get("model") if body.get("model") in ("sonnet", "haiku", "opus", "endpoint") else "sonnet"
+            model = body.get("model") if body.get("model") in ("sonnet", "haiku", "opus", "claude-fable-5-2", "endpoint") else "sonnet"
             effort = body.get("effort") if body.get("effort") in ("low", "medium", "high", "") else "low"
             msg = "the task is empty" if not task else start(task, model, effort)
         elif self.path == "/api/enhance":
@@ -340,13 +404,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(200, json.dumps({"message": "enhanced: read it, edit if needed, then Start", "task": enhance(rough)}).encode())
             except Exception as e:
                 return self.send(200, json.dumps({"message": f"enhance failed: {e}"}).encode())
+        elif self.path == "/api/resume":
+            task = (body.get("task") or "").strip()
+            model = body.get("model") if body.get("model") in ("sonnet", "haiku", "opus", "claude-fable-5-2", "endpoint") else "sonnet"
+            effort = body.get("effort") if body.get("effort") in ("low", "medium", "high", "") else "low"
+            msg = "the task is empty" if not task else resume(task, model, effort)
         elif self.path == "/api/stop":
             msg = stop()
-        elif self.path == "/api/park":
+        elif self.path in ("/api/park", "/api/open", "/api/relax", "/api/hold"):
+            name = self.path.rsplit("/", 1)[1]
             try:
-                msg = park()
+                msg = {"park": park, "open": lambda: arm_call("gripper", {"open_fraction": 1.0}),
+                       "relax": lambda: arm_call("set_torque", {"enabled": False}),
+                       "hold": lambda: arm_call("set_torque", {"enabled": True})}[name]()
             except Exception as e:
-                msg = f"park failed: {e}"
+                msg = f"{name} failed: {e}"
         else:
             return self.send(404, b"{}")
         self.send(200, json.dumps({"message": msg or "ok"}).encode())
