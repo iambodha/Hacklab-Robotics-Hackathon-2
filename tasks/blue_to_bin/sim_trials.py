@@ -56,8 +56,11 @@ def apply_pad_fix(inward_m: float = PAD_FIX_M, out_dir: Path | None = None) -> P
     return out
 
 
-def make_sim_executor(rec_root: Path, spec=None, pad_fix: bool = False, layout: str = "home"):
-    """Executor on the home twin with this task's locator and adapter skill (what the integrator would wire)."""
+def make_sim_executor(rec_root: Path, spec=None, pad_fix: bool = False, layout: str | None = None):
+    """Executor on the site's twin (SITE, default home) with this task's locator and adapter skill (what the
+    integrator would wire)."""
+    from sites import get_site
+    layout = layout or get_site().name
     if pad_fix:
         apply_pad_fix()
     from executor.backends.sim import SimBackend
@@ -116,14 +119,14 @@ def main():
     ap.add_argument("--twin-pad-fix", action="store_true", help="apply the proposed fingertip-pad change (see apply_pad_fix)")
     ap.add_argument("--frames-dir", help="save overview + wrist frames after the key steps of every trial here")
     ap.add_argument("--out", default=str(RESULTS / "sim_scripted.json"))
-    ap.add_argument("--layout", default="home", help="twin layout name or file (its overview camera must match scene_calib)")
+    ap.add_argument("--layout", help="twin layout name or file (default: the site's; its overview camera must match scene_calib)")
     a = ap.parse_args()
     import tempfile
     rec_root = Path(tempfile.mkdtemp(prefix="blue_to_bin_rec_"))
     ex, b, kin, spec = make_sim_executor(rec_root, pad_fix=a.twin_pad_fix, layout=a.layout)
     from .plan import Runner
     from .task import MEASURED, truth_in_bin
-    cap0 = json.loads(MEASURED.read_text())["blue_cap"]["centre_xy"]
+    cap0 = json.loads(Path(spec.source.get("file", MEASURED)).read_text())["blue_cap"]["centre_xy"]
     trials = []
     for k in range(1, a.trials + 1):
         b.arm.rng = np.random.default_rng(a.seed * 1000 + k)

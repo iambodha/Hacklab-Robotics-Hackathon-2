@@ -1,7 +1,8 @@
 """Task "put the blue object in the bin": goal, geometry, grasp choice and the success predicate.
 
 World frame of prompts/scene-contract.md (metres; origin = follower base on the table, +x forward, z up).
-Sizes come from measured.json (tasks/blue_to_bin/measure.py); positions are re-located on every attempt.
+Sizes and the bin position come from the site's measurement (measured.json for home, measured_<site>.json elsewhere;
+tasks/blue_to_bin/measure.py); the object's position is re-located on every attempt.
 
 Success (`judge`) needs BOTH, and neither is the executor's own claim:
   1. overview camera, independent: the blue object is seen, its centre lies inside the bin's rim footprint
@@ -13,13 +14,22 @@ from __future__ import annotations
 
 import json
 import math
+import warnings
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 import numpy as np
 
+from sites import get_site
+
 HERE = Path(__file__).resolve().parent
-MEASURED = HERE / "measured.json"
+MEASURED = HERE / "measured.json"                       # home's measurement
+
+
+def measured_path(site: str | None = None) -> Path:
+    """The selected site's measurement: measured.json for home, measured_<site>.json elsewhere."""
+    name = site or get_site().name
+    return MEASURED if name == "home" else HERE / f"measured_{name}.json"
 
 GOAL = "Take the blue object (a jar lid on the table) and put it in the bin (the transparent tub)."
 
@@ -52,7 +62,15 @@ class Spec:
     source: dict = field(default_factory=dict)
 
     @classmethod
-    def load(cls, path: Path = MEASURED, **over) -> "Spec":
+    def load(cls, path: Path | None = None, **over) -> "Spec":
+        if path is None:
+            path = measured_path()
+            if not path.exists() and path != MEASURED:
+                warnings.warn(f"{path.name} not measured yet: object sizes AND the bin position come from home's "
+                              f"{MEASURED.name}; run python -m tasks.blue_to_bin.measure on this table", stacklevel=2)
+                s = cls.load(MEASURED, **over)
+                s.source["bin_from_site"] = "home"
+                return s
         s = cls()
         if path.exists():
             d = json.loads(path.read_text())

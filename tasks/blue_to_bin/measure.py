@@ -12,7 +12,8 @@ the image, `bin_pixels` in measured.json, re-pick them when the bin moves). A ta
 rim radius, rim height, base radius) is fitted to them. Everything is world metres (scene-contract frame) with
 1-sigma from the pixel sigma (Jacobian) and the calibration (perception's held-out marker error).
 
-Writes tasks/blue_to_bin/measured.json and measured_overview.jpg (model outlines over the frame).
+Writes the selected site's tasks/blue_to_bin/measured.json (home; measured_<site>.json elsewhere) and
+measured_overview[_<site>].jpg (model outlines over the frame).
 """
 from __future__ import annotations
 
@@ -29,8 +30,10 @@ import numpy as np
 from perception import geometry as g
 from perception.locate import Locator, segment
 
+from .task import measured_path
+
 HERE = Path(__file__).resolve().parent
-OUT = HERE / "measured.json"
+OUT = measured_path()
 PIXEL_SIGMA = 0.7          # px, a silhouette extreme / a picked edge pixel
 
 # Pixels picked on the 00:58 frame (Station's last stored overview entry before its restart). (u, v) in 299x224.
@@ -215,8 +218,9 @@ def main():
     pix = json.loads(Path(args.bin_pixels).read_text()) if args.bin_pixels else DEFAULT_BIN_PIXELS
     cap, tub = measure_cap(img, loc, cam), measure_bin(loc, cam, pix)
     out = Path(args.out)
-    cv2.imwrite(str(out.with_name("measured_overview_raw.jpg")), img)
-    cv2.imwrite(str(out.with_name("measured_overview.jpg")), annotate(img, loc, cam, cap, tub, source))
+    stem = out.stem.replace("measured", "measured_overview", 1)          # measured_office -> measured_overview_office
+    cv2.imwrite(str(out.with_name(stem.replace("measured_overview", "measured_overview_raw", 1) + ".jpg")), img)
+    cv2.imwrite(str(out.with_name(stem + ".jpg")), annotate(img, loc, cam, cap, tub, source))
     rec = {"created": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "frame": "world (scene-contract), metres", "source": source,
            "scene_calib": loc.sc.d.get("created"), "blue_cap": cap, "bin": tub,
            "notes": ["read only: no command was sent", "calibration sigma = perception's held-out marker error (median)"]}

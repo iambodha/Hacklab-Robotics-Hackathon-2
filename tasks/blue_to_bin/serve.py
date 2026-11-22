@@ -70,9 +70,10 @@ def main():
                     help="dx,dy[,dz] world mm added to every commanded TCP point near the objects (dry run / touch_table)")
     ap.add_argument("--grip-force", type=float, help="0.1..1 jaw torque limit while closing (default Spec.grip_force)")
     a = ap.parse_args()
+    from sites import get_site
     if a.backend == "sim":
-        os.environ.setdefault("SIM_LAYOUT", "home")
-        os.environ.setdefault("ROBOT_SIM_LAYOUT", "home")
+        os.environ.setdefault("SIM_LAYOUT", get_site().name)
+        os.environ.setdefault("ROBOT_SIM_LAYOUT", get_site().name)
         if a.twin_pad_fix:
             from .sim_trials import apply_pad_fix
             apply_pad_fix()
@@ -81,6 +82,9 @@ def main():
     from .task import Spec
     off = tuple(float(v) / 1000 for v in a.tcp_offset_mm.split(","))
     spec = Spec.load(tcp_offset=(off + (0.0, 0.0, 0.0))[:3], **({"grip_force": a.grip_force} if a.grip_force else {}))
+    if a.backend == "real" and spec.source.get("bin_from_site", get_site().name) != get_site().name:
+        raise SystemExit(f"SITE={get_site().name}: the bin position is {spec.source['bin_from_site']}'s; measure it on this "
+                         "table first (python -m tasks.blue_to_bin.measure --live 10)")
     print(f"spec: lid {spec.cap_diameter * 1000:.0f} x {spec.cap_height * 1000:.0f} mm ({spec.grasp_mode()} grasp), bin "
           f"{list(spec.bin_xy)} rim {spec.bin_rim_height * 1000:.0f} mm, tcp offset {[round(v * 1000) for v in spec.tcp_offset]} mm, "
           f"grip force {spec.grip_force}", flush=True)

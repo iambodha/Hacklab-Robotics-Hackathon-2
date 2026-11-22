@@ -57,8 +57,9 @@ def main():
     ap.add_argument("--twin-pad-fix", action="store_true")
     ap.add_argument("--out", default=str(HERE / "results" / "sim_claude.json"))
     a = ap.parse_args()
-    os.environ.setdefault("SIM_LAYOUT", "home")
-    os.environ.setdefault("ROBOT_SIM_LAYOUT", "home")
+    from sites import get_site
+    os.environ.setdefault("SIM_LAYOUT", get_site().name)
+    os.environ.setdefault("ROBOT_SIM_LAYOUT", get_site().name)
     if a.twin_pad_fix:
         from .sim_trials import apply_pad_fix
         apply_pad_fix()
