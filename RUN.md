@@ -13,8 +13,23 @@ scripts/stack.sh status           # what is up, with pids and URLs
 ```
 
 `up` is idempotent: anything already listening is left alone. Logs are in `logs/<service>.log`. Recordings go to
-`RECORDER_DIR` (default `/Volumes/Dell HDD/Robotics-Hackathon/recordings`). The twin uses `SIM_LAYOUT`
-(default `home`). `scripts/stack.sh down` stops only what the script started.
+`RECORDER_DIR` (default `/Volumes/Dell HDD/Robotics-Hackathon/recordings`, `.../recordings/office` for the office).
+The twin uses `SIM_LAYOUT` (default: the site's layout). `scripts/stack.sh down` stops only what the script started.
+
+### Switching to the office table
+
+The table is selected by `SITE` (`home` if unset): calibration, twin layout, overview camera, camera queues, action
+logs and recordings all follow it. Services read it at startup, so restart them:
+
+```
+scripts/stack.sh down
+SITE=office python3 -m sites check        # read-only: resolved office files, cameras, log dirs; flags stale overrides
+scripts/stack.sh up --site office         # same as SITE=office scripts/stack.sh up
+curl -s http://127.0.0.1:8910/api/scene | python3 -m json.tool | grep -E '"(site|scene_calib|layout)"'
+```
+
+The last line must show `"site": "office"` and `sites/office/scene_calib.json`. Do not keep home's camera variables
+(from `sites/home/site.env`) in the shell: they override the site. Details: `docs/sites/switching.md`.
 
 ## 2. Open the console
 

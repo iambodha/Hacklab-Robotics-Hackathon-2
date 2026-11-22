@@ -8,6 +8,7 @@ import shlex
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 from . import ROOT, get_site
 
@@ -79,17 +80,74 @@ def shell_defaults() -> dict[str, str]:
     return values
 
 
+def check() -> tuple[list[str], list[str]]:
+    """(report lines, problems): the selected site's files, cameras and record dirs as the consumers resolve them.
+    Problems: a missing site file, or an override that names another registered site's file or camera."""
+    import os
+    site = get_site()
+    lines, problems = [f"site {site.name} ({(site.directory / 'site.json').relative_to(ROOT)})"], []
+    others = [get_site(p.parent.name) for p in sorted((ROOT / "sites").glob("*/site.json")) if p.parent.name != site.name]
+    foreign_files = {str(o.asset(k).resolve()): o.name for o in others for k in o.manifest["files"]
+                     if o.asset(k).resolve() != site.asset(k).resolve()}
+    foreign_cams = {o.manifest["cameras"][r].split("/")[-1]: o.name for o in others for r in ("wrist", "overview")}
+
+    def rel(p: Path) -> str:
+        return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
+    files = {"scene_calib": site.scene_calib, "layout": site.layout, "overview_camera": site.overview_camera,
+             "wrist_mount": site.wrist_mount, **{f"intrinsics_{r}": site.intrinsics(r) for r in ("overview", "wrist")}}
+    for key, path in files.items():
+        note = "ok" if path.is_file() else "MISSING"
+        if key == "scene_calib" and path.is_file():
+            note += f" (created {json.loads(path.read_text()).get('created', '?')})"
+        lines.append(f"  {key:<20} {rel(path)}  {note}")
+        if not path.is_file():
+            problems.append(f"{key}: {rel(path)} is missing")
+    for key, var in (("overview_camera", "ROBOT_OVERVIEW_CAL"), ("scene_calib", "EXECUTOR_SCENE_CALIB"),
+                     ("layout", "SIM_LAYOUT"), ("layout", "ROBOT_SIM_LAYOUT")):
+        value = os.environ.get(var)
+        if not value:
+            continue
+        lines.append(f"  override {var}={value}")
+        named = get_site(value).layout if (ROOT / "sites" / value / "site.json").is_file() else Path(value)
+        hit = foreign_files.get(str((named if named.is_absolute() else ROOT / named).resolve()))
+        if hit or (var.endswith("LAYOUT") and value in foreign_files.values()):
+            problems.append(f"{var}={value} selects site {hit or value}'s {key}, not {site.name}'s")
+    for role in ("overview", "wrist"):
+        for consumer in ("PERCEPTION", "TWIN"):
+            q = site.queue(role, consumer)
+            lines.append(f"  camera {role:<8} {consumer.lower():<10} {q}")
+            if q.split("/")[-1] in foreign_cams:
+                problems.append(f"{consumer}_{role.upper()}_QUEUE={q} is site {foreign_cams[q.split('/')[-1]]}'s {role} camera")
+        prefix = site.robot_camera(role)
+        lines.append(f"  camera {role:<8} real MCP   {prefix}")
+        if any(h.startswith(prefix) for h in foreign_cams) and not site.manifest["cameras"][role].split("/")[-1].startswith(prefix):
+            problems.append(f"ROBOT_{role.upper()}_CAM={prefix} is another site's camera")
+    lines.append(f"  recorder roles      {site.recorder_roles()}")
+    for prefix_role in site.recorder_roles().split(","):
+        prefix = prefix_role.split("=")[0]
+        if prefix and any(h.startswith(prefix) for h in foreign_cams):
+            problems.append(f"RECORDER_CAM_ROLES maps {prefix}, another site's camera")
+    for key, path in (("action log", site.action_log_dir), ("episodes", site.episode_dir), ("recordings", site.record_dir)):
+        lines.append(f"  {key:<20} {path}")
+    return lines, problems
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     d = sub.add_parser("discover", help="GET live camera metadata/snapshots from the existing relay")
     d.add_argument("--relay", default="http://127.0.0.1:8890")
     sub.add_parser("env", help="print shell-quoted exports, preserving explicit overrides")
+    sub.add_parser("check", help="print what the selected site resolves to; non-zero on missing files or stale overrides")
     args = parser.parse_args()
     if args.command == "env":
         for key, value in shell_defaults().items():
             print(f"export {key}={shlex.quote(value)}")
         return
+    if args.command == "check":
+        lines, problems = check()
+        print("\n".join(lines + [f"PROBLEM: {p}" for p in problems] + ([] if problems else ["ok"])))
+        sys.exit(1 if problems else 0)
     try:
         print(json.dumps(discover(args.relay), indent=2))
     except (OSError, ValueError) as exc:
