@@ -156,14 +156,17 @@ def refine_edges(gray: np.ndarray, c: np.ndarray, iters: int = 2, half: float = 
     return c
 
 
-def autodetect_dictionary(frames: list[np.ndarray]) -> tuple[str | None, dict[str, set[int]]]:
+def autodetect_dictionary(frames: list[np.ndarray], min_frac: float = 0.3) -> tuple[str | None, dict[str, set[int]]]:
     """Try every dictionary on the frames; pick the one finding the most markers (ties: smallest dict).
+    Only ids seen in >= min_frac of the frames count (bigger dictionaries pick up one-frame false positives).
     Returns (name, {dict name: ids seen})."""
     seen: dict[str, set[int]] = {}
     for name in DICT_NAMES:
-        ids: set[int] = set()
+        counts: dict[int, int] = {}
         for f in frames:
-            ids |= set(detect(f, name))
+            for i in detect(f, name):
+                counts[i] = counts.get(i, 0) + 1
+        ids = {i for i, n in counts.items() if n >= max(1, min_frac * len(frames))}
         if ids:
             seen[name] = ids
     if not seen:

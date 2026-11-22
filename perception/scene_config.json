@@ -1,6 +1,6 @@
 {
   "marker_size_m": 0.10,
-  "dictionary": "auto",
+  "dictionary": "DICT_4X4_50",
   "base_marker_ids": [22, 23],
   "arm_base": {
     "source": "auto",

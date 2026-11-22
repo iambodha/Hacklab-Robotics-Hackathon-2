@@ -177,16 +177,18 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
     intr_wr = load_intrinsics("wrist")
     wrist_est = None
     T_tm = {i: fit.T_table_marker(i) for i in fit.markers}
-    w_obs, w_T = [], []
+    w_obs, w_T, w_src = [], [], []
     if T_base_wcam is not None and any(i in T_tm for i in wr_med) and not moved:
         w_obs.append({i: wr_med[i] for i in wr_med if i in T_tm})
         w_T.append(T_base_wcam)
-    for pose in data.get("wrist_poses") or []:
+        w_src.append(f"current pose, markers {sorted(w_obs[-1])}")
+    for k, pose in enumerate(data.get("wrist_poses") or []):
         pm, _, _ = aruco.average_corners([f for f in pose["frames"] if f is not None], name)
         pm = {i: c for i, c in pm.items() if i in T_tm}
         if pm:
             w_obs.append(pm)
             w_T.append(wrist.T_base_wristcam(pose["joints"]))
+            w_src.append(f"{pose.get('source', f'hand pose {k + 1}')}, markers {sorted(pm)}")
     if w_obs:
         wrist_est = wrist.solve_base_from_wrist(w_obs, T_tm, w_T, size, W, H, intr=intr_wr, base_z=base_z)
         if intr_wr is None:
@@ -230,7 +232,8 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
         R_wt = (wrist.T_world_base(base_z) @ g.inv(T_table_base))[:2, :2]
         cov = R_wt @ est["cov_xyyaw"][:2, :2] @ R_wt.T                     # world x/y
         base_info = {"source": "foot + wrist (overview: front edge of the arm foot -> position; wrist camera: marker "
-                               "seen through FK at the current pose -> mostly yaw)",
+                               f"seen through FK at {len(w_obs)} arm pose(s) -> mostly yaw)",
+                     "wrist_poses": w_src,
                      "sigma_mm": est["sigma_mm"], "sigma_yaw_deg": est["sigma_yaw_deg"],
                      "sigma_world_x_mm": float(np.sqrt(cov[0, 0]) * 1000), "sigma_world_y_mm": float(np.sqrt(cov[1, 1]) * 1000),
                      "wrist_rms_px": est["rms_px"], "wrist_sigma_px_used": sigma_px,
@@ -403,6 +406,9 @@ def main():
     ap.add_argument("--frames", type=int, default=60, help="frames per camera (live)")
     ap.add_argument("--wrist-poses", type=int, default=0,
                     help="also record N extra hand-placed arm poses with markers in the wrist view (live)")
+    ap.add_argument("--extra-wrist-dir", type=Path, action="append", default=[],
+                    help="earlier capture dir (frames/calib-*) whose wrist frames + joints.json are added as an extra arm "
+                         "pose; only valid if the arm base has not moved since (the foot edge check shows it)")
     ap.add_argument("--fit-k1", action="store_true", help="also fit radial distortion k1 (needs markers spread over the image)")
     ap.add_argument("--config", type=Path, default=CONFIG_PATH)
     ap.add_argument("--out", type=Path, default=SCENE_PATH)
@@ -411,6 +417,9 @@ def main():
     cfg = json.loads(a.config.read_text())
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     data = capture_live(a.frames, ROOT / "frames" / f"calib-{stamp}", a.wrist_poses) if a.live else load_dir(a.frames_dir)
+    for d in a.extra_wrist_dir:
+        old = load_dir(d)
+        data["wrist_poses"] = data.get("wrist_poses", []) + [{"joints": old["joints"], "frames": old["wrist"], "source": str(d)}]
     res = calibrate(data, cfg, fit_k1=a.fit_k1)
     c = res["calib"]
     from .annotate import annotate_overview, annotate_wrist
