@@ -2,287 +2,566 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Executor console</title>
+<meta name="color-scheme" content="light dark">
+<title>ElRobot executor console</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%230e6a63'/%3E%3C/svg%3E">
 <style>
 :root{
-  --bg:#f3f1ec;--panel:#fbfaf7;--ink:#1d1c1a;--mut:#67635b;--faint:#8f8a80;--line:#e1ddd4;--line2:#d2cdc2;
-  --acc:#0e6a63;--acc-ink:#fff;--ok:#1d7448;--ok-bg:#e3f1e8;--warn:#8f5600;--warn-bg:#f8ecd6;--bad:#a8291f;--bad-bg:#f7e2df;
-  --info:#2b5cab;--info-bg:#e4ebf7;--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;--r:12px}
-@media (prefers-color-scheme:dark){:root{
-  --bg:#141413;--panel:#1c1c1a;--ink:#ecebe7;--mut:#a6a299;--faint:#7d796f;--line:#2c2b28;--line2:#3a3934;
-  --acc:#3fb3a6;--acc-ink:#06201d;--ok:#5fcf91;--ok-bg:#16301f;--warn:#e9b25c;--warn-bg:#33270f;--bad:#ff8a7a;--bad-bg:#3a1b17;
-  --info:#8fb3ff;--info-bg:#18233a}}
+  --bg:#f3f1ec;--panel:#fbfaf7;--sunk:#efece6;--ink:#1d1c1a;--mut:#5f5b54;--faint:#858076;--line:#e1ddd4;--line2:#cfcabe;
+  --acc:#0e6a63;--acc-ink:#fff;--acc-bg:#dcefec;--ok:#1d7448;--ok-bg:#e3f1e8;--warn:#8a5200;--warn-bg:#f8ecd6;--bad:#a8291f;--bad-bg:#f7e2df;
+  --info:#2b5cab;--info-bg:#e4ebf7;--blue:#2f6fe0;--bin:#d9822b;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;--r:12px;--shadow:0 1px 2px rgba(40,30,10,.05),0 4px 14px rgba(40,30,10,.04)}
+:root[data-theme=dark]{
+  --bg:#131312;--panel:#1b1b19;--sunk:#161615;--ink:#ecebe7;--mut:#aaa69c;--faint:#868277;--line:#2b2a27;--line2:#3b3a35;
+  --acc:#45b8aa;--acc-ink:#06201d;--acc-bg:#143330;--ok:#62d293;--ok-bg:#153020;--warn:#ebb562;--warn-bg:#33270f;--bad:#ff8c7c;--bad-bg:#3a1b17;
+  --info:#93b6ff;--info-bg:#18233a;--blue:#7aa7ff;--bin:#f0a050;--shadow:none}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:#131312;--panel:#1b1b19;--sunk:#161615;--ink:#ecebe7;--mut:#aaa69c;--faint:#868277;--line:#2b2a27;--line2:#3b3a35;
+  --acc:#45b8aa;--acc-ink:#06201d;--acc-bg:#143330;--ok:#62d293;--ok-bg:#153020;--warn:#ebb562;--warn-bg:#33270f;--bad:#ff8c7c;--bad-bg:#3a1b17;
+  --info:#93b6ff;--info-bg:#18233a;--blue:#7aa7ff;--bin:#f0a050;--shadow:none}}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html{background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
   font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
 body{margin:0}
-::selection{background:color-mix(in srgb,var(--acc) 28%,transparent)}
+::selection{background:color-mix(in srgb,var(--acc) 30%,transparent)}
 :focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:6px}
 *{scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
 a{color:var(--acc);text-underline-offset:3px}
-h1{font-size:17px;font-weight:650;letter-spacing:-.01em;margin:0}
-h2{font-size:13px;font-weight:650;margin:0 0 10px;color:var(--ink)}
-.mut{color:var(--mut)}.faint{color:var(--faint)}.mono{font-family:var(--mono);font-size:12.5px}
-header{position:sticky;top:0;z-index:5;display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px 20px;
-  background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-header .sp{flex:1}
-.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--line2);
-  font-size:12.5px;color:var(--mut);white-space:nowrap}
-.chip b{color:var(--ink);font-weight:600}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--faint)}
-.dot.on{background:var(--ok)}.dot.busy{background:var(--warn);animation:pulse 1.2s ease-in-out infinite}.dot.bad{background:var(--bad)}
-@keyframes pulse{50%{opacity:.35}}
-@media (prefers-reduced-motion:reduce){.dot.busy{animation:none}}
-main{display:grid;grid-template-columns:340px minmax(0,1fr);gap:16px;padding:16px 20px 40px;max-width:1680px;margin:0 auto}
-@media (max-width:1000px){main{grid-template-columns:1fr}}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px}
-.stack{display:flex;flex-direction:column;gap:16px;min-width:0}
-label{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px}
-textarea,select,input[type=text]{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line2);
+h1{font-size:16px;font-weight:650;letter-spacing:-.01em;margin:0;white-space:nowrap}
+h2{font-size:13.5px;font-weight:650;margin:0;letter-spacing:-.005em}
+h3{font-size:12.5px;font-weight:650;margin:16px 0 6px;color:var(--mut)}
+.mut{color:var(--mut)}.faint{color:var(--faint)}.mono{font-family:var(--mono);font-size:12px}
+.sp{flex:1}
+
+/* header + status pills */
+header{position:sticky;top:0;z-index:10;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 20px;
+  background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line)}
+header h1{margin-right:8px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:999px;border:1px solid var(--line2);
+  background:var(--panel);font-size:12.5px;color:var(--mut);white-space:nowrap}
+.pill b{color:var(--ink);font-weight:600}
+.pill.ok{border-color:color-mix(in srgb,var(--ok) 35%,var(--line2))}
+.pill.warn{border-color:color-mix(in srgb,var(--warn) 45%,var(--line2));background:var(--warn-bg)}
+.pill.bad{border-color:color-mix(in srgb,var(--bad) 50%,var(--line2));background:var(--bad-bg)}
+.pill.bad b{color:var(--bad)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+.ok>.dot,.dot.ok{background:var(--ok)}.warn>.dot,.dot.warn{background:var(--warn)}.bad>.dot,.dot.bad{background:var(--bad)}
+.dot.live{background:var(--info);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.3}}
+.iconbtn{height:26px;padding:0 10px;font-size:12.5px;font-weight:600}
+
+/* layout */
+main{display:grid;grid-template-columns:360px minmax(0,1fr);gap:16px;padding:16px 20px 48px;max-width:1720px;margin:0 auto}
+@media (max-width:1100px){main{grid-template-columns:1fr}}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px 16px;box-shadow:var(--shadow);min-width:0}
+.ph{display:flex;align-items:center;gap:10px;margin-bottom:12px;min-height:24px}
+.ph .faint{font-size:12px}
+
+/* controls */
+label.l{display:block;font-size:12px;font-weight:600;color:var(--mut);margin:14px 0 6px}
+textarea,select,input[type=text]{width:100%;font:inherit;color:var(--ink);background:var(--sunk);border:1px solid var(--line2);
   border-radius:8px;padding:8px 10px}
-textarea{min-height:96px;resize:vertical}
-textarea.code{font-family:var(--mono);font-size:12.5px;min-height:64px}
+textarea{min-height:72px;resize:vertical;line-height:1.4}
+textarea.code{font-family:var(--mono);font-size:12px;min-height:56px}
+textarea:focus,select:focus,input:focus{border-color:var(--acc);outline:none}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.row>select{flex:1;min-width:0}
 button{font:inherit;font-weight:600;padding:7px 14px;border-radius:8px;border:1px solid var(--line2);background:var(--panel);
-  color:var(--ink);cursor:pointer;transition:background .15s ease-out,border-color .15s ease-out}
+  color:var(--ink);cursor:pointer;transition:background .15s ease-out,border-color .15s ease-out,opacity .15s}
 button:hover:not(:disabled){border-color:var(--faint)}
-button:disabled{opacity:.45;cursor:not-allowed}
+button:active:not(:disabled){transform:translateY(.5px)}
+button:disabled{opacity:.42;cursor:not-allowed}
 button.primary{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+button.primary:hover:not(:disabled){filter:brightness(1.08)}
 button.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line2))}
 button.danger:hover:not(:disabled){background:var(--bad-bg)}
-.msg{font-size:12.5px;color:var(--mut);min-height:18px;margin-top:8px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;padding:2px;border-radius:9px;background:var(--sunk);border:1px solid var(--line2)}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{display:block;text-align:center;padding:5px 6px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--mut);cursor:pointer;
+  transition:background .15s ease-out,color .15s}
+.seg input:checked+label{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.seg input:focus-visible+label{outline:2px solid var(--acc);outline-offset:1px}
+.seg input:disabled+label{opacity:.4;cursor:not-allowed}
+.hint{font-size:12px;color:var(--faint);margin-top:6px;min-height:16px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}
+.actions .primary{grid-column:1/3;padding:9px 14px;font-size:14.5px}
+.msg{font-size:12.5px;color:var(--mut);min-height:18px;margin-top:10px}
 .msg.err{color:var(--bad)}
-.switch{display:flex;gap:10px;align-items:center;padding:10px;border-radius:8px;border:1px dashed var(--line2);margin-top:10px}
-.switch input{width:18px;height:18px;accent-color:var(--bad)}
-.switch.armed{border-style:solid;border-color:var(--bad);background:var(--bad-bg)}
-.cams{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-figure{margin:0;position:relative}
-figure img{display:block;width:100%;aspect-ratio:299/224;object-fit:cover;border-radius:10px;background:#0c0c0b}
-figcaption{position:absolute;left:8px;top:8px;font-size:11.5px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,.55);color:#f2f0ea}
-.arm{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px;margin-top:14px}
+.arm{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:10px;border:1px dashed var(--line2);margin-top:10px}
+.arm input{width:18px;height:18px;accent-color:var(--bad);margin:1px 0 0}
+.arm.armed{border-style:solid;border-color:var(--bad);background:var(--bad-bg)}
+.arm label{font-size:12.5px;color:var(--mut)}
+.arm label b{color:var(--ink)}
+.taskline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--line);font-size:12.5px}
+
+/* perception list */
+.objs{display:flex;flex-direction:column}
+.obj{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:8px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.obj:last-child{border-bottom:0}
+.obj i{width:10px;height:10px;border-radius:3px;background:var(--faint);align-self:center}
+.obj i.target{background:var(--blue)}.obj i.bin{background:var(--bin)}
+.obj .src{grid-column:2/4;font-size:11.5px;color:var(--faint);margin-top:-2px}
+details.box{border-top:1px solid var(--line);margin-top:14px;padding-top:10px}
+details.box>summary{cursor:pointer;font-weight:600;font-size:13px;list-style:none;display:flex;align-items:center;gap:6px}
+details.box>summary::before{content:"";width:6px;height:6px;border-right:1.5px solid var(--mut);border-bottom:1.5px solid var(--mut);transform:rotate(-45deg);transition:transform .15s}
+details.box[open]>summary::before{transform:rotate(45deg)}
+
+/* live */
+.cams{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:12px;align-items:start}
+figure{margin:0;position:relative;border-radius:10px;overflow:hidden;background:#0c0c0b}
+figure img{display:block;width:100%;height:auto;aspect-ratio:var(--ar,299/224)}
+figure svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+figcaption{position:absolute;left:8px;top:8px;display:flex;gap:6px;align-items:center;font-size:11.5px;padding:2px 9px;border-radius:999px;
+  background:rgba(12,12,11,.62);color:#f2f0ea;backdrop-filter:blur(4px)}
+.camnote{font-size:11.5px;color:var(--faint);margin-top:6px}
+.toggles{display:flex;gap:12px;font-size:12px;color:var(--mut)}
+.toggles label{display:flex;gap:5px;align-items:center;cursor:pointer}
+.toggles input{accent-color:var(--acc);margin:0}
+.joints{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;margin-top:12px}
 .j{font-size:11.5px}
-.j .bar{position:relative;height:56px;border-radius:6px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
-.j .fill{position:absolute;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--acc) 60%,transparent);transition:height .2s ease-out}
-.j .goal{position:absolute;left:0;right:0;height:2px;background:var(--ink);opacity:.55}
-.j .load{height:4px;border-radius:2px;margin-top:4px;background:var(--line);overflow:hidden}
-.j .load i{display:block;height:100%;background:var(--warn)}
+.j .bar{position:relative;height:34px;border-radius:6px;background:var(--sunk);border:1px solid var(--line);overflow:hidden}
+.j .fill{position:absolute;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--acc) 55%,transparent);transition:height .2s ease-out}
+.j .goal{position:absolute;left:0;right:0;height:2px;background:var(--ink);opacity:.5}
 .j .nm{display:flex;justify-content:space-between;margin-top:3px;color:var(--mut)}
-.kv{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:12.5px;color:var(--mut)}
-.kv b{color:var(--ink);font-weight:600;font-family:var(--mono);font-size:12.5px}
-.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:-4px -14px 12px;padding:0 10px}
-.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:none;color:var(--mut);padding:8px 10px;font-weight:600}
-.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--acc)}
-.tabs .count{font-weight:500;color:var(--faint);margin-left:4px}
-.view[hidden]{display:none}
-.tl{display:flex;flex-direction:column;max-height:70vh;overflow:auto}
-.ev{display:grid;grid-template-columns:62px 112px minmax(0,1fr);gap:10px;padding:6px 2px;border-bottom:1px solid var(--line);font-size:13px}
+.j .nm span:last-child{font-family:var(--mono);font-size:11px}
+.kv{display:flex;gap:18px;flex-wrap:wrap;margin-top:10px;font-size:12.5px;color:var(--mut)}
+.kv b{color:var(--ink);font-weight:600;font-family:var(--mono);font-size:12px}
+
+/* robot logic */
+.logic{display:grid;grid-template-columns:minmax(300px,400px) minmax(0,1fr);gap:16px}
+@media (max-width:1300px){.logic{grid-template-columns:1fr}}
+.strip{display:flex;gap:4px;align-items:stretch;overflow-x:auto;padding-bottom:4px;margin-bottom:12px}
+.step{flex:none;display:flex;flex-direction:column;gap:2px;min-width:92px;padding:6px 10px;border-radius:8px;border:1px solid var(--line2);
+  background:var(--sunk);cursor:pointer;text-align:left;font-weight:500}
+.step b{font-size:12.5px}
+.step span{font-size:11px}
+.step.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+.step.SUCCEEDED{background:var(--ok-bg)}.step.SUCCEEDED span{color:var(--ok)}
+.step.REJECTED,.step.FAULT{background:var(--bad-bg)}.step.REJECTED span,.step.FAULT span{color:var(--bad)}
+.step.PARTIAL,.step.BLOCKED,.step.CANCELLED{background:var(--warn-bg)}.step.PARTIAL span,.step.BLOCKED span,.step.CANCELLED span{color:var(--warn)}
+.step.RUNNING{background:var(--info-bg)}.step.RUNNING span{color:var(--info)}
+.arrow{flex:none;align-self:center;width:10px;height:1px;background:var(--line2)}
+.tl{display:flex;flex-direction:column;max-height:640px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--sunk)}
+.ev{display:grid;grid-template-columns:54px 10px minmax(0,1fr);gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:12.5px;align-items:start}
 .ev:last-child{border-bottom:0}
-.ev time{color:var(--faint);font-family:var(--mono);font-size:12px}
-.k{font-size:11.5px;font-weight:650;color:var(--mut);text-transform:lowercase}
-.k.advisor{color:var(--info)}.k.proposal{color:var(--acc)}.k.bad{color:var(--bad)}.k.ok{color:var(--ok)}.k.warn{color:var(--warn)}
-.ev pre,.card pre{margin:4px 0 0;white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:12px;color:var(--mut)}
+.ev time{color:var(--faint);font-family:var(--mono);font-size:11px;padding-top:1px}
+.ev .dot{margin-top:5px}
+.ev .k{font-size:11px;font-weight:650;color:var(--mut);margin-right:6px;text-transform:lowercase}
+.ev.adv .k{color:var(--info)}.ev.adv .dot{background:var(--info)}
+.ev.prop .k{color:var(--acc)}.ev.prop .dot{background:var(--acc)}
+.ev.good .dot{background:var(--ok)}.ev.badk .dot{background:var(--bad)}.ev.badk .k{color:var(--bad)}.ev.warnk .dot{background:var(--warn)}
+.ev[data-eid]{cursor:pointer}
+.ev[data-eid]:hover{background:color-mix(in srgb,var(--acc) 6%,transparent)}
 .ev .txt{white-space:pre-wrap;word-break:break-word}
-.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:650;letter-spacing:.01em}
-.SUCCEEDED,.pass{background:var(--ok-bg);color:var(--ok)}
-.PARTIAL,.BLOCKED,.CANCELLED,.skipped,.running,.RUNNING,.QUEUED{background:var(--warn-bg);color:var(--warn)}
-.REJECTED,.FAULT,.fail{background:var(--bad-bg);color:var(--bad)}
-.done{background:var(--info-bg);color:var(--info)}
-.execs{display:flex;flex-direction:column;gap:12px;max-height:74vh;overflow:auto}
-.card{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--bg)}
-.card h3{font-size:14px;margin:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.card .why{margin:6px 0 0;font-size:13px}
-.card table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12.5px}
-.card td,.card th{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:top}
-.card th{font-weight:600;color:var(--mut)}
-.card td.n{font-family:var(--mono);font-size:12px;color:var(--mut);word-break:break-word}
-.phases{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
-.phase{border:1px solid var(--line2);border-radius:8px;padding:5px 9px;font-size:12px;min-width:92px}
-.phase b{display:block;font-size:12.5px}
-.phase.SUCCEEDED,.phase.pass,.phase.done{border-color:color-mix(in srgb,var(--ok) 40%,var(--line2))}
-.phase.fail,.phase.FAULT,.phase.REJECTED{border-color:color-mix(in srgb,var(--bad) 45%,var(--line2))}
-details summary{cursor:pointer;color:var(--mut);font-size:12.5px;margin-top:8px}
-.empty{color:var(--faint);padding:18px 4px;text-align:center}
-.prompt{max-height:46vh;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;
-  white-space:pre-wrap;font-family:var(--mono);font-size:12px;color:var(--mut)}
-.recs a{display:block;padding:6px 0;border-bottom:1px solid var(--line);text-decoration:none}
-.recs a span{color:var(--mut);font-size:12.5px;margin-left:8px}
+.ev pre{margin:3px 0 0;white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:11.5px;color:var(--mut)}
+.filters{display:flex;gap:12px;font-size:12px;color:var(--mut);margin-bottom:8px}
+.filters label{display:flex;gap:5px;align-items:center;cursor:pointer}
+.filters input{accent-color:var(--acc);margin:0}
+.execs{display:flex;flex-direction:column;gap:12px;max-height:690px;overflow:auto;padding-right:2px}
+.card{border:1px solid var(--line);border-radius:10px;background:var(--panel);transition:border-color .25s ease-out,box-shadow .25s ease-out}
+.card.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.card .ch{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid var(--line)}
+.card .ch h4{margin:0;font-size:14px}
+.stage{display:grid;grid-template-columns:118px minmax(0,1fr);gap:10px;padding:9px 12px;border-bottom:1px solid var(--line);font-size:12.5px}
+.stage:last-child{border-bottom:0}
+.stage>.sl{color:var(--mut);font-weight:600;font-size:12px;display:flex;gap:2px 7px;align-items:flex-start;align-content:flex-start;flex-wrap:wrap}
+.stage>.sl .dot{margin-top:5px}
+.stage>.sl small{flex-basis:100%;padding-left:14px;font-weight:500;color:var(--faint);font-size:11px}
+.stage p{margin:0}
+.stage pre{margin:4px 0 0;white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:11.5px;color:var(--mut)}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:650;letter-spacing:.01em;background:var(--sunk);color:var(--mut)}
+.SUCCEEDED,.pass,.success{background:var(--ok-bg);color:var(--ok)}
+.PARTIAL,.BLOCKED,.CANCELLED,.skipped,.unknown{background:var(--warn-bg);color:var(--warn)}
+.REJECTED,.FAULT,.fail,.failure{background:var(--bad-bg);color:var(--bad)}
+.RUNNING,.running,.done{background:var(--info-bg);color:var(--info)}
+.checks{display:flex;flex-direction:column;gap:3px}
+.chk{display:grid;grid-template-columns:118px 50px minmax(0,1fr);gap:8px;align-items:baseline}
+.chk .n{font-family:var(--mono);font-size:11.5px;color:var(--mut);word-break:break-word}
+.phases{display:flex;gap:6px;flex-wrap:wrap}
+.phase{border:1px solid var(--line2);border-radius:8px;padding:5px 9px;font-size:12px;min-width:88px;background:var(--sunk)}
+.phase b{display:block;font-size:12px;margin-bottom:2px}
+.phase.ok{border-color:color-mix(in srgb,var(--ok) 45%,var(--line2))}
+.phase.bad{border-color:color-mix(in srgb,var(--bad) 50%,var(--line2))}
+.phase.live{border-color:var(--info)}
+.empty{color:var(--faint);padding:22px 8px;text-align:center;font-size:13px}
+details.prompts{margin-bottom:12px}
+details.prompts summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--mut)}
+.prompt{max-height:260px;overflow:auto;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:6px;
+  white-space:pre-wrap;font-family:var(--mono);font-size:11.5px;color:var(--mut)}
+
+/* twin */
+.twin{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr);gap:16px;align-items:start}
+@media (max-width:1300px){.twin{grid-template-columns:1fr}}
+.frame{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--sunk);aspect-ratio:16/9}
+.frame.off{aspect-ratio:auto;min-height:150px}
+.frame iframe{width:100%;height:100%;border:0;display:block;background:#111}
+.frame .off{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--mut);font-size:13px;text-align:center;padding:20px}
+.recs a{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);text-decoration:none;font-size:12.5px}
+.recs a span{color:var(--mut);white-space:nowrap}
+.recs a.cur{font-weight:650}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
+
 <header>
   <h1>ElRobot executor</h1>
-  <span class=chip><span class=dot id=dBusy></span><span id=sBusy>idle</span></span>
-  <span class=chip>backend <b id=sBackend>-</b></span>
-  <span class=chip id=cArm hidden><span class=dot id=dArm></span><span id=sArm>arm disabled</span></span>
-  <span class=chip>setup <b id=sSetup class=mono>-</b></span>
-  <span class=chip>advisor <b id=sAdv>none</b></span>
+  <span class=pill id=pStation title="NormaCore Station (TCP :8888)"><span class=dot></span>Station <b>-</b></span>
+  <span class=pill id=pRec title="Recorder service :8900"><span class=dot></span>Recorder <b>-</b></span>
+  <span class=pill id=pCams title="Frames per second as they reach the executor"><span class=dot></span>Cameras <b>-</b></span>
+  <span class=pill id=pArm><span class=dot></span>Arm <b>-</b></span>
+  <span class=pill id=pBackend><span class=dot></span>Backend <b>-</b></span>
+  <span class=pill id=pAdv><span class=dot></span>Advisor <b>-</b></span>
+  <span class=pill id=pSetup title="Setup id: calibration + ranges + tool + layout. Proposals for another setup are rejected.">Setup <b class=mono>-</b></span>
   <span class=sp></span>
-  <a id=lRec class=chip href="#" target=_blank rel=noopener hidden>recording</a>
+  <button class=iconbtn id=bTheme title="Theme: follow the system, light or dark">Auto</button>
 </header>
+
 <main>
-<div class=stack>
+<div class=col>
   <section class=panel aria-labelledby=hTask>
-    <h2 id=hTask>Task</h2>
-    <textarea id=prompt placeholder="e.g. Put the black cube into the grey box, then park."></textarea>
-    <label for=advisor>Advisor (runs in the background; proposes, never moves)</label>
-    <div class=row><select id=advisor><option value=claude>Claude Code</option><option value=gemini>Gemini Robotics ER</option>
-      <option value=none>None (manual proposals)</option></select>
-      <select id=model aria-label="Claude model"><option value=sonnet>sonnet</option><option value=opus>opus</option><option value=haiku>haiku</option></select></div>
-    <div class=row style="margin-top:12px"><button class=primary id=bStart>Start task</button><button id=bStop>Stop task</button>
-      <button class=danger id=bCancel>Cancel motion</button></div>
-    <div class=msg id=mTask></div>
+    <div class=ph><h2 id=hTask>Task</h2><span class=sp></span><span class="badge" id=taskState>idle</span></div>
+    <textarea id=prompt aria-label="Task prompt">Put the blue object in the bin</textarea>
+    <label class=l id=lAdv>Advisor <span class=faint style="font-weight:400">proposes skills; the executor validates and moves</span></label>
+    <div class=seg role=radiogroup aria-labelledby=lAdv id=advSeg>
+      <input type=radio name=adv id=aScr value=scripted checked><label for=aScr>Scripted</label>
+      <input type=radio name=adv id=aCl value=claude><label for=aCl>Claude</label>
+      <input type=radio name=adv id=aGe value=gemini><label for=aGe>Gemini</label>
+      <input type=radio name=adv id=aNo value=none><label for=aNo>Manual</label>
+    </div>
+    <div class=row id=modelRow hidden style="margin-top:8px"><select id=model aria-label="Claude model"><option value=sonnet>Claude Sonnet</option>
+      <option value=opus>Claude Opus</option><option value=haiku>Claude Haiku</option></select></div>
+    <div class=hint id=advHint></div>
+    <label class=l id=lBack>Backend</label>
+    <div class=seg role=radiogroup aria-labelledby=lBack id=backSeg>
+      <input type=radio name=back id=bkF value=fake><label for=bkF>Fake</label>
+      <input type=radio name=back id=bkS value=sim><label for=bkS>Sim twin</label>
+      <input type=radio name=back id=bkR value=real><label for=bkR>Real arm</label>
+    </div>
+    <div class=hint id=backHint></div>
+    <div class=arm id=armBox hidden><input type=checkbox id=arm><label for=arm><b>Arm enabled</b>: real motor commands. Off by default;
+      needs EXECUTOR_REAL_MOTION=1 when the console was started. Someone must stand at the arm.</label></div>
+    <div class=actions>
+      <button class=primary id=bStart>Start task</button>
+      <button id=bStop>Stop task</button>
+      <button class=danger id=bCancel title="Stop issuing commands now; the arm holds position">Cancel motion</button>
+    </div>
+    <div class=msg id=mTask role=status aria-live=polite></div>
+    <div class=taskline id=taskLine hidden></div>
   </section>
-  <section class=panel aria-labelledby=hBack>
-    <h2 id=hBack>Backend</h2>
-    <div class=row><select id=backend aria-label=Backend><option value=fake>fake (deterministic, tests)</option>
-      <option value=sim>sim (MuJoCo twin)</option><option value=real>real (Station, follower arm)</option></select>
-      <button id=bBackend>Switch</button></div>
-    <div class=switch id=armBox hidden><input type=checkbox id=arm><label for=arm style="margin:0;color:var(--ink)">
-      <b>Arm enabled</b><br><span class=mut>Real motor commands. Off by default. Needs EXECUTOR_REAL_MOTION=1 at start.</span></label></div>
-    <label for=tool>Tool attached (changes the setup id)</label>
-    <div class=row><select id=tool><option>none</option><option>tissue</option><option>spoon</option><option>napkin</option></select></div>
-    <div class=msg id=mBack></div>
-  </section>
-  <section class=panel aria-labelledby=hManual>
-    <h2 id=hManual>Propose a skill</h2>
-    <div class=row><select id=skill aria-label=Skill></select></div>
-    <label for=params>Parameters (JSON, world frame, metres)</label>
-    <textarea id=params class=code spellcheck=false>{}</textarea>
-    <div class=faint id=pdoc style="font-size:12px;margin-top:4px"></div>
-    <label for=why>Rationale</label>
-    <input type=text id=why value="operator test">
-    <div class=row style="margin-top:10px"><button id=bSubmit>Observe + submit</button></div>
-    <div class=msg id=mSubmit></div>
+
+  <section class=panel aria-labelledby=hPerc>
+    <div class=ph><h2 id=hPerc>Perception</h2><span class=sp></span><span class=faint id=locName></span></div>
+    <div class=objs id=objs><div class=empty>No estimates yet.</div></div>
+    <details class=box id=manual>
+      <summary>Propose a skill by hand</summary>
+      <label class=l for=skill>Skill</label>
+      <select id=skill></select>
+      <label class=l for=params>Parameters <span class=faint style="font-weight:400">JSON, world frame, metres</span></label>
+      <textarea id=params class=code spellcheck=false>{}</textarea>
+      <div class=hint id=pdoc></div>
+      <label class=l for=why>Rationale</label>
+      <input type=text id=why value="operator test">
+      <label class=l for=tool>Tool attached <span class=faint style="font-weight:400">changes the setup id</span></label>
+      <select id=tool><option>none</option><option>tissue</option><option>spoon</option><option>napkin</option></select>
+      <div class=row style="margin-top:12px"><button id=bSubmit>Observe and submit</button></div>
+      <div class=msg id=mSubmit role=status aria-live=polite></div>
+    </details>
   </section>
 </div>
-<div class=stack>
+
+<div class=col>
   <section class=panel aria-labelledby=hLive>
-    <h2 id=hLive>Live</h2>
-    <div class=cams><figure><img id=cWrist alt="Wrist camera"><figcaption>wrist</figcaption></figure>
-      <figure><img id=cOver alt="Overview camera"><figcaption>overview</figcaption></figure></div>
-    <div class=arm id=joints></div>
-    <div class=kv><span>TCP (world) <b id=tcp>-</b></span><span>tilt <b id=tilt>-</b></span><span>gripper <b id=grip>-</b></span>
-      <span>state age <b id=age>-</b></span><span>locator <b id=loc>-</b></span></div>
-  </section>
-  <section class=panel aria-labelledby=hLogic>
-    <h2 id=hLogic class=sr hidden>Robot logic</h2>
-    <div class=tabs role=tablist>
-      <button role=tab aria-selected=true data-v=vExec>Executions<span class=count id=nExec></span></button>
-      <button role=tab aria-selected=false data-v=vTl>Timeline<span class=count id=nTl></span></button>
-      <button role=tab aria-selected=false data-v=vAdv>Advisor</button>
-      <button role=tab aria-selected=false data-v=vRec>Recordings</button>
+    <div class=ph><h2 id=hLive>Live view</h2><span class=faint id=camSrc></span><span class=sp></span>
+      <div class=toggles><label><input type=checkbox id=oGrid checked>World grid</label><label><input type=checkbox id=oObj checked>Estimates</label>
+        <label><input type=checkbox id=oPath checked>Planned path</label></div></div>
+    <div class=cams>
+      <div><figure id=figOver><img id=cOver alt="Overview camera"><svg id=ov aria-hidden=true></svg>
+        <figcaption><span class="dot" id=dOver></span>overview <span id=fOver></span></figcaption></figure>
+        <div class=camnote id=ovNote></div></div>
+      <div><figure><img id=cWrist alt="Wrist camera"><figcaption><span class="dot" id=dWrist></span>wrist <span id=fWrist></span></figcaption></figure>
+        <div class=camnote>Wrist camera moves with the arm: no world overlay.</div></div>
     </div>
-    <div class=view id=vExec><div class=execs id=execs><div class=empty>No proposals yet. Start a task or propose a skill.</div></div></div>
-    <div class=view id=vTl hidden><div class=row style="margin-bottom:8px"><label style="margin:0" class=row>
-      <input type=checkbox id=fAdv checked> advisor</label><label style="margin:0" class=row><input type=checkbox id=fExec checked> executor</label>
-      <label style="margin:0" class=row><input type=checkbox id=fObs> observations</label></div><div class=tl id=tl></div></div>
-    <div class=view id=vAdv hidden><h2>Task prompt</h2><div class=prompt id=pTask>-</div>
-      <h2 style="margin-top:14px">System prompt sent to the advisor</h2><div class=prompt id=pSys>-</div></div>
-    <div class=view id=vRec hidden><div class=recs id=recs></div></div>
+    <div class=joints id=joints></div>
+    <div class=kv><span>TCP world <b id=tcp>-</b></span><span>tilt <b id=tilt>-</b></span><span>gripper <b id=grip>-</b></span><span>state age <b id=age>-</b></span></div>
+  </section>
+
+  <section class=panel aria-labelledby=hLogic>
+    <div class=ph><h2 id=hLogic>Robot logic</h2><span class=faint>advisor thinks → proposes → executor validates → twin preflight → phases → independent outcome</span></div>
+    <details class=prompts id=prompts><summary>Advisor prompts (system + task)</summary>
+      <h3>Task prompt</h3><div class=prompt id=pTask>No task started yet.</div>
+      <h3>System prompt</h3><div class=prompt id=pSys>No advisor started yet.</div></details>
+    <div class=strip id=strip></div>
+    <div class=logic>
+      <div>
+        <div class=filters><label><input type=checkbox id=fAdv checked>advisor</label><label><input type=checkbox id=fExec checked>executor</label>
+          <label><input type=checkbox id=fObs>observations</label><span class=sp></span><span class=faint id=nTl></span></div>
+        <div class=tl id=tl><div class=empty>Start a task: the advisor's messages and tool calls appear here.</div></div>
+      </div>
+      <div class=execs id=execs><div class=empty>No proposals yet. Each one shows its rationale, the validation checks with their numbers,
+        the twin preflight, the phases as they run, and the independent outcome.</div></div>
+    </div>
+  </section>
+
+  <section class=panel aria-labelledby=hTwin>
+    <div class=ph><h2 id=hTwin>Twin and recordings</h2><span class=sp></span><a id=lMirror target=_blank rel=noopener href="#">open twin mirror</a></div>
+    <div class=twin>
+      <div class=frame id=mirrorFrame><div class=off id=mirrorOff><b>Twin mirror is not running</b>
+        <span>It follows the real arm read-only (sim/mirror_real.py, :8892). Start it with <span class=mono>scripts/stack.sh up</span>.</span></div></div>
+      <div>
+        <h3 style="margin-top:0">This run</h3>
+        <div id=runLinks class=recs><div class=empty style="padding:10px 0">No task run yet.</div></div>
+        <h3>Recent recordings</h3>
+        <div class=recs id=recs></div>
+      </div>
+    </div>
   </section>
 </div>
 </main>
+
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const fmt=v=>typeof v==='number'?(Math.abs(v)>=100||Number.isInteger(v)?String(v):v.toFixed(3)):Array.isArray(v)?'['+v.map(fmt).join(', ')+']':
-  v&&typeof v==='object'?Object.entries(v).map(([k,x])=>k+' '+fmt(x)).join(', '):String(v);
+const num=v=>Math.abs(v)>=100||Number.isInteger(v)?String(v):Math.abs(v)>=1?v.toFixed(2):v.toFixed(3);
+const fmt=v=>v==null?'-':typeof v==='number'?num(v):typeof v==='boolean'?String(v):Array.isArray(v)?'['+v.map(fmt).join(', ')+']':
+  typeof v==='object'?Object.entries(v).map(([k,x])=>k+' '+fmt(x)).join(' · '):String(v);
 const clock=t=>new Date(t*1000).toLocaleTimeString([], {hour12:false});
+const xyz=a=>Array.isArray(a)?a.map(v=>(+v).toFixed(3)).join(', '):'-';
 async function api(path,body){const r=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  const j=await r.json().catch(()=>({error:'bad response'}));if(!r.ok)throw new Error(j.error||r.status);return j;}
+  const j=await r.json().catch(()=>({error:'bad response ('+r.status+')'}));if(!r.ok)throw new Error(j.error||r.status);return j;}
 function say(el,text,err){$(el).textContent=text;$(el).classList.toggle('err',!!err);}
+function pill(id,cls,text,title){const p=$(id);p.className='pill '+(cls||'');p.querySelector('b').textContent=text;if(title)p.title=title;}
+const FINAL=['SUCCEEDED','PARTIAL','BLOCKED','FAULT','CANCELLED','REJECTED'];
 
-let S=null,skills={},seq=0,events=[];
-document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));
-  document.querySelectorAll('.view').forEach(v=>v.hidden=v.id!==b.dataset.v);if(b.dataset.v==='vRec')recs();});
+/* theme */
+const THEMES=['auto','light','dark'];let theme=localStorage.getItem('theme')||'auto';
+function applyTheme(){if(theme==='auto')delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=theme;
+  $('bTheme').textContent=theme[0].toUpperCase()+theme.slice(1);}
+$('bTheme').onclick=()=>{theme=THEMES[(THEMES.indexOf(theme)+1)%3];localStorage.setItem('theme',theme);applyTheme();};applyTheme();
 
-$('bStart').onclick=async()=>{try{const t=await api('/api/task/start',{prompt:$('prompt').value,advisor:$('advisor').value,model:$('model').value});
-  say('mTask','started: recording '+t.recording_id);}catch(e){say('mTask',e.message,1)}};
-$('bStop').onclick=async()=>{try{await api('/api/task/stop',{});say('mTask','stopped; motion cancelled, arm holds');}catch(e){say('mTask',e.message,1)}};
-$('bCancel').onclick=async()=>{try{const r=await api('/api/cancel/current',{});say('mTask',r.cancelled?'cancel sent: no further commands':'nothing is moving');}catch(e){say('mTask',e.message,1)}};
-$('bBackend').onclick=async()=>{say('mBack','switching (sim takes a few seconds to load)...');try{await api('/api/backend',{name:$('backend').value});say('mBack','backend '+$('backend').value);}catch(e){say('mBack',e.message,1)}};
-$('arm').onchange=async()=>{try{const r=await api('/api/arm',{enabled:$('arm').checked});say('mBack',r.message,!r.can_move&&$('arm').checked);$('arm').checked=r.can_move;}catch(e){say('mBack',e.message,1);$('arm').checked=false}};
-$('tool').onchange=async()=>{try{const r=await api('/api/tool',{tool:$('tool').value});say('mBack','setup '+r.setup_id+' (older observations are now rejected)');}catch(e){say('mBack',e.message,1)}};
-$('advisor').onchange=()=>{$('model').hidden=$('advisor').value!=='claude'};
-const EXAMPLES={move_tcp:p=>({xyz_world:[0.20,0.0,0.10]}),park:()=>({}),gripper:()=>({open_fraction:1.0}),pick:()=>({xyz_world:[0.16,-0.025,0.0],object_height:0.02}),
-  place:()=>({xyz_world:[0.06,-0.24,0.19]}),stir:()=>({xyz_world:[0.24,0.0,0.06],radius:0.015,turns:2,clearance:0.06}),touch_table:()=>({xy_world:[0.22,0.03]})};
-$('skill').onchange=()=>{const s=skills[$('skill').value];if(!s)return;$('params').value=JSON.stringify((EXAMPLES[s.name]||(()=>({})))(),null,0);
-  $('pdoc').textContent=Object.entries(s.params).map(([k,v])=>k+': '+v).join(' · ')||'no parameters';};
-$('bSubmit').onclick=async()=>{let params;try{params=JSON.parse($('params').value||'{}')}catch(e){return say('mSubmit','parameters are not valid JSON',1)}
+let S=null,H=null,skills={},seq=0,events=[],EX=[],selected=null,outcomes={},busySwitch=false;
+const advVal=()=>document.querySelector('input[name=adv]:checked').value;
+const backVal=()=>document.querySelector('input[name=back]:checked')?.value;
+
+/* --- task panel --- */
+const ADV_HINT={scripted:'Deterministic planner: look, locate, pick (3 attempts), place above the bin, park.',
+  claude:'Claude Code headless (claude -p) with only the executor MCP tools.',gemini:'Gemini Robotics ER proposes one skill at a time.',
+  none:'No advisor: submit proposals by hand (Perception panel).'};
+document.querySelectorAll('input[name=adv]').forEach(r=>r.onchange=()=>{$('modelRow').hidden=advVal()!=='claude';$('advHint').textContent=ADV_HINT[advVal()];});
+$('advHint').textContent=ADV_HINT.scripted;
+document.querySelectorAll('input[name=back]').forEach(r=>r.onchange=async()=>{const name=backVal();busySwitch=true;
+  say('mTask',name==='sim'?'Loading the MuJoCo twin (a few seconds)...':'Switching to '+name+'...');
+  try{await api('/api/backend',{name});say('mTask','Backend: '+name+'.');seq=seq;}catch(e){say('mTask',e.message,1);}busySwitch=false;state();});
+$('bStart').onclick=async()=>{$('bStart').disabled=true;try{const t=await api('/api/task/start',{prompt:$('prompt').value,advisor:advVal(),model:$('model').value,backend:backVal()});
+  say('mTask','Started: '+t.advisor+' on '+t.backend+'.');selected=null;}catch(e){say('mTask',e.message,1)}state();};
+$('bStop').onclick=async()=>{try{await api('/api/task/stop',{});say('mTask','Task stopped; motion cancelled, the arm holds.');}catch(e){say('mTask',e.message,1)}state();};
+$('bCancel').onclick=async()=>{try{const r=await api('/api/cancel/current',{});say('mTask',r.cancelled?'Cancel sent: no further commands.':'Nothing is moving.');}catch(e){say('mTask',e.message,1)}};
+$('arm').onchange=async()=>{try{const r=await api('/api/arm',{enabled:$('arm').checked});say('mTask',r.message,!r.can_move&&$('arm').checked);$('arm').checked=r.can_move;}
+  catch(e){say('mTask',e.message,1);$('arm').checked=false}state();};
+$('tool').onchange=async()=>{try{const r=await api('/api/tool',{tool:$('tool').value});say('mSubmit','Setup '+r.setup_id+': older observations are now rejected.');}catch(e){say('mSubmit',e.message,1)}};
+
+const EXAMPLES={move_tcp:()=>({xyz_world:[0.20,0.0,0.10]}),park:()=>({}),gripper:()=>({open_fraction:1.0}),pick:()=>({xyz_world:[0.20,0.06,0.0],object_height:0.02}),
+  place:()=>({xyz_world:[0.06,-0.24,0.16]}),stir:()=>({xyz_world:[0.24,0.0,0.06],radius:0.015,turns:2,clearance:0.06}),touch_table:()=>({xy_world:[0.22,0.03]})};
+$('skill').onchange=()=>{const s=skills[$('skill').value];if(!s)return;$('params').value=JSON.stringify((EXAMPLES[s.name]||(()=>({})))());
+  $('pdoc').textContent=s.doc+' '+(Object.entries(s.params).map(([k,v])=>k+': '+v).join(' · ')||'No parameters.');};
+$('bSubmit').onclick=async()=>{let params;try{params=JSON.parse($('params').value||'{}')}catch(e){return say('mSubmit','Parameters are not valid JSON.',1)}
   try{const r=await api('/api/submit',{skill:$('skill').value,params,rationale:$('why').value,ttl_s:30,source:'operator'});
-    say('mSubmit',r.accepted?'accepted: '+r.execution_id:'rejected: '+r.reasons.join('; '),!r.accepted);execs();}catch(e){say('mSubmit',e.message,1)}};
+    say('mSubmit',r.accepted?'Accepted: '+r.execution_id:'Rejected: '+r.reasons.join('; '),!r.accepted);selected=r.execution_id;execs();}catch(e){say('mSubmit',e.message,1)}};
 
-async function state(){try{S=await api('/api/state');}catch(e){$('sBusy').textContent='console unreachable';$('dBusy').className='dot bad';return}
-  $('sBusy').textContent=S.busy?'executing':S.task.state==='running'?'task running':'idle';$('dBusy').className='dot '+(S.busy?'busy':S.task.state==='running'?'on':'');
-  $('sBackend').textContent=S.backend.name;$('sSetup').textContent=S.setup_id;$('sAdv').textContent=S.advisor?S.advisor.name+(S.advisor.running?' (running)':''):'none';
-  const real=S.backend.name==='real';$('cArm').hidden=!real;$('armBox').hidden=!real;
-  if(real){$('arm').checked=S.backend.can_move;$('armBox').classList.toggle('armed',S.backend.can_move);$('sArm').textContent=S.backend.can_move?'ARM ENABLED':'arm disabled (read only)';$('dArm').className='dot '+(S.backend.can_move?'bad':'')}
-  if(document.activeElement!==$('backend'))$('backend').value=S.backend.name;$('tool').value=S.tool;$('loc').textContent=S.locator;
-  $('bStart').disabled=S.task.state==='running';$('bStop').disabled=S.task.state!=='running';$('bCancel').disabled=!S.busy;$('bBackend').disabled=S.busy||S.task.state==='running';
-  const v=S.recording.viewer||S.task.viewer;$('lRec').hidden=!v;if(v){$('lRec').href=v;$('lRec').textContent=(S.recording.id?'recording ':'last recording ')+(S.recording.id||S.task.recording_id||'')}}
+async function state(){try{S=await api('/api/state');}catch(e){pill('pBackend','bad','console unreachable');return}
+  const t=S.task,running=t.state==='running',real=S.backend.name==='real';
+  if(!busySwitch){const r=document.querySelector(`input[name=back][value=${S.backend.name}]`);if(r)r.checked=true;}
+  $('taskState').textContent=S.busy?'moving':running?'running':t.state==='ended'?'ended':'idle';
+  $('taskState').className='badge '+(S.busy?'RUNNING':running?'running':t.state==='ended'?(/^DONE/.test(t.why||'')?'SUCCEEDED':'skipped'):'');
+  $('bStart').disabled=running;$('bStop').disabled=!running;$('bCancel').disabled=!S.busy;
+  document.querySelectorAll('input[name=back]').forEach(r=>r.disabled=running||S.busy);
+  $('armBox').hidden=!real;if(real){$('arm').checked=S.backend.can_move;$('armBox').classList.toggle('armed',S.backend.can_move);}
+  $('backHint').textContent={fake:'Simulated motors and synthetic estimates: for checking the flow.',sim:'MuJoCo twin: real physics, rendered cameras.',
+    real:S.backend.can_move?'REAL ARM ENABLED: proposals move the follower arm.':'Station, follower arm: read-only until the arm is enabled.'}[S.backend.name]||'';
+  $('backHint').style.color=real&&S.backend.can_move?'var(--bad)':'';
+  if(document.activeElement!==$('tool'))$('tool').value=S.tool;
+  const tl=$('taskLine');tl.hidden=t.state==='idle';
+  if(t.state!=='idle'){const secs=Math.max(0,Math.round(((t.ended||Date.now()/1000)-t.started)));
+    tl.innerHTML=`<span class="badge ${running?'running':''}">${esc(t.advisor)}</span><span class=mut>${esc(t.backend||'')}</span><span class=mono>${secs} s</span>`+
+      (t.why?`<span class=mut>${esc(t.why)}</span>`:'')+`<span class=sp></span>`+(t.viewer?`<a href="${esc(t.viewer)}" target=_blank rel=noopener>recording</a>`:'');}
+  runLinks();}
 
-function jointBars(js){const box=$('joints');if(box.children.length!==js.length)box.innerHTML=js.map(j=>`<div class=j><div class=bar><div class=fill></div><div class=goal></div></div><div class=load><i></i></div><div class=nm><span>${j.name}</span><span class=v></span></div></div>`).join('');
+async function health(){try{H=await api('/api/health');}catch(e){return}
+  const st=H.station;pill('pStation',st.ok?'ok':'bad',st.ok?'up':'down',`NormaCore Station ${st.addr}: ${st.ok?'reachable':'not reachable'}`);
+  const rc=H.recorder;pill('pRec',rc.ok?'ok':'warn',rc.ok?(rc.recording?'recording':'idle'):'down',
+    `Recorder service ${rc.url}: ${rc.ok?'up':'not reachable'}. This backend records ${rc.mode==='service'?'through the service':'locally ('+rc.local_viewer+')'}.`);
+  const cams=H.cameras,roles=Object.keys(cams);
+  if(roles.length){const bad=roles.some(r=>cams[r].fps==null||cams[r].fps<3||(cams[r].age_s??0)>1.5);
+    pill('pCams',bad?'warn':'ok',roles.map(r=>cams[r].fps==null?'-':Math.round(cams[r].fps)).join(' · ')+' fps',roles.map(r=>`${r}: ${cams[r].fps??'-'} fps, newest frame ${cams[r].age_s??'-'} s old`).join('\n'));
+    [['overview','fOver','dOver'],['wrist','fWrist','dWrist']].forEach(([r,f,d])=>{const c=cams[r];$(f).textContent=c&&c.fps!=null?Math.round(c.fps)+' fps':'';
+      $(d).className='dot '+(c&&c.fps>=3&&(c.age_s??0)<=1.5?'ok':'warn');});}
+  else pill('pCams','','waiting');
+  const a=H.arm;if(a.error)pill('pArm','bad','error',a.error);
+  else{const cls=a.faults.length?'bad':a.torque_on<a.motors||!a.calibrated||!a.in_range?'warn':'ok';
+    pill('pArm',cls,(a.faults.length?'fault '+a.faults.join(','):a.torque_on===a.motors?'torque on':a.torque_on?a.torque_on+'/'+a.motors+' torque':'torque off')+' · '+(a.calibrated?'calibrated':'not calibrated'),
+      `Torque on ${a.torque_on}/${a.motors} motors; ranges ${a.calibrated?'calibrated':'missing'}; joints ${a.in_range?'in range':'OUT OF RANGE'}.`);}
+  const b=H.backend;pill('pBackend',b.name==='real'&&b.can_move?'bad':'ok',b.name+(b.needs_enable?(b.can_move?' · ARMED':' · read-only'):''));
+  const ad=H.advisor;pill('pAdv',ad.running?'ok':'',ad.name?ad.name+(ad.running?' · running':' · idle'):'none');
+  $('pAdv').querySelector('.dot').className='dot'+(ad.running?' live':'');
+  $('aGe').disabled=!ad.available.gemini;$('aGe').nextElementSibling.title=ad.available.gemini?'':'Needs GEMINI_API_KEY in the console environment';
+  $('aCl').disabled=!ad.available.claude;$('aCl').nextElementSibling.title=ad.available.claude?'':'Needs the claude CLI on PATH';
+  $('pSetup').querySelector('b').textContent=H.setup_id.replace('setup-','');$('locName').textContent=H.locator;
+  mirror(H.mirror);}
+
+/* --- live --- */
+function jointBars(js){const box=$('joints');if(box.children.length!==js.length)box.innerHTML=js.map(j=>`<div class=j><div class=bar><div class=fill></div><div class=goal></div></div><div class=nm><span>${esc(j.name)}</span><span class=v></span></div></div>`).join('');
   js.forEach((j,i)=>{const el=box.children[i],n=Math.max(0,Math.min(1,j.norm??0)),g=Math.max(0,Math.min(1,j.goal_norm??n));
-    el.querySelector('.fill').style.height=(n*100)+'%';el.querySelector('.goal').style.bottom=(g*100)+'%';el.querySelector('.load i').style.width=Math.min(100,j.load/10)+'%';
-    el.querySelector('.v').textContent=(j.norm??0).toFixed(3);el.title=`${j.name}: norm ${j.norm} raw ${j.raw} goal ${j.goal} load ${j.load} temp ${j.temp} status ${j.status}${j.in_range?'':' OUT OF RANGE'}`;
+    el.querySelector('.fill').style.height=(n*100)+'%';el.querySelector('.goal').style.bottom=(g*100)+'%';
+    el.querySelector('.v').textContent=(j.norm??0).toFixed(2);el.title=`${j.name}: norm ${j.norm}, raw ${j.raw}, goal ${j.goal}, load ${j.load}, temp ${j.temp} °C, torque ${j.torque}, status ${j.status}${j.in_range?'':', OUT OF RANGE'}`;
     el.querySelector('.fill').style.background=j.status||!j.in_range?'var(--bad)':'';});}
-async function live(){try{const L=await api('/api/live');jointBars(L.joints);$('tcp').textContent=fmt(L.tcp_world);$('tilt').textContent=L.tilt_deg+'°';
-  const g=L.joints[L.joints.length-1];$('grip').textContent=(g.norm??0).toFixed(3)+' · load '+g.load;$('age').textContent=L.age_s+' s';}catch(e){}}
+async function live(){try{const L=await api('/api/live');jointBars(L.joints);$('tcp').textContent=xyz(L.tcp_world)+' m';$('tilt').textContent=L.tilt_deg+'°';
+  const g=L.joints[L.joints.length-1];$('grip').textContent=(g.norm??0).toFixed(2)+' open · load '+g.load;$('age').textContent=L.age_s+' s';}catch(e){}}
+function camLoop(img,role){const next=()=>setTimeout(()=>{img.src='/api/cam/'+role+'.jpg?'+Date.now()},document.hidden?1500:250);
+  img.onload=()=>{if(img.naturalWidth)img.parentElement.style.setProperty('--ar',img.naturalWidth+'/'+img.naturalHeight);next();};
+  img.onerror=()=>setTimeout(next,1200);img.src='/api/cam/'+role+'.jpg?'+Date.now();}
 
-function camLoop(img,role){const next=()=>setTimeout(()=>{img.src='/api/cam/'+role+'.jpg?'+Date.now()},document.hidden?1500:250);img.onload=next;img.onerror=()=>setTimeout(next,1200);img.src='/api/cam/'+role+'.jpg?'+Date.now();}
+/* overlay: normalised image coords (0..1) from /api/overlay, drawn into a W x H viewBox */
+let OV=null;
+async function overlay(){try{OV=await api('/api/overlay');drawOverlay();perception();}catch(e){}}
+function drawOverlay(){const svg=$('ov');if(!OV||!OV.camera){svg.innerHTML='';$('ovNote').textContent=OV&&OV.why?OV.why:'';return}
+  const [W,H]=OV.camera.size,P=p=>p?`${(p[0]*W).toFixed(1)},${(p[1]*H).toFixed(1)}`:null;
+  const poly=(pts,attrs)=>{const runs=[];let cur=[];(pts||[]).forEach(p=>{if(p)cur.push(P(p));else if(cur.length){runs.push(cur);cur=[]}});if(cur.length)runs.push(cur);
+    return runs.filter(r=>r.length>1).map(r=>`<polyline points="${r.join(' ')}" ${attrs}/>`).join('');};
+  const u=W/300,fs=5.2*u,sw=.75*u;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('preserveAspectRatio','none');
+  const label=(p,t,fill,dx=4,dy=-4,size=fs)=>p?`<text x="${p[0]*W+dx}" y="${p[1]*H+dy}" font-size="${size}" fill="${fill}" stroke="rgba(0,0,0,.7)" stroke-width="${size/4}" stroke-linejoin="round" paint-order="stroke" font-family="-apple-system,system-ui,sans-serif" font-weight="600">${esc(t)}</text>`:'';
+  let o='';
+  if($('oGrid').checked){
+    OV.grid.forEach(g=>{o+=poly(g.pts,`fill="none" stroke="rgba(255,255,255,${g.major?.42:.16})" stroke-width="${sw*(g.major?1:.7)}"`);
+      if(g.label){const end=[...g.pts].reverse().find(Boolean);o+=label(end,g.label,'rgba(255,255,255,.9)',-fs*1.9,-fs*.35,fs*.85);}});
+    o+=poly(OV.reach,`fill="none" stroke="rgba(110,220,205,.7)" stroke-width="${sw}" stroke-dasharray="${sw*5} ${sw*4}"`);
+    const A=OV.axes;if(A.o){[['x','#ff6b5e'],['y','#58d68d'],['z','#6aa8ff']].forEach(([k,c])=>{if(A[k])o+=`<line x1="${A.o[0]*W}" y1="${A.o[1]*H}" x2="${A[k][0]*W}" y2="${A[k][1]*H}" stroke="${c}" stroke-width="${sw*2.4}" stroke-linecap="round"/>`+label(A[k],k,c,2,0);});}
+    (OV.markers||[]).forEach(m=>{o+=poly([...m.pts,m.pts[0]],`fill="rgba(255,214,10,.12)" stroke="#ffd60a" stroke-width="${sw*1.2}"`)+label(m.c,'#'+m.id,'#ffd60a',-fs*.6,fs*.35);});}
+  if($('oObj').checked){
+    if(OV.bin_fixture&&OV.bin_fixture.box){OV.bin_fixture.box.forEach(r=>o+=poly([...r,r[0]],`fill="none" stroke="#f0a050" stroke-opacity=".8" stroke-width="${sw*1.2}" stroke-dasharray="${sw*3} ${sw*3}"`));
+      o+=label(OV.bin_fixture.uv,OV.bin_fixture.name+' (layout)','#f0a050',-fs*2,fs*.4);}
+    (OV.objects||[]).forEach(b=>{const c=b.kind==='target'?'#3d8bff':b.kind==='bin'?'#f0a050':'rgba(255,255,255,.75)';if(!b.uv)return;
+      if(b.box)b.box.forEach((r,i)=>o+=poly([...r,r[0]],`fill="${i?'none':'rgba(240,160,80,.14)'}" stroke="${c}" stroke-width="${sw*1.6}"`));
+      if(b.kind==='other'){o+=`<circle cx="${b.uv[0]*W}" cy="${b.uv[1]*H}" r="${2.2*u}" fill="rgba(255,255,255,.55)" stroke="rgba(0,0,0,.5)" stroke-width="${sw*.6}"/>`;return;}
+      const r=Math.max(5*u,(b.r||.01)*W);
+      if(b.kind!=='bin')o+=`<circle cx="${b.uv[0]*W}" cy="${b.uv[1]*H}" r="${r}" fill="${b.kind==='target'?'rgba(61,139,255,.18)':'none'}" stroke="${c}" stroke-width="${sw*1.6}" ${b.visible?'':`stroke-dasharray="${sw*3} ${sw*2}"`}/>`+
+        `<line x1="${b.uv[0]*W-r*.5}" y1="${b.uv[1]*H}" x2="${b.uv[0]*W+r*.5}" y2="${b.uv[1]*H}" stroke="${c}" stroke-width="${sw}"/><line x1="${b.uv[0]*W}" y1="${b.uv[1]*H-r*.5}" x2="${b.uv[0]*W}" y2="${b.uv[1]*H+r*.5}" stroke="${c}" stroke-width="${sw}"/>`;
+      const lp=b.kind==='bin'&&b.box?[...b.box[0]].sort((p,q)=>q[1]-p[1])[0]:b.uv;
+      o+=label(lp,`${b.name} ${b.xyz.slice(0,2).map(v=>v.toFixed(2)).join(', ')}${b.unc_mm?' ±'+Math.round(b.unc_mm)+'mm':''}`,c,b.kind==='bin'?-fs*2:r+3,b.kind==='bin'?fs*1.3:-r*.3);});}
+  if($('oPath').checked&&OV.path){const p=OV.path,live=p.state==='running';
+    p.segments.forEach((g,i)=>{o+=poly(g.pts,`fill="none" stroke="${live?'#45e0c8':'rgba(69,224,200,.55)'}" stroke-width="${sw*(live?2.4:1.6)}" stroke-linejoin="round" stroke-linecap="round" ${live?'':`stroke-dasharray="${sw*4} ${sw*3}"`}`);
+      const end=[...g.pts].reverse().find(Boolean);if(end)o+=`<circle cx="${end[0]*W}" cy="${end[1]*H}" r="${2.2*u}" fill="#45e0c8"/>`;});
+    if(p.target)o+=`<circle cx="${p.target[0]*W}" cy="${p.target[1]*H}" r="${6*u}" fill="none" stroke="#45e0c8" stroke-width="${sw*1.6}"/>`;}
+  const T=OV.tcp;if(T&&T.uv){if(T.shadow)o+=`<line x1="${T.uv[0]*W}" y1="${T.uv[1]*H}" x2="${T.shadow[0]*W}" y2="${T.shadow[1]*H}" stroke="rgba(255,255,255,.5)" stroke-width="${sw}" stroke-dasharray="${sw*2} ${sw*2}"/>`;
+    o+=`<circle cx="${T.uv[0]*W}" cy="${T.uv[1]*H}" r="${4*u}" fill="rgba(255,255,255,.3)" stroke="#fff" stroke-width="${sw*1.6}"/>`+label(T.uv,'TCP','#fff',-fs*2.6,4*u+fs*.9,fs*.9);}
+  svg.innerHTML=o;
+  $('camSrc').textContent='overlay: '+(OV.camera.source==='twin camera'?'twin camera model':OV.camera.source);
+  $('ovNote').textContent=OV.path?`Path: ${OV.path.skill} (${OV.path.state==='running'?'running now':'last accepted plan, '+OV.path.status.toLowerCase()}), `+OV.path.segments.map(s=>s.label).join(' → ')+'.':'Grid every 5 cm on the table (z = 0); dashed arc = reach limit.';}
+['oGrid','oObj','oPath'].forEach(i=>$(i).onchange=drawOverlay);
+function perception(){const all=[...((OV&&OV.objects)||[])],rank={target:0,bin:1,other:2},fx=OV&&OV.bin_fixture;
+  if(fx&&!all.some(o=>o.kind==='bin'))all.push({name:fx.name,kind:'bin',xyz:fx.xyz,visible:true,unc_mm:null,source:'twin layout fixture (not a camera estimate)'});
+  const objs=[...all].sort((a,b)=>rank[a.kind]-rank[b.kind]),main=objs.filter(o=>o.kind!=='other'),rest=objs.filter(o=>o.kind==='other');
+  const list=main.length?main:objs.slice(0,3);
+  $('objs').innerHTML=objs.length?list.map(o=>`<div class=obj><i class="${o.kind}"></i><span><b>${esc(o.name)}</b>${o.visible?'':' <span class=faint>(not visible)</span>'}</span>
+    <span class=mono>${xyz(o.xyz)}${o.unc_mm!=null?' ±'+Math.round(o.unc_mm)+' mm':''}</span><span class=src>${esc(o.source)}</span></div>`).join('')
+    +(rest.length>(main.length?0:3)?`<div class="obj"><i></i><span class=mut>${rest.length-(main.length?0:3)} other blob(s): small white dots on the overview</span><span></span></div>`:'')
+    :'<div class=empty>No objects estimated in the overview frame.</div>';}
 
-const KIND={advisor_message:'advisor',advisor_tool_call:'advisor',advisor_tool_result:'advisor',advisor_prompt:'advisor',advisor_result:'advisor',advisor_end:'advisor',advisor_init:'advisor',advisor_command:'advisor',advisor_error:'bad'};
+/* --- robot logic: timeline --- */
+const ADVK=k=>k.startsWith('advisor_');
 function evText(e){switch(e.kind){
-  case'advisor_message':return`<div class=txt>${esc(e.text)}</div>`;
-  case'advisor_tool_call':return`<b>${esc(e.tool)}</b><pre>${esc(JSON.stringify(e.input))}</pre>`;
-  case'advisor_tool_result':return`<span class=mut>${e.images?e.images+' image(s) · ':''}</span><pre>${esc((e.text||'').slice(0,600))}</pre>`;
-  case'advisor_prompt':return`task prompt sent (system prompt in the Advisor tab)<pre>${esc(e.task_prompt)}</pre>`;
-  case'advisor_result':return`<div class=txt>${esc(e.text)}</div><span class=mut>${e.turns??'?'} turns · ${e.seconds??'?'} s${e.cost_usd!=null?' · $'+Number(e.cost_usd).toFixed(2):''}</span>`;
-  case'proposal':return`<b>${esc(e.proposal.skill)}</b> from ${esc(e.proposal.source)} <span class=mut>${esc(e.proposal.rationale)}</span><pre>${esc(JSON.stringify(e.proposal.params))}</pre>`;
-  case'validation':return e.ok?'<span class="pill pass">valid</span> '+checksLine(e.checks):'<span class="pill fail">rejected</span> '+esc(e.reasons.join('; '));
-  case'phase':return`${esc(e.name)} <span class="pill ${esc(e.status)}">${esc(e.status)}</span> ${esc(e.termination||'')}`;
-  case'note':return`<span class=mut>${esc(e.text)}</span>`;
-  case'result':return`<span class="pill ${e.status}">${e.status}</span> ${esc(e.skill)}: ${esc(e.termination)} ${Object.keys(e.residuals||{}).length?'<pre>residuals '+esc(fmt(e.residuals))+'</pre>':''}`;
-  case'outcome':return`${esc(e.metric)} = ${esc(e.value)} ${esc(e.unit)} → <b>${e.success===null?'unknown':e.success?'success':'failure'}</b>`;
-  case'observation':return`<span class=mut>${esc(e.obs_id)} · freshness ${e.freshness_s} s · ${Object.entries(e.frames).map(([r,f])=>r+' seq '+f.seq+(f.stale?' STALE':'')).join(', ')} · ${e.objects} objects</span>`;
-  case'task':return`task ${esc(e.state)} ${e.prompt?'<pre>'+esc(e.prompt)+'</pre>':''}${e.why?esc(e.why):''}`;
-  case'advisor_end':return`advisor ended: ${esc(e.why)}`;
-  default:return`<pre>${esc(JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k])=>!['seq','t','kind'].includes(k)))))}</pre>`;}}
-function checksLine(c){return Object.entries(c||{}).filter(([k])=>k!=='validation_s').map(([k,v])=>`${k} ${v.result}`).join(' · ')}
-function kindClass(e){if(KIND[e.kind])return KIND[e.kind];if(e.kind==='proposal')return'proposal';if(e.kind==='result')return e.status==='SUCCEEDED'?'ok':'bad';
-  if(e.kind==='validation')return e.ok?'ok':'bad';if(e.kind==='cancel')return'warn';return'';}
+  case'advisor_message':return`<span class=k>advisor</span><span class=txt>${esc(e.text)}</span>`;
+  case'advisor_tool_call':return`<span class=k>tool call</span><b>${esc(e.tool)}</b>${e.input&&Object.keys(e.input).length?`<pre>${esc(JSON.stringify(e.input))}</pre>`:''}`;
+  case'advisor_tool_result':return`<span class=k>tool result</span>${e.images?`<span class=mut>${e.images} image(s)</span>`:''}<pre>${esc((e.text||'').slice(0,700))}</pre>`;
+  case'advisor_prompt':return`<span class=k>prompt sent</span><span class=mut>system + task prompt (see Advisor prompts)</span>`;
+  case'advisor_command':return`<span class=k>advisor</span><span class=mut>launched</span><pre>${esc((e.argv||[]).slice(0,6).join(' '))} ...</pre>`;
+  case'advisor_init':return`<span class=k>advisor</span>model ${esc(e.model)}, tools ${esc((e.tools||[]).length)}`;
+  case'advisor_result':return`<span class=k>advisor done</span><span class=txt>${esc(e.text)}</span> <span class=mut>${e.turns??'?'} turns · ${e.seconds??'?'} s${e.cost_usd!=null?' · $'+Number(e.cost_usd).toFixed(2):''}</span>`;
+  case'advisor_error':return`<span class=k>advisor error</span><span class=txt>${esc(e.text)}</span>`;
+  case'advisor_end':return`<span class=k>advisor ended</span>${esc(e.why)}`;
+  case'proposal':return`<span class=k>proposal</span><b>${esc(e.proposal.skill)}</b> <span class=mut>from ${esc(e.proposal.source)}: ${esc(e.proposal.rationale)}</span>`;
+  case'validation':return`<span class=k>validation</span>`+(e.ok?'<span class="badge pass">valid</span> ':'<span class="badge fail">rejected</span> ')+`<span class=mut>${esc(e.ok?checkSummary(e.checks):e.reasons.join('; '))}</span>`;
+  case'phase':return`<span class=k>phase</span>${esc(e.name)} <span class="badge ${esc(e.status)}">${esc(e.status.toLowerCase())}</span> <span class=mut>${esc(e.termination||'')}</span>`;
+  case'note':return`<span class=k>note</span><span class=mut>${esc(e.text)}</span>`;
+  case'result':return`<span class=k>result</span><b>${esc(e.skill)}</b> <span class="badge ${e.status}">${e.status}</span> <span class=mut>${esc(e.termination)}</span>`;
+  case'outcome':return`<span class=k>outcome</span>${esc(e.metric)} = ${esc(e.value)} ${esc(e.unit)} <span class="badge ${oc(e.success)}">${oc(e.success)}</span>`;
+  case'observation':return`<span class=k>observe</span><span class=mut>${esc(e.obs_id)} · ${e.freshness_s} s · ${Object.entries(e.frames).map(([r,f])=>r+' #'+f.seq+(f.stale?' STALE':'')).join(', ')} · ${e.objects} objects</span>`;
+  case'task':return`<span class=k>task</span>${esc(e.state)} ${e.prompt?'<span class=mut>'+esc(e.prompt)+'</span>':''}${e.why?' <span class=mut>'+esc(e.why)+'</span>':''}`;
+  case'backend':return`<span class=k>backend</span>${esc(e.name)} <span class=mut>setup ${esc(e.setup_id)} · recorder ${esc(e.recorder)}</span>`;
+  case'cancel':return`<span class=k>cancel</span>${esc(e.execution_id)}`;
+  case'arm':return`<span class=k>arm</span>${esc(e.text)}`;
+  case'setup_changed':return`<span class=k>setup</span>${esc(e.old)} → ${esc(e.new)}`;
+  case'error':return`<span class=k>error</span>${esc(e.text)}`;
+  default:return`<span class=k>${esc(e.kind.replace(/_/g,' '))}</span><span class=mut>${esc(e.text||JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k])=>!['seq','t','kind'].includes(k)))).slice(0,240))}</span>`;}}
+const oc=s=>s===null||s===undefined?'unknown':s?'success':'failure';
+function checkSummary(c){const ks=Object.entries(c||{}).filter(([k])=>k!=='validation_s');return ks.length+' checks: '+ks.map(([k,v])=>k+(v.result==='pass'?'':' '+v.result)).join(', ');}
+function evClass(e){if(ADVK(e.kind))return e.kind==='advisor_error'?'badk':'adv';if(e.kind==='proposal')return'prop';
+  if(e.kind==='result')return e.status==='SUCCEEDED'?'good':['REJECTED','FAULT'].includes(e.status)?'badk':'warnk';
+  if(e.kind==='validation')return e.ok?'good':'badk';if(e.kind==='outcome')return e.success?'good':e.success===false?'badk':'warnk';
+  if(e.kind==='cancel'||e.kind==='error')return'badk';return'';}
 function drawTl(){const a=$('fAdv').checked,x=$('fExec').checked,o=$('fObs').checked;
-  const show=events.filter(e=>e.kind==='observation'?o:e.kind.startsWith('advisor_')?a:x).slice(-400).reverse();
-  $('tl').innerHTML=show.length?show.map(e=>`<div class=ev><time>${clock(e.t)}</time><span class="k ${kindClass(e)}">${esc(e.kind.replace('advisor_','advisor · ').replace('_',' '))}</span><div>${evText(e)}</div></div>`).join(''):'<div class=empty>Nothing yet.</div>';
-  $('nTl').textContent=events.length||'';}
+  const show=events.filter(e=>e.kind==='motion_log'||(e.kind==='phase'&&e.status==='running')?false:e.kind==='observation'?o:ADVK(e.kind)?a:e.kind==='note'?x&&o:x).slice(-300).reverse();
+  const el=$('tl');const atTop=el.scrollTop<8;
+  el.innerHTML=show.length?show.map(e=>`<div class="ev ${evClass(e)}" ${e.execution_id?`data-eid="${esc(e.execution_id)}"`:''}><time>${clock(e.t)}</time><span class=dot></span><div>${evText(e)}</div></div>`).join(''):'<div class=empty>Nothing yet.</div>';
+  if(atTop)el.scrollTop=0;
+  el.querySelectorAll('[data-eid]').forEach(d=>d.onclick=()=>select(d.dataset.eid,true));
+  $('nTl').textContent=events.length?events.length+' events':'';}
 ['fAdv','fExec','fObs'].forEach(i=>$(i).onchange=drawTl);
-async function timeline(){try{const r=await api('/api/timeline?since='+seq);if(r.events.length){events=events.concat(r.events).slice(-1500);seq=r.seq;drawTl();
-  if(r.events.some(e=>['proposal','validation','result','phase','outcome'].includes(e.kind)))execs();
-  if(r.events.some(e=>e.kind==='advisor_prompt'))advisor();}}catch(e){}}
+async function timeline(){try{const r=await api('/api/timeline?since='+seq);if(r.events.length){events=events.concat(r.events).slice(-1500);seq=r.seq;
+  r.events.filter(e=>e.kind==='outcome').forEach(e=>outcomes[e.execution_id]=e);
+  if(r.events.some(e=>e.kind==='task'&&e.state==='started')){selected=null;}
+  drawTl();if(r.events.some(e=>['proposal','validation','result','phase','outcome','note'].includes(e.kind)))execs();
+  if(r.events.some(e=>e.kind==='advisor_prompt'||e.kind==='task'))advisor();}}catch(e){}}
 
-function checksTable(c){return'<table><tr><th>check</th><th>result</th><th>numbers</th></tr>'+Object.entries(c||{}).map(([k,v])=>{const {result,...n}=v;
-  return`<tr><td>${esc(k)}</td><td><span class="pill ${esc(result)}">${esc(result)}</span></td><td class=n>${esc(fmt(n))}</td></tr>`}).join('')+'</table>'}
+/* --- robot logic: proposals as pipelines --- */
+function stage(label,cls,body){return`<div class=stage><div class=sl><span class="dot ${cls||''}"></span>${label}</div><div>${body}</div></div>`}
+function checksList(c){return'<div class=checks>'+Object.entries(c||{}).filter(([k])=>k!=='twin_preflight'&&k!=='validation_s').map(([k,v])=>{const {result,...n}=v||{};
+  return`<div class=chk><span>${esc(k.replace(/_/g,' '))}</span><span class="badge ${esc(result)}">${esc(result)}</span><span class=n>${esc(fmt(n))}</span></div>`}).join('')+'</div>'}
+const phCls=s=>['SUCCEEDED','pass','done'].includes(s)?'ok':['FAULT','REJECTED','fail'].includes(s)?'bad':s==='running'?'live':'';
 function phasesRow(ps){return'<div class=phases>'+ps.map(p=>{const s=p.status||'';const dur=p.start!=null&&p.end!=null?(p.end-p.start).toFixed(1)+' s':p.seconds!=null?p.seconds+' s':'';
-  return`<div class="phase ${esc(s)}" title="${esc((p.notes||[]).join('\n'))}"><b>${esc(p.name)}</b><span class="pill ${esc(s)}">${esc(s)}</span> <span class=faint>${dur}</span></div>`}).join('')+'</div>'}
-async function execs(){let r;try{r=await api('/api/executions')}catch(e){return}$('nExec').textContent=r.executions.length||'';
-  if(!r.executions.length)return;
-  $('execs').innerHTML=r.executions.map(x=>{const p=x.proposal||{};const v=x.validation||{};const notes=(x.phases||[]).flatMap(ph=>(ph.notes||[]).map(n=>ph.name+': '+n));
-    return`<article class=card><h3>${esc(x.skill)} <span class="pill ${x.status}">${x.status}</span><span class=faint style="font-weight:500">${esc(p.source)} · ${esc(x.execution_id)}</span></h3>
-    ${p.rationale?`<p class=why>${esc(p.rationale)}</p>`:''}<pre>params ${esc(JSON.stringify(p.params))}</pre>
-    <p class=why><b>${esc(x.termination)}</b></p>
-    ${Object.keys(x.residuals||{}).length?`<pre>residuals ${esc(fmt(x.residuals))}</pre>`:''}
-    ${Object.keys(x.achieved||{}).length?`<pre>measured ${esc(fmt(x.achieved))}</pre>`:''}
-    ${phasesRow(x.phases||[])}
-    <details ${x.status==='REJECTED'?'open':''}><summary>validation: ${v.ok?'passed':'failed'} (${Object.keys(v.checks||{}).length} checks)</summary>${checksTable(v.checks)}</details>
-    ${notes.length?`<details><summary>execution log (${notes.length})</summary><pre>${esc(notes.join('\n'))}</pre></details>`:''}
-    <div class=row style="margin-top:10px">${['SUCCEEDED','PARTIAL','BLOCKED','FAULT','CANCELLED'].includes(x.status)?`<button data-eval="${x.execution_id}">Evaluate independently</button>`:''}
-    ${x.viewer?`<a href="${esc(x.viewer)}" target=_blank rel=noopener>replay in the recorder</a>`:''}<span class=mut id="o-${x.execution_id}"></span></div></article>`}).join('');
-  $('execs').querySelectorAll('[data-eval]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const o=await api('/api/evaluate/'+b.dataset.eval,{});
-    $('o-'+b.dataset.eval).textContent=`${o.metric} = ${o.value} ${o.unit} → ${o.success===null?'unknown':o.success?'success':'failure'}`;}catch(e){$('o-'+b.dataset.eval).textContent=e.message}b.disabled=false;});}
-async function advisor(){try{const a=await api('/api/advisor');$('pTask').textContent=a.task_prompt||'-';$('pSys').textContent=a.system_prompt||'(no advisor started yet)';}catch(e){}}
-async function recs(){try{const r=await api('/api/recordings');const row=s=>`<a href="${esc(s.viewer)}" target=_blank rel=noopener>${esc(s.id)}<span>${esc(s.duration!=null?Number(s.duration).toFixed(0)+' s':'active')} · ${esc(s.markers??0)} markers</span></a>`;
-  $('recs').innerHTML='<h2>Executor runs (fake / sim / replay)</h2>'+(r.local.map(row).join('')||'<div class=empty>none</div>')+'<h2 style="margin-top:14px">Recorder service (real arm, :8900)</h2>'+(r.service.map(row).join('')||'<div class=empty>recorder service not reachable</div>');}catch(e){}}
-(async()=>{skills=await api('/api/skills');$('skill').innerHTML=Object.keys(skills).map(k=>`<option>${k}</option>`).join('');$('skill').onchange();
-  await state();advisor();execs();timeline();live();camLoop($('cWrist'),'wrist');camLoop($('cOver'),'overview');
-  setInterval(state,1000);setInterval(live,300);setInterval(timeline,500);})();
+  return`<div class="phase ${phCls(s)}" title="${esc((p.notes||[]).join('\n')||p.termination||p.note||'')}"><b>${esc(p.name)}</b><span class="badge ${esc(s)}">${esc(String(s).toLowerCase())}</span> <span class=faint>${dur}</span></div>`}).join('')+'</div>'}
+function card(x){const p=x.proposal||{},v=x.validation||{},ck=v.checks||{},tw=ck.twin_preflight,o=outcomes[x.execution_id];
+  const notes=(x.phases||[]).flatMap(ph=>(ph.notes||[]).map(n=>ph.name+': '+n));const fin=FINAL.includes(x.status)&&x.status!=='REJECTED';
+  const vt=ck.validation_s?`<small>${ck.validation_s.seconds} s</small>`:'';
+  return`<article class="card${selected===x.execution_id?' sel':''}" id="c-${x.execution_id}"><div class=ch><h4>${esc(x.skill)}</h4><span class="badge ${x.status}">${x.status}</span>
+    <span class=faint>${esc(p.source)} · ${esc(x.execution_id)}</span><span class=sp></span>${x.viewer?`<a href="${esc(x.viewer)}" target=_blank rel=noopener>replay</a>`:''}</div>
+    ${stage('Proposal','ok',`<p>${esc(p.rationale||'(no rationale)')}</p><pre>${esc(JSON.stringify(p.params))}</pre>`)}
+    ${stage('Validation'+vt,v.ok?'ok':'bad',(v.ok?'':`<p style="color:var(--bad);margin-bottom:6px">${esc((v.reasons||[]).join('; '))}</p>`)+checksList(ck))}
+    ${stage('Twin preflight',tw?.result==='pass'?'ok':tw?.result==='fail'?'bad':'warn',tw?`<span class="badge ${esc(tw.result)}">${esc(tw.result)}</span> <span class=mut>${esc(fmt(Object.fromEntries(Object.entries(tw).filter(([k])=>k!=='result'))))}</span>`:'<span class=mut>not run</span>')}
+    ${stage('Phases',x.status==='RUNNING'?'live':phCls(x.status)||'warn',phasesRow(x.phases||[])+`<p style="margin-top:6px"><b>${esc(x.termination||(x.status==='RUNNING'?'running...':''))}</b></p>`+
+      (Object.keys(x.residuals||{}).length?`<pre>residuals ${esc(fmt(x.residuals))}</pre>`:'')+(Object.keys(x.achieved||{}).length?`<pre>measured ${esc(fmt(x.achieved))}</pre>`:'')+
+      (notes.length?`<details><summary class=faint style="cursor:pointer;font-size:12px;margin-top:4px">execution log (${notes.length})</summary><pre>${esc(notes.join('\n'))}</pre></details>`:''))}
+    ${stage('Outcome',o?(o.success?'ok':o.success===false?'bad':'warn'):'',o?`${esc(o.metric)} = <b>${esc(o.value)}</b> ${esc(o.unit)} <span class="badge ${oc(o.success)}">${oc(o.success)}</span><pre>${esc((o.evidence||[]).join('\n'))}</pre>`:
+      fin?`<button data-eval="${x.execution_id}">Evaluate independently</button>`:'<span class=mut>'+(x.status==='REJECTED'?'not executed':'after the run')+'</span>')}
+  </article>`}
+async function execs(){let r;try{r=await api('/api/executions')}catch(e){return}EX=r.executions;
+  if(!EX.length)return;
+  const box=$('execs'),st=box.scrollTop;box.innerHTML=EX.map(card).join('');box.scrollTop=st;
+  box.querySelectorAll('[data-eval]').forEach(b=>b.onclick=async()=>{b.disabled=true;b.textContent='Evaluating...';try{const o=await api('/api/evaluate/'+b.dataset.eval,{});outcomes[b.dataset.eval]=o;execs();}catch(e){b.textContent=e.message}});
+  box.querySelectorAll('.card').forEach(c=>c.onclick=ev=>{if(ev.target.closest('button,a,summary'))return;select(c.id.slice(2),false)});
+  strip();}
+function strip(){const xs=[...EX].reverse().slice(-14);
+  $('strip').innerHTML=xs.map((x,i)=>(i?'<span class=arrow></span>':'')+`<button class="step ${x.status}${selected===x.execution_id?' sel':''}" data-eid="${x.execution_id}"><b>${esc(x.skill)}</b><span>${x.status.toLowerCase()}${outcomes[x.execution_id]?' · '+oc(outcomes[x.execution_id].success):''}</span></button>`).join('');
+  $('strip').querySelectorAll('.step').forEach(b=>b.onclick=()=>select(b.dataset.eid,true));}
+function select(eid,scroll){selected=eid;document.querySelectorAll('.card').forEach(c=>c.classList.toggle('sel',c.id==='c-'+eid));
+  document.querySelectorAll('.step').forEach(c=>c.classList.toggle('sel',c.dataset.eid===eid));
+  const c=$('c-'+eid);if(c&&scroll){const box=$('execs');box.scrollTo({top:c.offsetTop-box.offsetTop-4,behavior:matchMedia('(prefers-reduced-motion:reduce)').matches?'auto':'smooth'});}}
+async function advisor(){try{const a=await api('/api/advisor');$('pTask').textContent=a.task_prompt||'No task started yet.';$('pSys').textContent=a.system_prompt||'No advisor started yet.';}catch(e){}}
+
+/* --- twin + recordings --- */
+let mirrorUp=null;
+function mirror(m){$('lMirror').href=m.url;$('lMirror').hidden=!m.ok;if(m.ok===mirrorUp)return;mirrorUp=m.ok;
+  const f=$('mirrorFrame');f.querySelector('iframe')?.remove();$('mirrorOff').hidden=!!m.ok;f.classList.toggle('off',!m.ok);
+  if(m.ok){const i=document.createElement('iframe');i.src=m.url+'/';i.title='Twin mirror';f.prepend(i);}}
+function runLinks(){const t=S&&S.task;if(!t||t.state==='idle')return;
+  $('runLinks').innerHTML=`<a class=cur href="${esc(t.viewer)}" target=_blank rel=noopener>${esc(t.recording_id)}<span>${t.state==='running'?'recording now':'recorder viewer'}</span></a>`;}
+async function recs(){try{const r=await api('/api/recordings');const cur=S&&S.task&&S.task.recording_id;
+  const row=(s,where)=>`<a href="${esc(s.viewer)}" target=_blank rel=noopener class="${s.id===cur?'cur':''}">${esc(s.id)}<span>${where} · ${esc(s.duration!=null?Number(s.duration).toFixed(0)+' s':'active')} · ${esc(s.markers??0)} markers</span></a>`;
+  const all=[...r.local.slice(0,6).map(s=>row(s,'executor')),...r.service.slice(0,4).map(s=>row(s,'recorder'))];
+  $('recs').innerHTML=all.join('')||'<div class=empty style="padding:10px 0">No recordings yet.</div>';}catch(e){}}
+
+(async()=>{try{skills=await api('/api/skills');}catch(e){}$('skill').innerHTML=Object.keys(skills).map(k=>`<option>${esc(k)}</option>`).join('');$('skill').onchange();
+  await state();health();advisor();execs();timeline();live();overlay();recs();camLoop($('cWrist'),'wrist');camLoop($('cOver'),'overview');
+  setInterval(state,1000);setInterval(health,1500);setInterval(live,300);setInterval(timeline,500);
+  setInterval(()=>{if(!document.hidden)overlay()},500);setInterval(recs,8000);})();
 </script>
 </html>
