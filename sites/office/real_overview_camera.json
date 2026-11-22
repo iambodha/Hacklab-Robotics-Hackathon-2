@@ -1,0 +1,20 @@
+{
+  "source": "office twin sim/generated/site_office/workspace.xml camera overview_cam (synced from sites/office/scene_calib.json)",
+  "pos": [
+    0.00526,
+    0.6697,
+    0.38277
+  ],
+  "xmat": [
+    -0.998628,
+    0.046047,
+    -0.024922,
+    -0.05057,
+    -0.724872,
+    0.687025,
+    0.01357,
+    0.687342,
+    0.726207
+  ],
+  "fovy": 75.86
+}
