@@ -48,6 +48,7 @@ import numpy as np  # noqa: E402
 from mcp.server.fastmcp import FastMCP, Image  # noqa: E402
 from PIL import Image as PILImage, ImageDraw  # noqa: E402
 
+from sites import get_site  # noqa: E402
 import robot_profile  # noqa: E402
 from robot_profile import env  # noqa: E402
 
@@ -74,10 +75,10 @@ IMG_SCALE = env("ROBOT_IMG_SCALE", P.cameras.scale, int)
 GRID = env("ROBOT_GRID", "1" if P.cameras.grid else "0", str) == "1"
 DROP_LINE = os.environ.get("ROBOT_DROP_LINE", "1") == "1"         # 0: clean wrist images (system2 perception)
 MIN_Z = env("ROBOT_MIN_TCP_Z", P.workspace.min_tcp_z)
-WRIST_CAM = env("ROBOT_WRIST_CAM", P.cameras.wrist, str)          # cam_stream hash prefixes (per machine)
-OVERVIEW_CAM = env("ROBOT_OVERVIEW_CAM", P.cameras.overview, str)
-OVERVIEW_CAL = Path(os.environ.get("ROBOT_OVERVIEW_CAL", HERE / "real_overview_camera.json"))
-LOG_DIR = Path(os.environ.get("ROBOT_REAL_LOG_DIR", HERE / "real_sessions"))
+WRIST_CAM = get_site().robot_camera("wrist")          # cam_stream hash prefixes (per machine)
+OVERVIEW_CAM = get_site().robot_camera("overview")
+OVERVIEW_CAL = get_site().overview_camera
+LOG_DIR = get_site().action_log_dir
 W, H = P.cameras.width, P.cameras.height
 FRAME = P.frame_text
 PARK, CARRY_Z = list(P.poses.park), env("ROBOT_CARRY_Z", P.poses.carry_z)
@@ -143,7 +144,7 @@ if RANGES_FILE:
     am._read = _read_with_ranges   # arm_mcp's joint_state / set_torque / _table pick this up too
 
 server = FastMCP(P.mcp_server_name)
-LOG_DIR.mkdir(exist_ok=True)
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 SESSION_LOG = LOG_DIR / "actions.jsonl"
 
 
@@ -757,7 +758,7 @@ async def pixel_to_table(camera: str, u: float, v: float, height: float = 0.0, v
         pos, mat, fovy = _wrist_pose(q)
     elif camera == "overview":
         if not OVERVIEW_CAL.exists():
-            return ("the overview camera is not calibrated on the real arm yet (no sim/real_overview_camera.json); "
+            return (f"the overview camera is not calibrated on the real arm yet (missing {OVERVIEW_CAL}); "
                     "use the wrist camera: move_tcp to a high survey pose, look(), then pixel_to_table('wrist', ...)")
         cal = json.loads(OVERVIEW_CAL.read_text())
         pos, mat, fovy = np.array(cal["pos"]), np.array(cal["xmat"]).reshape(3, 3), float(cal["fovy"])

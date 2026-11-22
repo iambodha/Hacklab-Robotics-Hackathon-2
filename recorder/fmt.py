@@ -7,6 +7,7 @@ two stay identical.
 from __future__ import annotations
 
 import os
+from sites import get_site
 import re
 import struct
 
@@ -17,7 +18,7 @@ GRIPPER = "j8"
 
 FOLLOWER_BUS = os.environ.get("ROBOT_BUS_SERIAL", "5B61033301")
 LEADER_BUS = os.environ.get("ROBOT_LEADER_SERIAL", "5B61035034")
-_DEFAULT_ROLES = "28ff0ca8=wrist,9ea4cacd=overview"
+_DEFAULT_ROLES = get_site().recorder_roles()
 
 # ST3215 / STS3215 register addresses inside the state dump Station sends
 REG_TORQUE, REG_GOAL, REG_POS, REG_SPEED, REG_LOAD = 0x28, 0x2A, 0x38, 0x3A, 0x3C
@@ -43,7 +44,7 @@ def bus_role(serial: str) -> str | None:
 
 
 def cam_roles() -> dict[str, str]:
-    spec = os.environ.get("RECORDER_CAM_ROLES", _DEFAULT_ROLES)
+    spec = get_site().recorder_roles()
     return dict(p.split("=", 1) for p in spec.split(",") if "=" in p)
 
 

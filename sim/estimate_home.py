@@ -36,7 +36,8 @@ import real_joints  # noqa: E402
 import sync_from_calib  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-OUT = HERE / "layouts" / "home_estimate"
+from sites import get_site
+OUT = get_site().directory / "estimate"
 DICT, SIZE = "DICT_4X4_50", 0.10
 ROT = lambda a: np.array([[math.cos(a), -math.sin(a), 0], [math.sin(a), math.cos(a), 0], [0, 0, 1.0]])
 
@@ -372,11 +373,11 @@ def scene_calib(fit, base, markers_P, edges, wrist_fovy, raw, ranges) -> dict:
                   "edges_P": edges},
         "markers": {"dictionary": DICT, "size_m": SIZE, "items": items},
         "cameras": {
-            "overview": {"queue": "usbvideo/9ea4cacd5be94751e1eea7be90bcf628", "image_size": [W, H],
+            "overview": {"queue": get_site().queue("overview", "TWIN"), "image_size": [W, H],
                          "K_normalized": {"fx": f / W, "fy": f / H, "cx": 0.5, "cy": 0.5}, "dist": [fit["k1"], 0, 0, 0, 0],
                          "T_world_cam": sync_from_calib.r(T_W_P @ T_P_cam), "reproj_px": round(fit["err_px"], 3),
                          "fovy_deg": round(math.degrees(2 * math.atan(H / 2 / f)), 3)},
-            "wrist": {"queue": "usbvideo/28ff0ca87978e8f993c2ac64a84d188a", "image_size": [W, H],
+            "wrist": {"queue": get_site().queue("wrist", "TWIN"), "image_size": [W, H],
                       "fovy_deg": round(wrist_fovy, 3), "link": "Gripper_Base_v1_1",
                       "source": "CAD (camera_pose/wrist_camera.json)"}},
         "arm": {"bus": "5B61033301", "urdf": "norma-core/hardware/elrobot/simulation/elrobot_follower.urdf",
@@ -391,7 +392,7 @@ def main():
     ap.add_argument("--n", type=int, default=5, help="overview frames averaged for the marker corners")
     ap.add_argument("--wrist-fovy", type=float, help="wrist camera vertical fov (default: the overview's fitted fovy)")
     ap.add_argument("--jaw-pitch", action="store_true", help="also report the wrist tilt implied by the jaw silhouette")
-    ap.add_argument("--layout", type=Path, default=HERE / "layouts" / "home.json")
+    ap.add_argument("--layout", type=Path, default=get_site().layout)
     ap.add_argument("--ids", type=int, nargs="+", help="table marker ids (default 20 21 22 23)")
     ap.add_argument("--near-margin", type=float, default=0.05,
                     help="table assumed to run this far past the overview's bottom row (m; the near edge is not seen)")

@@ -18,13 +18,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from sites import get_site
+
 from .data import AgentStore, LearnStore, trace_columns
 
 STATIC = Path(__file__).parent / "static"
 RECORDER_URL = os.environ.get("RECORDER_URL", "http://127.0.0.1:8900")
 RELAY_URL = os.environ.get("RELAY_URL", "http://127.0.0.1:8890")
-CAMERAS = [{"role": "wrist", "hash": "28ff0ca87978e8f993c2ac64a84d188a"},
-           {"role": "overview", "hash": "9ea4cacd5be94751e1eea7be90bcf628"}]
+CAMERAS = [{"role": role, "hash": get_site().camera_hash(role)} for role in ("wrist", "overview")]
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
                 ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml"}
 

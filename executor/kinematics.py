@@ -27,13 +27,14 @@ if str(SIM) not in sys.path:
     sys.path.append(str(SIM))      # appended: sim/recorder.py must not shadow the recorder package
 os.environ.setdefault("MUJOCO_GL", "cgl" if sys.platform == "darwin" else "egl")
 
+from sites import get_site
 from learning import skillcfg as SC  # noqa: E402
 
 DEFAULT_T_WORLD_BASE = np.array([[0.0, 1.0, 0.0, 0.0], [-1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
 
 
 def scene_calib_path() -> Path | None:
-    for p in (os.environ.get("EXECUTOR_SCENE_CALIB"), REPO / "calibration" / "scene_calib.json"):
+    for p in (os.environ.get("EXECUTOR_SCENE_CALIB"), get_site().scene_calib):
         if p and Path(p).exists():
             return Path(p)
     return None

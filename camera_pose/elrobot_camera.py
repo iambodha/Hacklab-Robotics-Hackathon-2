@@ -41,7 +41,9 @@ REPO = HERE.parent
 sys.path.insert(0, str(HERE))
 from check_joint_mapping import Urdf  # noqa: E402  (minimal serial-chain FK, reused as the handoff asks)
 
-CAMERA_JSON = HERE / "wrist_camera.json"
+sys.path.insert(0, str(REPO))
+from sites import get_site
+CAMERA_JSON = get_site().wrist_mount
 LINK = "Gripper_Base_v1_1"
 JOINT_OF = {f"j{i}": f"rev_motor_0{i}" for i in range(1, 8)}
 RAD_PER_TICK = 2 * math.pi / 4096

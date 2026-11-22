@@ -28,6 +28,7 @@ def repo(tmp_path_factory):
     ign = shutil.ignore_patterns("__pycache__", ".loop", "data", "*.pyc", ".pytest_cache")
     shutil.copytree(ROOT / "skills", r / "skills", ignore=ign)
     shutil.copytree(ROOT / "recorder", r / "recorder", ignore=ign)
+    shutil.copytree(ROOT / "sites", r / "sites", ignore=ign)  # registry dependency of recorder / bundles
     shutil.copytree(ROOT / "sim" / "robots", r / "sim" / "robots", ignore=ign)
     shutil.copy(ROOT / ".gitignore", r / ".gitignore")
     _git("init", "-q", cwd=r)

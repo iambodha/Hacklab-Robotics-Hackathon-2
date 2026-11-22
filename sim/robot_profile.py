@@ -51,10 +51,12 @@ class Kin:
         k, self.ik = prof.kinematics, prof.ik
         self.n_arm = len(prof.motors.arm)
         if k.backend == "workspace_xml":
-            xml = HERE / k.xml
+            import build_scene
+            layout = build_scene.layout_path()
+            xml = (build_scene.generated_dir(layout) / "workspace.xml"
+                   if k.xml == "generated/workspace.xml" else HERE / k.xml)
             if not xml.exists():
-                import build_scene
-                build_scene.build(report=False)
+                build_scene.build(layout, xml.parent, report=False)
             self.model = mujoco.MjModel.from_xml_path(str(xml))
             joints = self.model.actuator_trnid[:, 0]              # one actuator per joint: arm joints, then the gripper
             self.site, self.cam = self.model.site(k.tcp_site).id, self.model.camera(k.wrist_camera).id

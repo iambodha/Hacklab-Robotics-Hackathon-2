@@ -28,6 +28,7 @@ import cv2
 import numpy as np
 
 from . import accuracy, arm_base, aruco, geometry as g, scene_fit, wrist
+from sites import get_site
 from .scene import CALIB_DIR, CONFIG_PATH, SCENE_PATH, intrinsics_file, load_intrinsics
 from .station_io import QUEUES, ROOT
 
@@ -347,7 +348,7 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
         extent, extent_src = [lo.round(4).tolist(), hi.round(4).tolist()], "bounding box of the markers + 3 cm (not the real table edge)"
 
     roles = {i: "base" if i in base_ids else "top" for i in med}
-    wcam_cfg = json.loads((ROOT / "camera_pose/wrist_camera.json").read_text())
+    wcam_cfg = json.loads(get_site().wrist_mount.read_text())
     intr_w_out = intr_wr or (wrist_est or {}).get("intr")
     calib = {
         "version": 1,
@@ -373,7 +374,7 @@ def calibrate(data: dict, cfg: dict, fit_k1: bool = False, log=print) -> dict:
                       "T_link_cam": _m(np.array(wcam_cfg["T_link_camera"])), "link": "Gripper_Base_v1_1",
                       "source": ("CAD @ Rx(%+.2f deg) mount correction" % wcam_cfg["mount_correction"]["pitch_deg"]
                                  if (wcam_cfg.get("mount_correction") or {}).get("applied") else "CAD")
-                                + " (camera_pose/wrist_camera.json)"},
+                                + f" ({get_site().wrist_mount.relative_to(ROOT)})"},
         },
         "arm": {"bus": "5B61033301", "urdf": "norma-core/hardware/elrobot/simulation/elrobot_follower.urdf",
                 "joint_mapping": f"{wrist.arm_mapping()} (robot profile sim/robots/elrobot.json, as the executor and "

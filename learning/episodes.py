@@ -20,7 +20,8 @@ from pathlib import Path
 
 from . import skillcfg
 
-DEFAULT_DIR = Path("/Users/bodha/Documents/b0dha/Robotics-Hackathon/logs/learning/bottle")
+from sites import get_site
+DEFAULT_DIR = get_site().episode_dir
 OUTCOMES = ("opened", "loosened", "no_progress", "slip", "misaligned", "aborted", "fault")
 PHASES = ("locate", "approach", "grasp", "twist", "release", "regrasp", "check", "extract", "retreat")
 STATUSES = ("ok", "fail", "abort")

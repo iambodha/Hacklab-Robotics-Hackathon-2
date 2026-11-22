@@ -11,9 +11,9 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-HACK = Path("/Users/bodha/Documents/b0dha/Robotics-Hackathon")
-LEARN_DIR = Path(os.environ.get("BOTTLE_LEARN_DIR", HACK / "logs/learning/bottle"))
-ACTIONS_LOG = Path(os.environ.get("ACTIONS_LOG", HACK / "logs/real_sessions_home/actions.jsonl"))
+from sites import get_site
+LEARN_DIR = get_site().episode_dir
+ACTIONS_LOG = Path(os.environ.get("ACTIONS_LOG", get_site().action_log_dir / "actions.jsonl"))
 OPERATOR_LOG = os.environ.get("OPERATOR_LOG", "")
 
 LOAD_KEY = re.compile(r"j7.*load|load.*j7", re.I)

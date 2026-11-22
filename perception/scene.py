@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from sites import get_site
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,13 +11,13 @@ import numpy as np
 from . import geometry as g
 
 ROOT = Path(__file__).resolve().parent.parent
-CALIB_DIR = ROOT / "calibration"
-SCENE_PATH = CALIB_DIR / "scene_calib.json"
+SCENE_PATH = get_site().scene_calib
+CALIB_DIR = SCENE_PATH.parent
 CONFIG_PATH = Path(__file__).resolve().parent / "scene_config.json"
 
 
 def intrinsics_file(cam: str) -> Path:
-    return CALIB_DIR / f"intrinsics_{cam}.json"
+    return get_site().intrinsics(cam)
 
 
 def load_intrinsics(cam: str) -> dict | None:
