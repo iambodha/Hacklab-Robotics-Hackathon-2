@@ -1,5 +1,5 @@
-"""Board rectification: table-plane homography from the calibrated overview camera (calibration/scene_calib.json,
-written by perception) or from >= 4 image<->world point pairs (e.g. marker corners). Pure numpy, deterministic.
+"""Board rectification: table-plane homography from the calibrated overview camera (a site's scene_calib.json,
+sites.get_site().scene_calib, written by perception) or from >= 4 image<->world point pairs (e.g. marker corners). Pure numpy, deterministic.
 
 Rectified board image convention: row i <-> world y = y0 + (i + 0.5) / px_per_m, column j <-> x = x0 + (j + 0.5) / px_per_m.
 """

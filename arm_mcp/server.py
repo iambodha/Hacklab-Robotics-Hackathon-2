@@ -258,7 +258,7 @@ async def project_to_wrist(x: float, y: float, z: float, assumed_hfov_deg: float
 
 
 # ---------------------------------------------------------------------------
-# Scene perception (perception/, calibration/scene_calib.json). Read-only: frames come from Station's
+# Scene perception (perception/, the selected site's scene_calib.json: sites.get_site()). Read-only: frames come from Station's
 # usbvideo queues, joints from the motor bus; nothing is ever sent to the arm. World frame: follower
 # base_link origin on the table, z up, x = arm forward at j1=0, metres. Needs opencv-contrib-python.
 
@@ -276,7 +276,7 @@ def _perc():
 def _locator():
     loc = _perc()
     if not loc.scene_file_exists():
-        raise RuntimeError("no calibration/scene_calib.json yet: run `python -m perception.calib_scene --live`")
+        raise RuntimeError(f"no {loc.SCENE_PATH} yet: run `python -m perception.calib_scene --live` for this SITE")
     return loc.Locator(loc.reload())
 
 

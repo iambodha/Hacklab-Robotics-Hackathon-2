@@ -1,6 +1,7 @@
 """Arm kinematics for the executor: the robot profile's joint mapping, FK, and the real arm's least-lean IK,
 in the WORLD frame of prompts/scene-contract.md (the kinematic model's own base frame has +y forward; the world
-frame has +x forward: p_world = T_world_base @ p_base, T_world_base from calibration/scene_calib.json).
+frame has +x forward: p_world = T_world_base @ p_base, T_world_base from the
+selected site's scene_calib.json: EXECUTOR_SCENE_CALIB, else sites.get_site().scene_calib).
 
 The IK is the same algorithm as sim/real_arm_mcp.py (_target_rot/_solve_rot/_solve_tcp): jaws as close to
 straight down as the target allows, stepping the lean up gradually and staying near the seed. It is copied rather

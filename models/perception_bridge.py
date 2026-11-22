@@ -1,8 +1,9 @@
 """Read-only access to the perception workstream's localisation API (pixels -> world metres).
 
-perception lives in another worktree (ws/perception, $PERCEPTION_ROOT). It is imported by path, never
-copied or modified. If it can't be imported (no opencv/numpy in this environment, no scene_calib.json),
-`locator()` returns None and callers fall back to pixel-only proposals.
+perception is this checkout's perception/ package (or the one under $PERCEPTION_ROOT); its calibration is the selected
+site's scene_calib.json (sites.get_site(), SITE=home|office). It is imported by path, never copied or modified. If it
+can't be imported (no opencv/numpy in this environment, no scene_calib.json for the site), `locator()` returns None
+and callers fall back to pixel-only proposals.
 """
 from __future__ import annotations
 
@@ -10,7 +11,7 @@ import os
 import sys
 from pathlib import Path
 
-PERCEPTION_ROOT = Path(os.environ.get("PERCEPTION_ROOT", Path(__file__).resolve().parents[2] / "perception"))
+PERCEPTION_ROOT = Path(os.environ.get("PERCEPTION_ROOT", Path(__file__).resolve().parents[1]))
 _LOC = None
 _ERR: str | None = None
 
@@ -25,7 +26,7 @@ def locator():
             sys.path.append(str(PERCEPTION_ROOT))
         from perception import locate  # noqa: PLC0415
         if not locate.scene_file_exists():
-            raise FileNotFoundError("perception/calibration/scene_calib.json is missing")
+            raise FileNotFoundError(f"{locate.SCENE_PATH} is missing")
         _LOC = locate.Locator()
         _ERR = None
     except Exception as e:  # ImportError (cv2), missing calibration, bad JSON

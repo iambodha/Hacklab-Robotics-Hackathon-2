@@ -22,6 +22,12 @@ SIM = Path(__file__).resolve().parents[2] / "sim"
 CAMS = {"wrist": "wrist_cam", "overview": "overview_cam"}
 
 
+def layout_label(layout_file) -> str:
+    """sites/<name>/<file>.json -> <name>; any other layout -> its file stem."""
+    p = Path(layout_file).resolve()
+    return p.parent.name if p.parent.parent == SIM.parent / "sites" else p.stem
+
+
 class SimBackend(Backend):
     name = "sim"
 
@@ -38,7 +44,7 @@ class SimBackend(Backend):
         self.render_lock = threading.Lock()
         self.render_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sim-render")
         self.seq = {r: 0 for r in CAMS}
-        self.layout_name = Path(os.environ.get("ROBOT_SIM_LAYOUT", "layout.json")).stem
+        self.layout_name = layout_label(sim_arm_mcp.LAYOUT)
 
     def read_state(self) -> MotorRead:
         rows = self.arm.state()

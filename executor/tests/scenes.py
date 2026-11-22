@@ -1,4 +1,4 @@
-"""Synthetic overview images through the calibrated camera (calibration/scene_calib.json), for fake-backend tests."""
+"""Synthetic overview images through the calibrated camera (the site's scene_calib.json), for fake-backend tests."""
 from __future__ import annotations
 
 import cv2

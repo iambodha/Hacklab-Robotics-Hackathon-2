@@ -1,4 +1,5 @@
-"""Load calibration/scene_calib.json into a Scene: cameras (intrinsics, poses), markers, arm base."""
+"""Load the selected site's scene_calib.json (sites.get_site(), SITE=home|office) into a Scene: cameras (intrinsics,
+poses), markers, arm base."""
 from __future__ import annotations
 
 import json

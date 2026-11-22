@@ -14,7 +14,8 @@ import numpy as np
 
 from .geometry import Board, Camera, segment_distance
 
-# calibration/scene_calib.json (perception, 2026-11-22 00:20): overview camera, 299x224
+# Frozen fixture, deliberately not site-selected (seeded images must not change with SITE): home's
+# calibration/scene_calib.json (perception, 2026-11-22 00:20) overview camera, 299x224
 OVERVIEW_CALIB = {"cameras": {"overview": {
     "image_size": [299, 224], "K_normalized": {"fx": 0.485183, "fy": 0.647633, "cx": 0.498328, "cy": 0.497768},
     "dist": [0, 0, 0, 0, 0],

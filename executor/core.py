@@ -29,6 +29,7 @@ from .recording import RecorderLink, TableMemory
 from .skills import SKILLS, Verdict
 from .validation import validate, validate_in_sim
 from learning import skillcfg as SC  # noqa: E402  (kinematics put the repo on sys.path)
+from sites import get_site  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 WIPE_SKILLS = ("wipe", "wipe_region")
@@ -443,7 +444,8 @@ class Executor:
 
     def describe(self) -> dict:
         return {"backend": self.backend.describe(), "skills": {k: s.describe() for k, s in self.skills.items()},
-                "locator": self.locator.name, "perception": self.locator.describe(), "scene_calib": str(scene_calib_path()) if scene_calib_path() else None,
+                "locator": self.locator.name, "perception": self.locator.describe(), "site": get_site().name,
+                "scene_calib": str(scene_calib_path()) if scene_calib_path() else None,
                 "tool": self.tool, "layout": self.layout, "profile": self.kin.P.name,
                 "twin_preflight": self.twin.describe() if self.twin else None,
                 "skill_config": SC.stamp(self.kin.cfg_target)}
