@@ -1,0 +1,646 @@
+{
+ "baseline": {
+  "sim.stir.radius_m": 0.009,
+  "sim.stir.turns": 3,
+  "sim.stir.height_m": 0.04,
+  "sim.stir.step_dt_s": 0.05,
+  "sim.stir.wall_margin_m": 0.006,
+  "sim.stir.lean_extra_deg": 0.0,
+  "sim.stir.grasp_from_top_m": 0.035,
+  "sim.stir.ring_points": 16
+ },
+ "rows": [
+  {
+   "attempt": 1,
+   "outcome": "too_few_loops",
+   "score": 0.069,
+   "best": 0,
+   "changed": {},
+   "loops": 2.94,
+   "radius_cm": 0.8,
+   "pace": 0.216,
+   "terms": {
+    "coverage": 0.335,
+    "depth": 0.436,
+    "pace": 0.432,
+    "immersion": 1.0,
+    "clean": 1.0
+   },
+   "config_version": 0,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 3,
+    "sim.stir.height_m": 0.04,
+    "sim.stir.step_dt_s": 0.05,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 2,
+   "outcome": "stirred",
+   "score": 0.569,
+   "best": 0.569,
+   "changed": {
+    "turns": 4
+   },
+   "loops": 3.95,
+   "radius_cm": 0.8,
+   "pace": 0.22,
+   "terms": {
+    "coverage": 0.335,
+    "depth": 0.428,
+    "pace": 0.44,
+    "immersion": 1.0,
+    "clean": 1.0
+   },
+   "config_version": 1,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.04,
+    "sim.stir.step_dt_s": 0.05,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 3,
+   "outcome": "scraped_wall",
+   "score": 0.0,
+   "best": 0,
+   "changed": {
+    "radius_m": 0.012
+   },
+   "loops": 4.01,
+   "radius_cm": 0.57,
+   "pace": 0.297,
+   "terms": {
+    "coverage": 0.237,
+    "depth": 0.445,
+    "pace": 0.594,
+    "immersion": 1.0,
+    "clean": 0.583
+   },
+   "config_version": 2,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.012,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.04,
+    "sim.stir.step_dt_s": 0.05,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 4,
+   "outcome": "stirred",
+   "score": 0.601,
+   "best": 0.601,
+   "changed": {
+    "radius_m": 0.009,
+    "height_m": 0.034
+   },
+   "loops": 3.95,
+   "radius_cm": 0.81,
+   "pace": 0.251,
+   "terms": {
+    "coverage": 0.336,
+    "depth": 0.556,
+    "pace": 0.502,
+    "immersion": 1.0,
+    "clean": 1.0
+   },
+   "config_version": 3,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.034,
+    "sim.stir.step_dt_s": 0.05,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 5,
+   "outcome": "scraped_wall",
+   "score": 0.0,
+   "best": 0.569,
+   "changed": {
+    "height_m": 0.028
+   },
+   "loops": 0.57,
+   "radius_cm": 1.93,
+   "pace": 0.042,
+   "terms": {
+    "coverage": 0.804,
+    "depth": 0.669,
+    "pace": 0.084,
+    "immersion": 1.0,
+    "clean": 0.0
+   },
+   "config_version": 4,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.028,
+    "sim.stir.step_dt_s": 0.05,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 6,
+   "outcome": "stirred",
+   "score": 0.624,
+   "best": 0.624,
+   "changed": {
+    "height_m": 0.034,
+    "step_dt_s": 0.04
+   },
+   "loops": 3.95,
+   "radius_cm": 0.8,
+   "pace": 0.309,
+   "terms": {
+    "coverage": 0.335,
+    "depth": 0.555,
+    "pace": 0.618,
+    "immersion": 1.0,
+    "clean": 1.0
+   },
+   "config_version": 5,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.034,
+    "sim.stir.step_dt_s": 0.04,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 7,
+   "outcome": "stirred",
+   "score": 0.659,
+   "best": 0.659,
+   "changed": {
+    "step_dt_s": 0.03
+   },
+   "loops": 3.94,
+   "radius_cm": 0.8,
+   "pace": 0.398,
+   "terms": {
+    "coverage": 0.334,
+    "depth": 0.552,
+    "pace": 0.796,
+    "immersion": 1.0,
+    "clean": 1.0
+   },
+   "config_version": 6,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.034,
+    "sim.stir.step_dt_s": 0.03,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 8,
+   "outcome": "scraped_wall",
+   "score": 0.118,
+   "best": 0.624,
+   "changed": {
+    "step_dt_s": 0.02
+   },
+   "loops": 3.99,
+   "radius_cm": 0.66,
+   "pace": 0.707,
+   "terms": {
+    "coverage": 0.274,
+    "depth": 0.564,
+    "pace": 1.0,
+    "immersion": 1.0,
+    "clean": 0.69
+   },
+   "config_version": 7,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.034,
+    "sim.stir.step_dt_s": 0.02,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 9,
+   "outcome": "stirred",
+   "score": 0.661,
+   "best": 0.661,
+   "changed": {
+    "step_dt_s": 0.03
+   },
+   "loops": 3.95,
+   "radius_cm": 0.8,
+   "pace": 0.403,
+   "terms": {
+    "coverage": 0.333,
+    "depth": 0.555,
+    "pace": 0.806,
+    "immersion": 1.0,
+    "clean": 1.0
+   },
+   "config_version": 8,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.034,
+    "sim.stir.step_dt_s": 0.03,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 10,
+   "outcome": "stirred",
+   "score": 0.66,
+   "best": 0.66,
+   "changed": {},
+   "loops": 3.94,
+   "radius_cm": 0.8,
+   "pace": 0.401,
+   "terms": {
+    "coverage": 0.332,
+    "depth": 0.555,
+    "pace": 0.802,
+    "immersion": 1.0,
+    "clean": 1.0
+   },
+   "config_version": 8,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.034,
+    "sim.stir.step_dt_s": 0.03,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 11,
+   "outcome": "stirred",
+   "score": 0.66,
+   "best": 0.66,
+   "changed": {},
+   "loops": 3.95,
+   "radius_cm": 0.8,
+   "pace": 0.402,
+   "terms": {
+    "coverage": 0.333,
+    "depth": 0.555,
+    "pace": 0.804,
+    "immersion": 1.0,
+    "clean": 1.0
+   },
+   "config_version": 8,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.034,
+    "sim.stir.step_dt_s": 0.03,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 12,
+   "outcome": "stirred",
+   "score": 0.659,
+   "best": 0.659,
+   "changed": {},
+   "loops": 3.94,
+   "radius_cm": 0.8,
+   "pace": 0.399,
+   "terms": {
+    "coverage": 0.334,
+    "depth": 0.552,
+    "pace": 0.798,
+    "immersion": 1.0,
+    "clean": 1.0
+   },
+   "config_version": 8,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.034,
+    "sim.stir.step_dt_s": 0.03,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 13,
+   "outcome": "stirred",
+   "score": 0.66,
+   "best": 0.66,
+   "changed": {},
+   "loops": 3.95,
+   "radius_cm": 0.8,
+   "pace": 0.402,
+   "terms": {
+    "coverage": 0.333,
+    "depth": 0.555,
+    "pace": 0.804,
+    "immersion": 1.0,
+    "clean": 1.0
+   },
+   "config_version": 8,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.034,
+    "sim.stir.step_dt_s": 0.03,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 14,
+   "outcome": "stirred",
+   "score": 0.661,
+   "best": 0.661,
+   "changed": {},
+   "loops": 3.94,
+   "radius_cm": 0.8,
+   "pace": 0.403,
+   "terms": {
+    "coverage": 0.333,
+    "depth": 0.555,
+    "pace": 0.806,
+    "immersion": 1.0,
+    "clean": 1.0
+   },
+   "config_version": 8,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.034,
+    "sim.stir.step_dt_s": 0.03,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 15,
+   "outcome": "stirred",
+   "score": 0.659,
+   "best": 0.659,
+   "changed": {},
+   "loops": 3.95,
+   "radius_cm": 0.8,
+   "pace": 0.398,
+   "terms": {
+    "coverage": 0.334,
+    "depth": 0.554,
+    "pace": 0.796,
+    "immersion": 1.0,
+    "clean": 1.0
+   },
+   "config_version": 8,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.034,
+    "sim.stir.step_dt_s": 0.03,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  },
+  {
+   "attempt": 16,
+   "outcome": "stirred",
+   "score": 0.659,
+   "best": 0.659,
+   "changed": {},
+   "loops": 3.95,
+   "radius_cm": 0.8,
+   "pace": 0.398,
+   "terms": {
+    "coverage": 0.334,
+    "depth": 0.554,
+    "pace": 0.796,
+    "immersion": 1.0,
+    "clean": 1.0
+   },
+   "config_version": 8,
+   "rtf": 1.0,
+   "cfg": {
+    "sim.stir.radius_m": 0.009,
+    "sim.stir.turns": 4,
+    "sim.stir.height_m": 0.034,
+    "sim.stir.step_dt_s": 0.03,
+    "sim.stir.wall_margin_m": 0.006,
+    "sim.stir.lean_extra_deg": 0.0,
+    "sim.stir.grasp_from_top_m": 0.035,
+    "sim.stir.ring_points": 16
+   }
+  }
+ ],
+ "best": {
+  "attempt": 7,
+  "score": 0.659,
+  "cfg": {
+   "sim.stir.radius_m": 0.009,
+   "sim.stir.turns": 4,
+   "sim.stir.height_m": 0.034,
+   "sim.stir.step_dt_s": 0.03,
+   "sim.stir.wall_margin_m": 0.006,
+   "sim.stir.lean_extra_deg": 0.0,
+   "sim.stir.grasp_from_top_m": 0.035,
+   "sim.stir.ring_points": 16
+  }
+ },
+ "limits": {
+  "sim.stir.radius_m": "attempt 3: radius_m=0.012 -> scraped_wall, score 0.0 (best 0.569)",
+  "sim.stir.height_m": "attempt 5: height_m=0.028 -> scraped_wall, score 0.0 (best 0.601)",
+  "sim.stir.step_dt_s": "attempt 8: step_dt_s=0.02 -> scraped_wall, score 0.118 (best 0.659)"
+ },
+ "practice_s": 643,
+ "validation": {
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5
+  ],
+  "click_noise_m": 0.01,
+  "baseline": [
+   {
+    "seed": 1,
+    "outcome": "scraped_wall",
+    "stirred": false,
+    "score": 0.0,
+    "loops": 3.0,
+    "radius_cm": 0.9,
+    "pace": 0.322
+   },
+   {
+    "seed": 2,
+    "outcome": "no_grasp",
+    "stirred": false,
+    "score": 0.0,
+    "loops": null,
+    "radius_cm": 0,
+    "pace": null
+   },
+   {
+    "seed": 3,
+    "outcome": "no_grasp",
+    "stirred": false,
+    "score": 0.0,
+    "loops": null,
+    "radius_cm": 0,
+    "pace": null
+   },
+   {
+    "seed": 4,
+    "outcome": "too_few_loops",
+    "stirred": false,
+    "score": 0.086,
+    "loops": 3.0,
+    "radius_cm": 0.78,
+    "pace": 0.265
+   },
+   {
+    "seed": 5,
+    "outcome": "scraped_wall",
+    "stirred": false,
+    "score": 0.0,
+    "loops": 2.99,
+    "radius_cm": 0.87,
+    "pace": 0.323
+   }
+  ],
+  "learned": [
+   {
+    "seed": 1,
+    "outcome": "stirred",
+    "stirred": true,
+    "score": 0.723,
+    "loops": 4.0,
+    "radius_cm": 0.94,
+    "pace": 0.571
+   },
+   {
+    "seed": 2,
+    "outcome": "no_grasp",
+    "stirred": false,
+    "score": 0.0,
+    "loops": null,
+    "radius_cm": 0,
+    "pace": null
+   },
+   {
+    "seed": 3,
+    "outcome": "no_grasp",
+    "stirred": false,
+    "score": 0.0,
+    "loops": null,
+    "radius_cm": 0,
+    "pace": null
+   },
+   {
+    "seed": 4,
+    "outcome": "stirred",
+    "stirred": true,
+    "score": 0.689,
+    "loops": 3.99,
+    "radius_cm": 0.74,
+    "pace": 0.491
+   },
+   {
+    "seed": 5,
+    "outcome": "stirred",
+    "stirred": true,
+    "score": 0.715,
+    "loops": 3.99,
+    "radius_cm": 0.88,
+    "pace": 0.532
+   }
+  ],
+  "summary": {
+   "baseline": {
+    "runs": 5,
+    "stirred": 0,
+    "mean_score": 0.017,
+    "mean_radius_cm": 0.0,
+    "mean_pace": 0.0,
+    "outcomes": {
+     "no_grasp": 2,
+     "scraped_wall": 2,
+     "too_few_loops": 1
+    }
+   },
+   "learned": {
+    "runs": 5,
+    "stirred": 3,
+    "mean_score": 0.425,
+    "mean_radius_cm": 0.85,
+    "mean_pace": 0.531,
+    "outcomes": {
+     "no_grasp": 2,
+     "stirred": 3
+    }
+   }
+  }
+ },
+ "run": "run1"
+}

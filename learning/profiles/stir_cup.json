@@ -1,0 +1,117 @@
+{
+ "profile": "stir_cup",
+ "version": 1,
+ "skill": "stir a drink with a spoon standing in a mug: stir_spoon (sim/stir_skill.py)",
+ "learned_on": "2026-11-22",
+ "robot": "ElRobot (sim/robots/elrobot.json) - MuJoCo twin of the office table (sim/layouts/stir_office.json)",
+ "source": "learning/stir/practice.py: 16 twin attempts; records in DATA_ROOT/stir/run1/ (episodes.jsonl, SUMMARY.md); curated copy in docs/stir/data/",
+ "learned_in": "twin",
+ "how_to_read": "docs/stir/README.md. Each entry: value (the default in force), baseline (the code value it replaces), attempts (the twin attempts that used it and stirred cleanly), evidence, date, source = twin: learned in simulation only, not yet on the real arm (docs/stir/REAL_RUN.md).",
+ "object": {
+  "cup_inner_radius_m": 0.036,
+  "cup_height_m": 0.095,
+  "cup_wall_m": 0.004,
+  "cup_xy_m": [
+   0.0,
+   0.19
+  ],
+  "liquid_level": 0.6,
+  "spoon_length_m": 0.155,
+  "spoon_handle_width_m": 0.012,
+  "site": "office"
+ },
+ "history": [
+  {
+   "version": 1,
+   "date": "2026-11-22",
+   "by": "stir-skill session (twin practice)",
+   "change": "first stir profile: 16 twin attempts, best = attempt 7"
+  }
+ ],
+ "entries": {
+  "sim.stir.turns": {
+   "value": 4,
+   "baseline": 3,
+   "attempts": [
+    2,
+    4,
+    6,
+    7,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+   ],
+   "date": "2026-11-22",
+   "evidence": "turns 3 -> 4: the best clean stir (attempt 7, score 0.659) used 4; values tried [3, 4].",
+   "source": "twin"
+  },
+  "sim.stir.height_m": {
+   "value": 0.034,
+   "baseline": 0.04,
+   "attempts": [
+    4,
+    6,
+    7,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+   ],
+   "date": "2026-11-22",
+   "evidence": "height_m 0.04 -> 0.034: the best clean stir (attempt 7, score 0.659) used 0.034; values tried [0.028, 0.034, 0.04]. Limit: attempt 5: height_m=0.028 -> scraped_wall, score 0.0 (best 0.601).",
+   "source": "twin"
+  },
+  "sim.stir.step_dt_s": {
+   "value": 0.03,
+   "baseline": 0.05,
+   "attempts": [
+    7,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+   ],
+   "date": "2026-11-22",
+   "evidence": "step_dt_s 0.05 -> 0.03: the best clean stir (attempt 7, score 0.659) used 0.03; values tried [0.02, 0.03, 0.04, 0.05]. Limit: attempt 8: step_dt_s=0.02 -> scraped_wall, score 0.118 (best 0.659).",
+   "source": "twin"
+  }
+ },
+ "validation": {
+  "baseline": {
+   "runs": 5,
+   "stirred": 0,
+   "mean_score": 0.017,
+   "mean_radius_cm": 0.0,
+   "mean_pace": 0.0,
+   "outcomes": {
+    "no_grasp": 2,
+    "scraped_wall": 2,
+    "too_few_loops": 1
+   }
+  },
+  "learned": {
+   "runs": 5,
+   "stirred": 3,
+   "mean_score": 0.425,
+   "mean_radius_cm": 0.85,
+   "mean_pace": 0.531,
+   "outcomes": {
+    "no_grasp": 2,
+    "stirred": 3
+   }
+  }
+ }
+}

@@ -1,0 +1,902 @@
+[
+ {
+  "attempt": 1,
+  "changed": {},
+  "hypothesis": "Baseline: the r4 stir skill's code values as they are, on the office mug (8 cm, 9.5 cm tall). Expect a clean but small, slow, high stir.",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 18.9,
+   "turns": 3,
+   "points_per_turn": 86
+  },
+  "outcome": "too_few_loops",
+  "score": 0.069,
+  "terms": {
+   "coverage": 0.335,
+   "depth": 0.436,
+   "pace": 0.432,
+   "immersion": 1.0,
+   "clean": 1.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 2.94,
+   "path_radius_m": 0.0075,
+   "radius_about_axis_m": 0.008,
+   "stir_s": 13.63,
+   "pace_loops_per_s": 0.216,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.0,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0299,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0,
+   "cup_tilt_max_deg": 3.1,
+   "slip_m": 0.0004,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "2.94 loops in 13.63 s (bowl radius 0.8 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 0%, on the bottom 0% of the stir",
+   "mug moved 0.0 mm, tilted up to 3.1 deg; arm on mug 0.0 s; spoon slid 0.4 mm in the jaws; spoon in mug at the end: True",
+   "failed gates: loops"
+  ],
+  "lesson": "no change: too_few_loops (failed gates: loops)."
+ },
+ {
+  "attempt": 2,
+  "changed": {
+   "sim.stir.turns": {
+    "before": 3,
+    "after": 4
+   }
+  },
+  "hypothesis": "Only 2.94 loops: one more turn.",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 18.9,
+   "turns": 4,
+   "points_per_turn": 85
+  },
+  "outcome": "stirred",
+  "score": 0.569,
+  "terms": {
+   "coverage": 0.335,
+   "depth": 0.428,
+   "pace": 0.44,
+   "immersion": 1.0,
+   "clean": 1.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 3.95,
+   "path_radius_m": 0.0074,
+   "radius_about_axis_m": 0.008,
+   "stir_s": 17.9,
+   "pace_loops_per_s": 0.22,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.0,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0303,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0,
+   "cup_tilt_max_deg": 3.1,
+   "slip_m": 0.0007,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "3.95 loops in 17.9 s (bowl radius 0.8 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 0%, on the bottom 0% of the stir",
+   "mug moved 0.0 mm, tilted up to 3.1 deg; arm on mug 0.0 s; spoon slid 0.7 mm in the jaws; spoon in mug at the end: True"
+  ],
+  "lesson": "turns 3->4: stirred cleanly, score 0.569 (better than the best -); coverage 0.335, depth 0.428, pace 0.44 (0.22 loops/s), 3.95 loops."
+ },
+ {
+  "attempt": 3,
+  "changed": {
+   "sim.stir.radius_m": {
+    "before": 0.009,
+    "after": 0.012
+   }
+  },
+  "hypothesis": "radius_m 0.009 -> 0.012: a wider circle moves more of the drink (coverage).",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.0067,
+   "radius_asked_m": 0.012,
+   "lean_deg": 23.0,
+   "turns": 4,
+   "points_per_turn": 64
+  },
+  "outcome": "scraped_wall",
+  "score": 0.0,
+  "terms": {
+   "coverage": 0.237,
+   "depth": 0.445,
+   "pace": 0.594,
+   "immersion": 1.0,
+   "clean": 0.583
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 4.01,
+   "path_radius_m": 0.0054,
+   "radius_about_axis_m": 0.0057,
+   "stir_s": 13.52,
+   "pace_loops_per_s": 0.297,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.417,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0294,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0002,
+   "cup_tilt_max_deg": 3.1,
+   "slip_m": 0.0014,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "4.01 loops in 13.52 s (bowl radius 0.6 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 42%, on the bottom 0% of the stir",
+   "mug moved 0.2 mm, tilted up to 3.1 deg; arm on mug 0.0 s; spoon slid 1.4 mm in the jaws; spoon in mug at the end: True",
+   "failed gates: wall_contact"
+  ],
+  "lesson": "radius_m 0.009->0.012: scraped_wall (failed gates: wall_contact)."
+ },
+ {
+  "attempt": 4,
+  "changed": {
+   "sim.stir.radius_m": {
+    "before": 0.012,
+    "after": 0.009
+   },
+   "sim.stir.height_m": {
+    "before": 0.04,
+    "after": 0.034
+   }
+  },
+  "hypothesis": "radius_m=0.012 did not pay (scraped_wall, score 0.0 vs best 0.569): back to radius_m=0.009; then height_m 0.04 -> 0.034: a lower circle mixes what settles at the bottom (depth).",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 16.0,
+   "turns": 4,
+   "points_per_turn": 75
+  },
+  "outcome": "stirred",
+  "score": 0.601,
+  "terms": {
+   "coverage": 0.336,
+   "depth": 0.556,
+   "pace": 0.502,
+   "immersion": 1.0,
+   "clean": 1.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 3.95,
+   "path_radius_m": 0.0075,
+   "radius_about_axis_m": 0.0081,
+   "stir_s": 15.75,
+   "pace_loops_per_s": 0.251,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.0,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0236,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0,
+   "cup_tilt_max_deg": 3.0,
+   "slip_m": 0.0005,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "3.95 loops in 15.75 s (bowl radius 0.8 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 0%, on the bottom 0% of the stir",
+   "mug moved 0.0 mm, tilted up to 3.0 deg; arm on mug 0.0 s; spoon slid 0.5 mm in the jaws; spoon in mug at the end: True"
+  ],
+  "lesson": "radius_m 0.012->0.009, height_m 0.04->0.034: stirred cleanly, score 0.601 (better than the best 0.569); coverage 0.336, depth 0.556, pace 0.502 (0.251 loops/s), 3.95 loops."
+ },
+ {
+  "attempt": 5,
+  "changed": {
+   "sim.stir.height_m": {
+    "before": 0.034,
+    "after": 0.028
+   }
+  },
+  "hypothesis": "keep going: height_m 0.034 -> 0.028: a lower circle mixes what settles at the bottom (depth).",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 17.0,
+   "turns": 4,
+   "points_per_turn": 63
+  },
+  "outcome": "scraped_wall",
+  "score": 0.0,
+  "terms": {
+   "coverage": 0.804,
+   "depth": 0.669,
+   "pace": 0.084,
+   "immersion": 1.0,
+   "clean": 0.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 0.57,
+   "path_radius_m": 0.0092,
+   "radius_about_axis_m": 0.0193,
+   "stir_s": 13.6,
+   "pace_loops_per_s": 0.042,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.434,
+   "bottom_frac": 0.688,
+   "bowl_height_m": 0.0176,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.004,
+   "cup_tilt_max_deg": 3.5,
+   "slip_m": 0.0201,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "0.57 loops in 13.6 s (bowl radius 1.9 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 43%, on the bottom 69% of the stir",
+   "mug moved 4.0 mm, tilted up to 3.5 deg; arm on mug 0.0 s; spoon slid 20.1 mm in the jaws; spoon in mug at the end: True",
+   "failed gates: wall_contact, slip, loops"
+  ],
+  "lesson": "height_m 0.034->0.028: scraped_wall (failed gates: wall_contact, slip, loops)."
+ },
+ {
+  "attempt": 6,
+  "changed": {
+   "sim.stir.height_m": {
+    "before": 0.028,
+    "after": 0.034
+   },
+   "sim.stir.step_dt_s": {
+    "before": 0.05,
+    "after": 0.04
+   }
+  },
+  "hypothesis": "height_m=0.028 did not pay (scraped_wall, score 0.0 vs best 0.601): back to height_m=0.034; then step_dt_s 0.05 -> 0.04: shorter steps on the circle stir faster (pace).",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 16.0,
+   "turns": 4,
+   "points_per_turn": 75
+  },
+  "outcome": "stirred",
+  "score": 0.624,
+  "terms": {
+   "coverage": 0.335,
+   "depth": 0.555,
+   "pace": 0.618,
+   "immersion": 1.0,
+   "clean": 1.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 3.95,
+   "path_radius_m": 0.0075,
+   "radius_about_axis_m": 0.008,
+   "stir_s": 12.77,
+   "pace_loops_per_s": 0.309,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.0,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0236,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0,
+   "cup_tilt_max_deg": 3.0,
+   "slip_m": 0.0006,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "3.95 loops in 12.77 s (bowl radius 0.8 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 0%, on the bottom 0% of the stir",
+   "mug moved 0.0 mm, tilted up to 3.0 deg; arm on mug 0.0 s; spoon slid 0.6 mm in the jaws; spoon in mug at the end: True"
+  ],
+  "lesson": "height_m 0.028->0.034, step_dt_s 0.05->0.04: stirred cleanly, score 0.624 (better than the best 0.601); coverage 0.335, depth 0.555, pace 0.618 (0.309 loops/s), 3.95 loops."
+ },
+ {
+  "attempt": 7,
+  "changed": {
+   "sim.stir.step_dt_s": {
+    "before": 0.04,
+    "after": 0.03
+   }
+  },
+  "hypothesis": "keep going: step_dt_s 0.04 -> 0.03: shorter steps on the circle stir faster (pace).",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 16.0,
+   "turns": 4,
+   "points_per_turn": 76
+  },
+  "outcome": "stirred",
+  "score": 0.659,
+  "terms": {
+   "coverage": 0.334,
+   "depth": 0.552,
+   "pace": 0.796,
+   "immersion": 1.0,
+   "clean": 1.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 3.94,
+   "path_radius_m": 0.0074,
+   "radius_about_axis_m": 0.008,
+   "stir_s": 9.91,
+   "pace_loops_per_s": 0.398,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.0,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0238,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0001,
+   "cup_tilt_max_deg": 3.1,
+   "slip_m": 0.0006,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "3.94 loops in 9.91 s (bowl radius 0.8 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 0%, on the bottom 0% of the stir",
+   "mug moved 0.1 mm, tilted up to 3.1 deg; arm on mug 0.0 s; spoon slid 0.6 mm in the jaws; spoon in mug at the end: True"
+  ],
+  "lesson": "step_dt_s 0.04->0.03: stirred cleanly, score 0.659 (better than the best 0.601); coverage 0.334, depth 0.552, pace 0.796 (0.398 loops/s), 3.94 loops."
+ },
+ {
+  "attempt": 8,
+  "changed": {
+   "sim.stir.step_dt_s": {
+    "before": 0.03,
+    "after": 0.02
+   }
+  },
+  "hypothesis": "keep going: step_dt_s 0.03 -> 0.02: shorter steps on the circle stir faster (pace).",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.0079,
+   "radius_asked_m": 0.009,
+   "lean_deg": 20.0,
+   "turns": 4,
+   "points_per_turn": 62
+  },
+  "outcome": "scraped_wall",
+  "score": 0.118,
+  "terms": {
+   "coverage": 0.274,
+   "depth": 0.564,
+   "pace": 1.0,
+   "immersion": 1.0,
+   "clean": 0.69
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 3.99,
+   "path_radius_m": 0.0063,
+   "radius_about_axis_m": 0.0066,
+   "stir_s": 5.64,
+   "pace_loops_per_s": 0.707,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.31,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0231,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0001,
+   "cup_tilt_max_deg": 3.1,
+   "slip_m": 0.0001,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "3.99 loops in 5.64 s (bowl radius 0.7 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 31%, on the bottom 0% of the stir",
+   "mug moved 0.1 mm, tilted up to 3.1 deg; arm on mug 0.0 s; spoon slid 0.1 mm in the jaws; spoon in mug at the end: True",
+   "failed gates: wall_contact"
+  ],
+  "lesson": "step_dt_s 0.03->0.02: scraped_wall (failed gates: wall_contact)."
+ },
+ {
+  "attempt": 9,
+  "changed": {
+   "sim.stir.step_dt_s": {
+    "before": 0.02,
+    "after": 0.03
+   }
+  },
+  "hypothesis": "step_dt_s=0.02 did not pay (scraped_wall, score 0.118 vs best 0.659): back to step_dt_s=0.03.",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 16.0,
+   "turns": 4,
+   "points_per_turn": 75
+  },
+  "outcome": "stirred",
+  "score": 0.661,
+  "terms": {
+   "coverage": 0.333,
+   "depth": 0.555,
+   "pace": 0.806,
+   "immersion": 1.0,
+   "clean": 1.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 3.95,
+   "path_radius_m": 0.0074,
+   "radius_about_axis_m": 0.008,
+   "stir_s": 9.8,
+   "pace_loops_per_s": 0.403,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.0,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0236,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0,
+   "cup_tilt_max_deg": 3.0,
+   "slip_m": 0.0006,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "3.95 loops in 9.8 s (bowl radius 0.8 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 0%, on the bottom 0% of the stir",
+   "mug moved 0.0 mm, tilted up to 3.0 deg; arm on mug 0.0 s; spoon slid 0.6 mm in the jaws; spoon in mug at the end: True"
+  ],
+  "lesson": "step_dt_s 0.02->0.03: stirred cleanly, score 0.661 (no better than the best 0.659); coverage 0.333, depth 0.555, pace 0.806 (0.403 loops/s), 3.95 loops."
+ },
+ {
+  "attempt": 10,
+  "changed": {},
+  "hypothesis": "Every search direction has found its limit: repeat the best configuration (attempt 7) to check that the result holds.",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 16.0,
+   "turns": 4,
+   "points_per_turn": 75
+  },
+  "outcome": "stirred",
+  "score": 0.66,
+  "terms": {
+   "coverage": 0.332,
+   "depth": 0.555,
+   "pace": 0.802,
+   "immersion": 1.0,
+   "clean": 1.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 3.94,
+   "path_radius_m": 0.0074,
+   "radius_about_axis_m": 0.008,
+   "stir_s": 9.83,
+   "pace_loops_per_s": 0.401,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.0,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0236,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0,
+   "cup_tilt_max_deg": 3.0,
+   "slip_m": 0.0006,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "3.94 loops in 9.83 s (bowl radius 0.8 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 0%, on the bottom 0% of the stir",
+   "mug moved 0.0 mm, tilted up to 3.0 deg; arm on mug 0.0 s; spoon slid 0.6 mm in the jaws; spoon in mug at the end: True"
+  ],
+  "lesson": "no change: stirred cleanly, score 0.66 (no better than the best 0.659); coverage 0.332, depth 0.555, pace 0.802 (0.401 loops/s), 3.94 loops."
+ },
+ {
+  "attempt": 11,
+  "changed": {},
+  "hypothesis": "Every search direction has found its limit: repeat the best configuration (attempt 7) to check that the result holds.",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 16.0,
+   "turns": 4,
+   "points_per_turn": 75
+  },
+  "outcome": "stirred",
+  "score": 0.66,
+  "terms": {
+   "coverage": 0.333,
+   "depth": 0.555,
+   "pace": 0.804,
+   "immersion": 1.0,
+   "clean": 1.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 3.95,
+   "path_radius_m": 0.0074,
+   "radius_about_axis_m": 0.008,
+   "stir_s": 9.81,
+   "pace_loops_per_s": 0.402,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.0,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0236,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0001,
+   "cup_tilt_max_deg": 3.0,
+   "slip_m": 0.0006,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "3.95 loops in 9.81 s (bowl radius 0.8 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 0%, on the bottom 0% of the stir",
+   "mug moved 0.1 mm, tilted up to 3.0 deg; arm on mug 0.0 s; spoon slid 0.6 mm in the jaws; spoon in mug at the end: True"
+  ],
+  "lesson": "no change: stirred cleanly, score 0.66 (no better than the best 0.659); coverage 0.333, depth 0.555, pace 0.804 (0.402 loops/s), 3.95 loops."
+ },
+ {
+  "attempt": 12,
+  "changed": {},
+  "hypothesis": "Every search direction has found its limit: repeat the best configuration (attempt 7) to check that the result holds.",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 16.0,
+   "turns": 4,
+   "points_per_turn": 76
+  },
+  "outcome": "stirred",
+  "score": 0.659,
+  "terms": {
+   "coverage": 0.334,
+   "depth": 0.552,
+   "pace": 0.798,
+   "immersion": 1.0,
+   "clean": 1.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 3.94,
+   "path_radius_m": 0.0074,
+   "radius_about_axis_m": 0.008,
+   "stir_s": 9.88,
+   "pace_loops_per_s": 0.399,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.0,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0238,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0001,
+   "cup_tilt_max_deg": 3.1,
+   "slip_m": 0.0007,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "3.94 loops in 9.88 s (bowl radius 0.8 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 0%, on the bottom 0% of the stir",
+   "mug moved 0.1 mm, tilted up to 3.1 deg; arm on mug 0.0 s; spoon slid 0.7 mm in the jaws; spoon in mug at the end: True"
+  ],
+  "lesson": "no change: stirred cleanly, score 0.659 (no better than the best 0.659); coverage 0.334, depth 0.552, pace 0.798 (0.399 loops/s), 3.94 loops."
+ },
+ {
+  "attempt": 13,
+  "changed": {},
+  "hypothesis": "Every search direction has found its limit: repeat the best configuration (attempt 7) to check that the result holds.",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 16.0,
+   "turns": 4,
+   "points_per_turn": 75
+  },
+  "outcome": "stirred",
+  "score": 0.66,
+  "terms": {
+   "coverage": 0.333,
+   "depth": 0.555,
+   "pace": 0.804,
+   "immersion": 1.0,
+   "clean": 1.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 3.95,
+   "path_radius_m": 0.0074,
+   "radius_about_axis_m": 0.008,
+   "stir_s": 9.8,
+   "pace_loops_per_s": 0.402,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.0,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0236,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0,
+   "cup_tilt_max_deg": 3.0,
+   "slip_m": 0.0006,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "3.95 loops in 9.8 s (bowl radius 0.8 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 0%, on the bottom 0% of the stir",
+   "mug moved 0.0 mm, tilted up to 3.0 deg; arm on mug 0.0 s; spoon slid 0.6 mm in the jaws; spoon in mug at the end: True"
+  ],
+  "lesson": "no change: stirred cleanly, score 0.66 (no better than the best 0.659); coverage 0.333, depth 0.555, pace 0.804 (0.402 loops/s), 3.95 loops."
+ },
+ {
+  "attempt": 14,
+  "changed": {},
+  "hypothesis": "Every search direction has found its limit: repeat the best configuration (attempt 7) to check that the result holds.",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 16.0,
+   "turns": 4,
+   "points_per_turn": 75
+  },
+  "outcome": "stirred",
+  "score": 0.661,
+  "terms": {
+   "coverage": 0.333,
+   "depth": 0.555,
+   "pace": 0.806,
+   "immersion": 1.0,
+   "clean": 1.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 3.94,
+   "path_radius_m": 0.0074,
+   "radius_about_axis_m": 0.008,
+   "stir_s": 9.79,
+   "pace_loops_per_s": 0.403,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.0,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0236,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0001,
+   "cup_tilt_max_deg": 3.0,
+   "slip_m": 0.0006,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "3.94 loops in 9.79 s (bowl radius 0.8 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 0%, on the bottom 0% of the stir",
+   "mug moved 0.1 mm, tilted up to 3.0 deg; arm on mug 0.0 s; spoon slid 0.6 mm in the jaws; spoon in mug at the end: True"
+  ],
+  "lesson": "no change: stirred cleanly, score 0.661 (no better than the best 0.659); coverage 0.333, depth 0.555, pace 0.806 (0.403 loops/s), 3.94 loops."
+ },
+ {
+  "attempt": 15,
+  "changed": {},
+  "hypothesis": "Every search direction has found its limit: repeat the best configuration (attempt 7) to check that the result holds.",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 16.0,
+   "turns": 4,
+   "points_per_turn": 76
+  },
+  "outcome": "stirred",
+  "score": 0.659,
+  "terms": {
+   "coverage": 0.334,
+   "depth": 0.554,
+   "pace": 0.796,
+   "immersion": 1.0,
+   "clean": 1.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 3.95,
+   "path_radius_m": 0.0074,
+   "radius_about_axis_m": 0.008,
+   "stir_s": 9.91,
+   "pace_loops_per_s": 0.398,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.0,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0236,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0001,
+   "cup_tilt_max_deg": 3.1,
+   "slip_m": 0.0006,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "3.95 loops in 9.91 s (bowl radius 0.8 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 0%, on the bottom 0% of the stir",
+   "mug moved 0.1 mm, tilted up to 3.1 deg; arm on mug 0.0 s; spoon slid 0.6 mm in the jaws; spoon in mug at the end: True"
+  ],
+  "lesson": "no change: stirred cleanly, score 0.659 (no better than the best 0.659); coverage 0.334, depth 0.554, pace 0.796 (0.398 loops/s), 3.95 loops."
+ },
+ {
+  "attempt": 16,
+  "changed": {},
+  "hypothesis": "Every search direction has found its limit: repeat the best configuration (attempt 7) to check that the result holds.",
+  "phases": [
+   "locate:ok",
+   "grasp:ok",
+   "straighten:ok",
+   "lead_in:ok",
+   "stir:ok",
+   "release:ok"
+  ],
+  "stir": {
+   "radius_m": 0.009,
+   "radius_asked_m": 0.009,
+   "lean_deg": 16.0,
+   "turns": 4,
+   "points_per_turn": 76
+  },
+  "outcome": "stirred",
+  "score": 0.659,
+  "terms": {
+   "coverage": 0.334,
+   "depth": 0.554,
+   "pace": 0.796,
+   "immersion": 1.0,
+   "clean": 1.0
+  },
+  "metrics": {
+   "grasped": true,
+   "aborted": null,
+   "loops": 3.95,
+   "path_radius_m": 0.0074,
+   "radius_about_axis_m": 0.008,
+   "stir_s": 9.93,
+   "pace_loops_per_s": 0.398,
+   "immersion_frac": 1.0,
+   "wall_frac": 0.0,
+   "bottom_frac": 0.0,
+   "bowl_height_m": 0.0236,
+   "arm_cup_s": 0.0,
+   "cup_moved_m": 0.0001,
+   "cup_tilt_max_deg": 3.1,
+   "slip_m": 0.0006,
+   "spoon_in_cup": true
+  },
+  "evidence": [
+   "3.95 loops in 9.93 s (bowl radius 0.8 cm about the mug axis, usable 2.4 cm)",
+   "bowl under the drink 100%, on the wall 0%, on the bottom 0% of the stir",
+   "mug moved 0.1 mm, tilted up to 3.1 deg; arm on mug 0.0 s; spoon slid 0.6 mm in the jaws; spoon in mug at the end: True"
+  ],
+  "lesson": "no change: stirred cleanly, score 0.659 (no better than the best 0.659); coverage 0.334, depth 0.554, pace 0.796 (0.398 loops/s), 3.95 loops."
+ }
+]

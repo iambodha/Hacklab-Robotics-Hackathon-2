@@ -91,21 +91,24 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("run")
     ap.add_argument("--docs", default=str(REPO / "docs" / "stir"))
+    ap.add_argument("--tag", default="", help="suffix for the curve and data folder (e.g. run1)")
     a = ap.parse_args(argv)
     run, docs = Path(a.run), Path(a.docs)
-    (docs / "data").mkdir(parents=True, exist_ok=True)
+    sfx = f"-{a.tag}" if a.tag else ""
+    data = docs / "data" / a.tag if a.tag else docs / "data"
+    data.mkdir(parents=True, exist_ok=True)
     res = json.loads((run / "result.json").read_text())
     val = (res.get("validation") or {}).get("summary")
-    (docs / "learning-curve.svg").write_text(curve_svg(res["rows"], val))
+    (docs / f"learning-curve{sfx}.svg").write_text(curve_svg(res["rows"], val))
     slim = {k: v for k, v in res.items() if k != "run_dir"}
     slim["run"] = run.name
-    (docs / "data" / "result.json").write_text(json.dumps(slim, indent=1))
-    (docs / "data" / "attempts.json").write_text(json.dumps(attempts_table(run / "practice"), indent=1))
-    shutil.copy(run / "practice" / "SUMMARY.md", docs / "data" / "SUMMARY.md")
+    (data / "result.json").write_text(json.dumps(slim, indent=1))
+    (data / "attempts.json").write_text(json.dumps(attempts_table(run / "practice"), indent=1))
+    shutil.copy(run / "practice" / "SUMMARY.md", data / "SUMMARY.md")
     best = (res.get("best") or {}).get("attempt")
     img = run / "practice" / f"attempt_{best}" / "stir_side.jpg"
     if img.exists():
-        shutil.copy(img, docs / "stir_side.jpg")
+        shutil.copy(img, docs / f"stir_side{sfx}.jpg")
     print(docs)
 
 
