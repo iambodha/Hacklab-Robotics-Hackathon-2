@@ -1,8 +1,8 @@
 """Object estimates for observations, behind one small interface.
 
 Order of preference (make_locator):
-  1. PerceptionLocator: `perception.locate` (this repo's perception package) with calibration/scene_calib.json (its
-     camera intrinsics + pose). Every object hint in executor/object_hints.json (or EXECUTOR_OBJECT_HINTS) is
+  1. PerceptionLocator: `perception.locate` (this repo's perception package) with the site's scene_calib.json
+     (sites.get_site(); its camera intrinsics + pose). Every object hint in executor/object_hints.json (or EXECUTOR_OBJECT_HINTS) is
      segmented by colour on the overview image; its footprint on the table becomes world xyz + size + yaw with a 1-sigma
      `uncertainty_mm` (pixel + calibration + unknown object height). On the twin, the twin's own overview camera
      replaces the calibrated one (same code, the twin's pose), so sim observations measure what the twin renders.
@@ -166,7 +166,8 @@ class PerceptionLocator(Locator):
 
     def describe(self) -> dict:
         ov = self.base.d["cameras"]["overview"]
-        board = REPO / "calibration" / "intrinsics_overview.json"
+        from sites import get_site
+        board = get_site().intrinsics("overview")
         return {"name": self.name, "scene_calib": self.base.d.get("created"), "intrinsics": ov.get("intrinsics_source"),
                 "board_intrinsics_file": str(board) if board.exists() else None,
                 "hints": [h.__dict__ for h in self.hints]}

@@ -3,7 +3,8 @@ are markers in it.
 
 mode "service": the recorder HTTP API (http://127.0.0.1:8900, records the real Station: state, both cameras,
                 commands). Used for the real backend when it is up.
-mode "local":   recorder.store.SessionWriter in <repo>/recordings (same format, same viewer). Used for fake / sim /
+mode "local":   recorder.store.SessionWriter in <repo>/<site recordings dir> (recordings/ for home, recordings/office/
+                for office; EXECUTOR_RECORDINGS overrides) (same format, same viewer). Used for fake / sim /
                 replay runs (and as the fallback); it also stores the backend's state and frames at a low rate so
                 the recorder viewer can replay a sim run. Served by a second recorder API on :8911.
 """
@@ -17,9 +18,11 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from sites import get_site
+
 REPO = Path(__file__).resolve().parent.parent
 SERVICE_URL = os.environ.get("RECORDER_URL", "http://127.0.0.1:8900")
-LOCAL_ROOT = Path(os.environ.get("EXECUTOR_RECORDINGS", REPO / "recordings"))
+LOCAL_ROOT = Path(os.environ.get("EXECUTOR_RECORDINGS", REPO / get_site().manifest["directories"]["recordings"]))
 LOCAL_VIEWER = os.environ.get("EXECUTOR_LOCAL_RECORDER_URL", "http://127.0.0.1:8911")
 
 

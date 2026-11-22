@@ -8,16 +8,18 @@ look, joint_state, set_torque, move_to, gripper, tcp_pose, move_tcp, pixel_to_ta
     tracking error above ROBOT_TRACK_TOL or a motor fault
   * cameras: the cam_stream relay (scripts/cam_stream.py, :8890), freshness-checked like arm_mcp, then
     upscaled 2x with the same labelled pixel grid as the sim (coordinates as used by pixel_to_table)
-  * kinematics: the sim's own MuJoCo model (sim/generated/workspace.xml, kinematics only, no physics) and its
+  * kinematics: the robot profile's MuJoCo model (robot_profile.Kin, kinematics only, no physics) and its
     ArmIK, with the same joint mapping as the sim: q = lower + n*(upper - lower) through the URDF limits,
     n = the real calibrated-range norm
-  * wrist camera: CAD mount pose from camera_pose/wrist_camera.json (in the model as wrist_cam)
-  * overview camera: needs real extrinsics in sim/real_overview_camera.json (see OPERATOR_REAL.md); until
-    then pixel_to_table("overview", ...) explains that and the agent uses the wrist camera
+  * wrist camera: CAD mount pose from the site's wrist mount (sites.get_site().wrist_mount; in the model as wrist_cam)
+  * overview camera: real extrinsics from the site's real_overview_camera.json (sites/<SITE>/, ROBOT_OVERVIEW_CAL
+    overrides; see OPERATOR_REAL.md); until it exists pixel_to_table("overview", ...) explains that and the agent
+    uses the wrist camera. Camera hash prefixes: the site's (ROBOT_WRIST_CAM / ROBOT_OVERVIEW_CAM override).
 
 Real-world additions: move_tcp refuses targets with the TCP below ROBOT_MIN_TCP_Z (default 0.012 m: the
 fingertips reach the table at TCP z ~ 0.01), stops waiting when joints stop moving (servos under load stop
-short), and reports the remaining error. Every tool call is appended to sim/real_sessions/actions.jsonl.
+short), and reports the remaining error. Every tool call is appended to the site's action log
+(logs/real_sessions_<site>/actions.jsonl; ROBOT_REAL_LOG_DIR overrides).
 
 Run (stdio; usually via sim/run_agent_real.sh):
   MUJOCO_GL=cgl uv run --no-project --with 'mcp>=1.12,<2' --with pillow --with numpy --with mujoco \\
@@ -779,7 +781,7 @@ async def camera_info() -> str:
     """Camera calibration as JSON, the model pixel_to_table uses (same contract as sim_arm_mcp.camera_info): per
     camera the look() image size, pinhole fx, fy, cx, cy in look() pixels and the pose in the base frame in the
     OpenCV convention (x right, y down, z forward): p_base = R_base_cam @ p_cam + t_base_cam. The wrist pose
-    follows the current joints; the overview camera is listed only once sim/real_overview_camera.json exists."""
+    follows the current joints; the overview camera is listed only once the site's real_overview_camera.json exists."""
     q, _ = await measured()
     poses = {"wrist": _wrist_pose(q)}
     if OVERVIEW_CAL.exists():

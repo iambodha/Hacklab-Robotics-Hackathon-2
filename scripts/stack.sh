@@ -1,7 +1,7 @@
 #!/bin/bash
 # One-command demo stack: recorder (:8900), executor console (:8910), twin mirror (:8892).
 #
-#   scripts/stack.sh up [--backend fake|sim|real] [--real-motion] [--station]
+#   scripts/stack.sh up [--site home|office] [--backend fake|sim|real] [--real-motion] [--station]
 #   scripts/stack.sh status
 #   scripts/stack.sh down [--station]
 #
@@ -10,28 +10,41 @@
 #         without it. --real-motion starts the console with EXECUTOR_REAL_MOTION=1, which allows (does not do)
 #         real motion: the arm still has to be enabled in the console or with `task --arm-enabled`.
 # down    stops only what this script started (pid files in logs/); Station only with --station.
-# Logs: logs/<service>.log. Recordings: RECORDER_DIR (default "$DATA_ROOT/recordings" on the external drive).
-# The console's twin uses SIM_LAYOUT (default home: the home table with the cap and the bin; a name or a path).
+# Site: --site or SITE (default home, sites/<name>/site.json) is exported to every service it starts: calibration,
+#         twin layout, camera queues, action logs and recordings follow it. A service already running for another
+#         site is left alone with a warning: `down`, then `up` to switch.
+# Logs: logs/<service>.log. Recordings: RECORDER_DIR (default "$DATA_ROOT/<site recordings dir>" on the external
+#         drive: recordings/ for home, recordings/office/ for office).
+# The console's twin uses SIM_LAYOUT (default: the site's layout; a name or a path); the mirror always uses the site's.
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 LOGS="$REPO/logs"
 DATA_ROOT="${DATA_ROOT:-/Volumes/Dell HDD/Robotics-Hackathon}"
-RECORDER_DIR="${RECORDER_DIR:-$DATA_ROOT/recordings}"
+SITE="${SITE:-home}"
 BACKEND=sim
 REAL_MOTION=0
 WITH_STATION=0
 CMD="${1:-status}"; shift || true
-case "$CMD" in -h|--help|help) sed -n '2,15p' "$0"; exit 0 ;; esac
+case "$CMD" in -h|--help|help) sed -n '2,19p' "$0"; exit 0 ;; esac
 while [ $# -gt 0 ]; do
   case "$1" in
+    --site) SITE="$2"; shift ;;
     --backend) BACKEND="$2"; shift ;;
     --real-motion) REAL_MOTION=1 ;;
     --station) WITH_STATION=1 ;;
-    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
     *) echo "unknown option $1 (see --help)"; exit 2 ;;
   esac
   shift
 done
+
+export SITE
+SITE_RECORDINGS="$(cd "$REPO" && python3 -c 'import sys
+from sites import get_site
+try: print(get_site().manifest["directories"]["recordings"])
+except ValueError as e: sys.exit(str(e))')" || exit 2
+if [ -n "${RECORDER_DIR:-}" ]; then REC_DRIVE="$(dirname "$RECORDER_DIR")"
+else RECORDER_DIR="$DATA_ROOT/$SITE_RECORDINGS"; REC_DRIVE="$DATA_ROOT"; fi
 
 if [ -z "${NORMA_CORE_REPO:-}" ]; then
   for c in "$REPO/norma-core" "$REPO/../repo/norma-core" "$REPO/../../repo/norma-core"; do
@@ -64,10 +77,16 @@ start() {  # name cmd...  (runs in REPO, log + pid under logs/)
   local port; port="$(port_of "$name")"
   local pid; pid="$(listening_pid "$port")"
   if [ -n "$pid" ]; then
-    printf '  %-9s already running (pid %s)   %s\n' "$name" "$pid" "$(url_of "$name")"; return 0
+    printf '  %-9s already running (pid %s)   %s\n' "$name" "$pid" "$(url_of "$name")"
+    local was; was="$(cat "$LOGS/$name.site" 2>/dev/null)"
+    if [ "$name" != station ] && [ "$was" != "$SITE" ]; then
+      echo "            WARNING: it runs for SITE=${was:-unknown}, not $SITE: stack.sh down, then up, to switch"
+    fi
+    return 0
   fi
   ( cd "$REPO" && exec nohup "$@" >>"$LOGS/$name.log" 2>&1 ) &
   echo $! > "$LOGS/$name.pid"
+  echo "$SITE" > "$LOGS/$name.site"
   printf '  %-9s starting (log logs/%s.log) ... ' "$name" "$name"
   if wait_port "$name" "$port" "${WAIT:-90}"; then echo "up   $(url_of "$name")"
   else echo "FAILED: see logs/$name.log"; tail -5 "$LOGS/$name.log" | sed 's/^/      /'; return 1; fi
@@ -85,13 +104,13 @@ stop() {  # name
   else
     printf '  %-9s was not running\n' "$1"
   fi
-  rm -f "$f"
+  rm -f "$f" "$LOGS/$1.site"
 }
 
 status() {
   for s in station recorder console mirror; do
     local pid; pid="$(listening_pid "$(port_of "$s")")"
-    local own=""; [ -f "$LOGS/$s.pid" ] && own=" (started by stack.sh)"
+    local own=""; [ -f "$LOGS/$s.pid" ] && own=" (started by stack.sh, SITE=$(cat "$LOGS/$s.site" 2>/dev/null || echo unknown))"
     if [ -n "$pid" ]; then printf '  %-9s up    pid %-6s %s%s\n' "$s" "$pid" "$(url_of "$s")" "$own"
     elif [ -n "$own" ] && kill -0 "$(cat "$LOGS/$s.pid")" 2>/dev/null; then printf '  %-9s not listening (process alive: starting or restarting, see logs/%s.log)\n' "$s" "$s"
     elif [ -n "$own" ]; then printf '  %-9s DIED: see logs/%s.log\n' "$s" "$s"
@@ -101,23 +120,23 @@ status() {
 
 case "$CMD" in
   up)
-    echo "stack up (backend $BACKEND$([ $REAL_MOTION = 1 ] && echo ', real motion ALLOWED'))"
+    echo "stack up (site $SITE, backend $BACKEND$([ $REAL_MOTION = 1 ] && echo ', real motion ALLOWED'))"
     if [ -z "$(listening_pid 8888)" ]; then
       if [ $WITH_STATION = 1 ]; then WAIT=20 start station "$REPO/scripts/run-station.sh"
       else echo "  station   not running: start it (scripts/run-station.sh) or pass --station; real backend + mirror need it"; fi
     else printf '  %-9s up   %s\n' station "$(url_of station)"; fi
-    if [ -z "$(listening_pid 8900)" ] && [ ! -d "$(dirname "$RECORDER_DIR")" ]; then
-      echo "  recorder  NOT started: $(dirname "$RECORDER_DIR") is missing (mount the external drive or set RECORDER_DIR)"
+    if [ -z "$(listening_pid 8900)" ] && [ ! -d "$REC_DRIVE" ]; then
+      echo "  recorder  NOT started: $REC_DRIVE is missing (mount the external drive or set RECORDER_DIR)"
     else
       mkdir -p "$RECORDER_DIR" 2>/dev/null
       RECORDER_DIR="$RECORDER_DIR" start recorder uv run --no-project -q python -m recorder serve
     fi
-    ROBOT_SIM_LAYOUT="${SIM_LAYOUT:-home}" EXECUTOR_REAL_MOTION=$([ $REAL_MOTION = 1 ] && echo 1 || echo 0) \
+    ROBOT_SIM_LAYOUT="${SIM_LAYOUT:-$SITE}" EXECUTOR_REAL_MOTION=$([ $REAL_MOTION = 1 ] && echo 1 || echo 0) \
       start console uv run --no-project -q "${PYDEPS[@]}" python -m executor serve --backend "$BACKEND"
     if [ -n "$(listening_pid 8888)" ]; then
       # restarted if it exits (it is read-only); every restart is logged
       WAIT=60 start mirror bash -c 'while :; do "$@"; echo "=== mirror exited ($?) at $(date +%T); restarting in 3 s"; sleep 3; done' _ \
-        uv run --no-project -q "${PYDEPS[@]}" python sim/mirror_real.py --layout home --port 8892
+        uv run --no-project -q "${PYDEPS[@]}" python sim/mirror_real.py --layout "$SITE" --port 8892
     else echo "  mirror    skipped: needs Station"; fi
     echo
     echo "  open the console:  http://127.0.0.1:8910"
@@ -129,5 +148,5 @@ case "$CMD" in
     if [ $WITH_STATION = 1 ]; then stop station; fi
     ;;
   status) status ;;
-  *) echo "usage: scripts/stack.sh up|down|status [--backend fake|sim|real] [--real-motion] [--station]"; exit 2 ;;
+  *) echo "usage: scripts/stack.sh up|down|status [--site home|office] [--backend fake|sim|real] [--real-motion] [--station]"; exit 2 ;;
 esac

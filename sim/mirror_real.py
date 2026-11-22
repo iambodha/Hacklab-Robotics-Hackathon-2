@@ -1,6 +1,6 @@
 """Live mirror: the twin's joints follow the real follower arm (read-only), shown next to the real cameras.
 
-  python3 sim/mirror_real.py [--layout home] [--port 8892] [--fps 15] [--q-tol 0.002] [--viewer] [--seconds N]
+  python3 sim/mirror_real.py [--layout NAME|PATH (default: SITE's layout)] [--port 8892] [--fps 15] [--q-tol 0.002] [--viewer] [--seconds N]
 
 Follows Station's st3215/inference (raw ticks -> URDF radians via sim/real_joints.py; mapping configurable with
 layout["arm"]["joint_mapping"] or TWIN_JOINT_MAP) and both camera queues. Serves http://127.0.0.1:<port>/ with a live
@@ -33,6 +33,7 @@ import compare_real  # noqa: E402
 import mujoco  # noqa: E402
 import real_joints  # noqa: E402
 import station_io  # noqa: E402
+from sites import get_site  # noqa: E402  (build_scene put the repo on sys.path)
 
 STATE = {"jpeg": b"", "state": {}, "lock": threading.Lock()}
 PAGE = b"""<!doctype html><title>twin mirror</title><body style="margin:0;background:#111;color:#ddd;font:13px monospace">
@@ -88,7 +89,7 @@ async def follow_camera(cli, cam, latest):
 
 
 async def run(a):
-    layout_file = build_scene.layout_path(a.layout)
+    layout_file = build_scene.layout_path(a.layout or get_site().name)   # the real table's twin, not SIM_LAYOUT
     model, layout = compare_real.load_model(layout_file)
     data = mujoco.MjData(model)
     W, H = layout["image_size"]
@@ -164,7 +165,7 @@ async def run(a):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--layout", default="home")
+    ap.add_argument("--layout", help="twin layout name or path (default: the selected site's, SITE=home|office)")
     ap.add_argument("--port", type=int, default=8892)
     ap.add_argument("--fps", type=float, default=15)
     ap.add_argument("--q-tol", type=float, default=2e-3, help="re-render the twin only when a joint moved more (rad)")

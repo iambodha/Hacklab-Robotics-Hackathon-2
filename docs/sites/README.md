@@ -27,10 +27,11 @@ Services select a site at startup: restart them deliberately when changing SITE,
 
 ## Switch
 
-From the repository root:
+Operator runbook (stack restart, verification): [switching.md](switching.md). From the repository root:
 
 ```bash
 export SITE=office
+python -m sites check               # resolved files, cameras, log dirs; non-zero on missing files or stale overrides
 python -m sites env                 # inspect resolved defaults; does not launch anything
 python -m sites discover            # GET only, from the already-running relay
 ```

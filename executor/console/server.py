@@ -31,6 +31,7 @@ from ..contracts import Status, proposal_from_dict, to_dict
 from ..core import EventLog, Executor
 from ..kinematics import Kinematics, scene_calib_path
 from ..recording import LOCAL_ROOT, SERVICE_URL, RecorderLink, service_up
+from sites import get_site
 
 HERE = Path(__file__).resolve().parent
 STATE_DIR = HERE.parent / "logs"
@@ -199,7 +200,8 @@ class Console:
     def scene(self) -> dict:
         P = self.kin.P
         return {"frame": "world: metres, origin = arm base on the table top, +z up, +x forward (scene-contract.md)",
-                "T_world_base": self.kin.T.tolist(), "scene_calib": str(scene_calib_path()) if scene_calib_path() else None,
+                "T_world_base": self.kin.T.tolist(), "site": get_site().name,
+                "scene_calib": str(scene_calib_path()) if scene_calib_path() else None,
                 "scene_version": self.ex.scene_version, "min_tcp_z": P.workspace.min_tcp_z, "max_tcp_z": P.workspace.max_tcp_z,
                 "max_radius": P.workspace.max_radius, "table_tcp_z": P.touch.nominal_table_tcp_z,
                 "park_world": self.kin.to_world(P.poses.park).round(3).tolist(), "profile": P.name, "tool": self.ex.tool,

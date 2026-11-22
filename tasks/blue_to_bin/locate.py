@@ -4,8 +4,8 @@ The executor's make_locator() looks for a module-level `perception.locate.locate
 perception does not have (it has Locator.locate_object / segment). This adapter fills the gap for the demo task:
 the blue blob in the overview frame (only pixels that look at the table), fitted with an upright cylinder of the
 KNOWN lid size (measured.json), so the fit gives the centre AND the height of its base above the table (on the
-table ~0, lifted in the jaws, or on the tub floor). Calibration: calibration/scene_calib.json (the twin's overview
-camera is synced from the same file, so sim and real use the same geometry).
+table ~0, lifted in the jaws, or on the tub floor). Calibration: the selected site's scene_calib.json (sites.get_site();
+the site twin's overview camera is synced from the same file, so sim and real use the same geometry).
 """
 from __future__ import annotations
 
