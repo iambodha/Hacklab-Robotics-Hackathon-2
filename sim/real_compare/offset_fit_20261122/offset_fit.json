@@ -1,0 +1,97 @@
+{
+ "mapping": "range_fraction",
+ "q_range_fraction_rad": [
+  -0.0657,
+  -1.5521,
+  -0.2124,
+  1.7233,
+  0.0197,
+  0.0367,
+  0.0048,
+  0.9395
+ ],
+ "offsets_deg": {
+  "j1": -2.04,
+  "j2": 5.34,
+  "j3": -1.5,
+  "j4": -2.76,
+  "j5": -2.66,
+  "j6": 5.85,
+  "j7": -1.05,
+  "j8": -5.45,
+  "wrist_mount_pitch": 9.31
+ },
+ "std_deg": {
+  "j1": 0.65,
+  "j2": 3.18,
+  "j3": 3.86,
+  "j4": 3.72,
+  "j5": 3.41,
+  "j6": 4.41,
+  "j7": 3.53,
+  "j8": 0.88,
+  "wrist_mount_pitch": 0.19
+ },
+ "combinations": {
+  "pitch_sum_j2+j3+j4+j6": {
+   "deg": 6.93,
+   "std_deg": 1.38
+  },
+  "pitch_sum+mount": {
+   "deg": -2.39,
+   "std_deg": 1.38
+  },
+  "j2+j3": {
+   "deg": 3.84,
+   "std_deg": 4.63
+  },
+  "j4+j6": {
+   "deg": 3.08,
+   "std_deg": 4.57
+  },
+  "roll_j5+j7": {
+   "deg": -3.71,
+   "std_deg": 1.84
+  }
+ },
+ "prior_std_deg": {
+  "j1": 5,
+  "j2": 5,
+  "j3": 5,
+  "j4": 5,
+  "j5": 5,
+  "j6": 5,
+  "j7": 5,
+  "j8": 10,
+  "wrist_mount_pitch": 10
+ },
+ "corr_strong": {
+  "j1~j5": 0.86,
+  "j5~j7": -0.86
+ },
+ "before": {
+  "wrist_marker_corner_px": {
+   "20": 2.18
+  },
+  "wrist_marker_corner_px_mean": 2.18,
+  "wrist_jaw_chamfer_px": 14.59,
+  "overview_arm_chamfer_px": 2.93
+ },
+ "after": {
+  "wrist_marker_corner_px": {
+   "20": 1.97
+  },
+  "wrist_marker_corner_px_mean": 1.97,
+  "wrist_jaw_chamfer_px": 5.02,
+  "overview_arm_chamfer_px": 2.71
+ },
+ "markers_used": {
+  "20": 1.5
+ },
+ "points": {
+  "wrist_jaw_edges": 625,
+  "overview_arm_edges": 253
+ },
+ "cost": 215.28,
+ "nfev": 32
+}
