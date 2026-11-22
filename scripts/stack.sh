@@ -19,7 +19,7 @@
 set -u
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 LOGS="$REPO/logs"
-DATA_ROOT="${DATA_ROOT:-/Volumes/Dell HDD/Robotics-Hackathon}"
+DATA_ROOT="${DATA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)/data}"   # bulky output; set DATA_ROOT for an external drive
 SITE="${SITE:-home}"
 BACKEND=sim
 REAL_MOTION=0

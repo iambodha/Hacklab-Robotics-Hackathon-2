@@ -17,7 +17,7 @@ set -euo pipefail
 [ $# -ge 1 ] || { sed -n '2,15p' "$0"; exit 2; }
 VIDEO=$1
 NAME=${2:-$(basename "${VIDEO%.*}")}
-DATA_ROOT=${DATA_ROOT:-"/Volumes/Dell HDD/Robotics-Hackathon"}
+DATA_ROOT=${DATA_ROOT:-"$(cd "$(dirname "$0")/../.." && pwd)/data"}   # set DATA_ROOT for an external drive
 OUT="$DATA_ROOT/splat/$NAME"
 FPS=${SPLAT_FPS:-2}
 MAX_FRAMES=${SPLAT_MAX_FRAMES:-300}

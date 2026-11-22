@@ -19,7 +19,7 @@ import numpy as np
 
 SIM = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SIM))
-DATA_ROOT = Path(os.environ.get("DATA_ROOT", "/Volumes/Dell HDD/Robotics-Hackathon"))
+DATA_ROOT = Path(os.environ.get("DATA_ROOT") or Path(__file__).resolve().parents[2] / "data")
 
 
 def render(layout_name: str, n: int, out: Path, W=640, H=480):

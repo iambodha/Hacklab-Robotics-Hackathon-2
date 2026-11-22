@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-DATA_ROOT = Path(os.environ.get("DATA_ROOT", "/Volumes/Dell HDD/Robotics-Hackathon")) / "r5-kitsim"
+DATA_ROOT = Path(os.environ.get("DATA_ROOT") or Path(__file__).resolve().parents[2] / "data") / "r5-kitsim"
 MAX_CHANGES_PER_CLASS = 2      # per class and iteration (the bottle allows 3 per attempt; classes are independent)
 MIN_SHARE = 0.10               # a symptom counts when it hits at least this share of a class's objects
 PLACE_ABOVE_GRASP_MM = 1.0     # place_z is never set below grasp_z + this (object bottom 1 mm above the paper)

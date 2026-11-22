@@ -52,7 +52,7 @@ PAD_TIP_SHIFT_M = 0.006     # stock pad tip 16 mm below the TCP -> 10 mm (profil
 SHEET_Z = 0.0004            # paper plane above the table top (table skin at 0.2 mm, table markers at 0.6 mm)
 TEXTURE_PPM = 4.0           # sheet texture pixels per mm: 0.25 mm pixels, finer than the overview's ~3 mm/px
 KIT_LAYOUT = HERE / 'layouts' / 'kit_home.json'
-SCENE_ROOT = Path(os.environ.get('DATA_ROOT', '/Volumes/Dell HDD/Robotics-Hackathon')) / 'r5-kitsim'
+SCENE_ROOT = Path(os.environ.get('DATA_ROOT') or Path(__file__).resolve().parents[1] / 'data') / 'r5-kitsim'
 
 
 def default_base() -> str:
