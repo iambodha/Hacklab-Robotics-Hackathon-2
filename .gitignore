@@ -38,3 +38,4 @@ sim/sessions/
 generaloid/.generated/
 *.ply
 ._*
+graphify-out/
