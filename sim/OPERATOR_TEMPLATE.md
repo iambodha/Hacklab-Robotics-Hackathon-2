@@ -47,6 +47,12 @@ Base frame (metres): <<FRAME>>
 - `release_here()`: open the jaws where the gripper is and retreat. It reports the release position.
 - `drop_at(x, y, z, yaw_deg)`: carry, release and retreat in one call, for a box position you ALREADY verified in
   this run. Without yaw_deg the gripper keeps the rotation it picked with.
+- `place_at(x, y, z_from, z_min, yaw_deg, twist_deg)`: SET DOWN the held part gently instead of dropping it: down in
+  small steps until the part is felt resting on something, release, straight back up. Use it to put a part INTO or
+  ONTO another part (a gear into a ring, a lid on a cup, stacking): a part dropped from above bounces and lands
+  tilted. `twist_deg` 10-20 turns the part a little both ways before letting go, so gear teeth or keyed shapes
+  settle. Fix the target's position first with `center_over` while the gripper is empty, as for a box. For a part
+  that must sit against the inside wall of a ring, aim off-centre by (ring inner radius - part radius).
 - `stir(...)` and `grab_upright(x, y, z)`: see Stirring below. `wipe(x, y, to_x, to_y, strokes)`: see Wiping below.
 - `gripper(open_fraction)`, `tcp_pose()`, `joint_state()`, `move_to({...})`, `set_torque()`: rarely needed.
 

@@ -83,6 +83,7 @@ FRAME = P.frame_text
 PARK, CARRY_Z = list(P.poses.park), env("ROBOT_CARRY_Z", P.poses.carry_z)
 WS, MO, GR, PK, DR, ST, IKP, TS, GB, WP = (P.workspace, P.motion, P.gripper, P.pick, P.drop, P.stir, P.ik, P.touch, P.grab,
                                               P.wipe)
+PL = P.place
 
 IK = robot_profile.Kin(P)                            # forward kinematics, wrist-camera pose, position-only IK
 MODEL = IK.model
@@ -838,7 +839,7 @@ def _remember_touch(x: float, y: float, z: float) -> None:
         pass
 
 
-async def _descend_guarded(x: float, y: float, z_to: float, yaw: float):
+async def _descend_guarded(x: float, y: float, z_to: float, yaw: float, guard_top: float | None = None):
     """Go straight down to z_to, feeling for contact near the table. Returns (text, contact_z or None).
     Above the table zone it moves normally. In the zone it goes in small steps, each settled with LIMITED effort.
     Contact (measured on hardware): a joint stays short of its target while the two most loaded arm motors together
@@ -847,7 +848,8 @@ async def _descend_guarded(x: float, y: float, z_to: float, yaw: float):
     q, st = await measured()
     cur, seed = IK.fk(q)[0], q
     last = float(cur[2])
-    start = max(z_to, TS.nominal_table_tcp_z + TS.guard_from)
+    # guard_top: feel from this gripper height down (a HELD object touches long before the fingertips would)
+    start = max(z_to, TS.nominal_table_tcp_z + TS.guard_from if guard_top is None else guard_top)
     if cur[2] > start + TS.step:                              # the free part of the way down, at normal speed
         sol, _ = await asyncio.to_thread(_solve_tcp, np.array([x, y, start]), seed, yaw)
         if sol is None:
@@ -857,7 +859,7 @@ async def _descend_guarded(x: float, y: float, z_to: float, yaw: float):
             return res, None
         q, st = await measured()
         seed, last = sol, float(IK.fk(q)[0][2])
-    hits = 0
+    hits, base = 0, None
     for z in list(np.arange(last - TS.step, z_to, -TS.step)) + [z_to]:
         sol, _ = await asyncio.to_thread(_solve_tcp, np.array([x, y, z]), seed, yaw)
         if sol is None:
@@ -873,7 +875,19 @@ async def _descend_guarded(x: float, y: float, z_to: float, yaw: float):
         short = max(abs(st[ARM_IDS[i]]["lo"] + float(norm[i]) * (st[ARM_IDS[i]]["hi"] - st[ARM_IDS[i]]["lo"]) - st[ARM_IDS[i]]["raw"])
                     for i in range(NA))
         loads = sorted((st[m]["load"] for m in ARM_IDS), reverse=True)
-        hits = hits + 1 if (short >= TS.short_ticks and loads[0] + loads[1] >= TS.load_sum) else 0
+        if guard_top is None:
+            touching = short >= TS.short_ticks and loads[0] + loads[1] >= TS.load_sum
+        else:
+            # Carrying a part, higher up: a joint is often a few ticks short from the weight alone, and the loads are
+            # high all the way (measured: a false touch at 26 ticks, loads 276+88, in free air). What does change at
+            # a real touch is that the gripper stops following: its height falls behind the commanded height, more
+            # each step. So compare the lag with the smallest lag seen so far on this descent.
+            lag = meas - float(z)
+            base = lag if base is None else min(base, lag)
+            # ... but the lag also drifts by itself on a long limited-effort descent (a false touch at 3 cm, empty,
+            # with every joint within 6 ticks). So both must hold: falling behind AND a joint held short.
+            touching = lag - base >= PL.lag and short >= TS.short_ticks
+        hits = hits + 1 if touching else 0
         if hits >= TS.reads:
             await _stop_here(st, ARM_IDS)                     # stop pushing: goals = where the joints are
             up, _ = await asyncio.to_thread(_solve_tcp, np.array([x, y, meas + TS.backoff]), qn, yaw)
@@ -1199,6 +1213,58 @@ async def drop_at(x: float, y: float, z: float = DR.default_z, yaw_deg: float | 
     out = await move_tcp(x=PARK[0], y=PARK[1], z=max(z, P.poses.retreat_min_z), top_down=True)
     log.append("retreat: " + _first(out))
     return ["RELEASED at " + str([round(x, 3), round(y, 3), round(z, 3)]) + ".\n" + "\n".join(log)] + await _views()
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+@doc
+async def place_at(x: float, y: float, z_from: float = PL.z_from, z_min: float | None = None, yaw_deg: float | None = None,
+                   twist_deg: float = 0.0) -> list:
+    """SET DOWN what the gripper holds, gently, at (x, y): for putting a part INTO or ONTO another part (a gear into a
+    ring, a lid on a cup, a block on a block), where dropping it from above would make it bounce or land tilted.
+    The gripper goes to height z_from above (x, y), then straight down in small steps, FEELING through the held part
+    for the moment it rests on something; there it stops pushing, opens the jaws and lifts straight back up to
+    z_from. z_from: a gripper height at which the held part is still clearly above the target (default <<PLACE_Z_FROM>>).
+    z_min: the lowest gripper height allowed (default: fingertips at the table); if it is reached without feeling
+    anything, the part is released there. twist_deg: before letting go, turn the part that many degrees one way and
+    back the other (use 10-20 for gears or anything keyed, so the teeth find their gaps; 0 = no twist). yaw_deg turns
+    the gripper for the placement (leave it out to keep the current rotation). (x, y) must be where the GRIPPER has
+    to be for the part to land right: verify it first with center_over on the target while the gripper is empty.
+    Returns where it touched, and fresh images taken from z_from: check in them that the part sits flat."""
+    log = []
+    out = await move_tcp(x=x, y=y, z=z_from, top_down=True, yaw_deg=yaw_deg)
+    log.append("carry: " + _first(out))
+    if _stopped(out):
+        return ["PLACE STOPPED before going down (still holding).\n" + "\n".join(log)] + await _views()
+    yaw = _yaw_now((await measured())[0])
+    low = TS.nominal_table_tcp_z if z_min is None else max(float(z_min), TS.nominal_table_tcp_z - TS.max_below)
+    text, hit = await _descend_guarded(x, y, low, yaw, guard_top=z_from)
+    log.append("lower: " + text)
+    if text.startswith("ABORTED"):
+        return ["PLACE STOPPED on the way down (still holding).\n" + "\n".join(log)] + await _views()
+    q, _ = await measured()
+    here = IK.fk(q)[0]
+    if twist_deg:
+        t = float(min(PL.twist_max, abs(twist_deg)))
+        for a in (yaw + t, yaw - t, yaw):
+            sol, _ = await asyncio.to_thread(_solve_tcp, np.array([here[0], here[1], here[2]]), q, a)
+            if sol is None:
+                log.append("twist skipped: no joint solution for that rotation here")
+                break
+            res = await _go(sol, settle=False)
+            q = sol
+            if res.startswith("ABORTED"):
+                log.append("twist: " + res)
+                break
+        else:
+            log.append(f"twisted {t:.0f} deg each way")
+    log.append("release: " + _first(await gripper(open_fraction=1.0)))
+    out = await move_tcp(x=float(here[0]), y=float(here[1]), z=z_from, top_down=True)
+    log.append("lift: " + _first(out))
+    where = (f"PLACED: the part touched down at gripper height {hit:.3f}" if hit is not None else
+             f"RELEASED at gripper height {float(here[2]):.3f} without feeling a touch (z_min reached)")
+    return [where + f", at [{float(here[0]):.3f}, {float(here[1]):.3f}]. Check in the images that it sits flat and in place.\n"
+            + "\n".join(log)] + await _views()
 
 
 SURVEY_VIEWS: dict[str, tuple] = {}     # camera pose of each image of the last survey()

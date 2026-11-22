@@ -197,6 +197,12 @@
     "close_view_z": 0.09,
     "table_clearance": 0.002
   },
+  "place": {
+    "_about": "place_at: set a held part down by feel instead of dropping it",
+    "z_from": 0.09,
+    "lag": 0.005,
+    "twist_max": 25
+  },
   "drop": {
     "default_z": 0.19,
     "box_z": 0.2,
