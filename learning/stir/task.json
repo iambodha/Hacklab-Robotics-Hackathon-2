@@ -1,0 +1,100 @@
+{
+ "_about": [
+  "The stir task on the office table: what the twin puts on the table (learning/stir/twin.py writes sim/layouts/stir_office.json from it).",
+  "Units: metres, kg, degrees. Frame: the arm base frame (+y = arm forward, +x = arm's right), so the same xy is the same arm pose on every table.",
+  "Sizes are a common ceramic mug and a teaspoon-sized stirring spoon (the brief: mug ~8 cm across, 9-10 cm tall; spoon 15-20 cm). Tape-measure the real ones before REAL_RUN.md and edit here.",
+  "cup.inner_radius / height / wall: open cylinder, body origin at its centre (sim/build_scene.shape_parts 'cup').",
+  "spoon: flat handle (length, width across the jaws, thickness) + an ellipsoid bowl (full width, depth, length) at its lower end. Total length = handle_length + bowl[2] - 0.004 (the bowl overlaps the handle by 4 mm)."
+ ],
+ "site": "office",
+ "rest_pose": [
+  0,
+  0.5,
+  -1.3,
+  -0.9,
+  0,
+  0,
+  0,
+  0
+ ],
+ "_rest_pose_about": "The arm starts folded up and back (the rest pose of the r4 stir scene sim/layout_stir.json). The office layout's rest pose is the real arm's pose during the calibration frames, reaching forward over the table: its forearm lies across the cup at 19 cm and pushed the spoon off the rim. REAL_RUN.md: move the real arm to this pose before placing the mug.",
+ "cup": {
+  "name": "cup",
+  "xy": [
+   0.0,
+   0.19
+  ],
+  "_xy_about": "19 cm in front of the arm base, on its centre line: where the home bottle and home stir demo stood (0.18-0.20 m), inside the office reach map (sites/office/reach.json reaches every 10 deg ray at 0.18-0.22 m with the jaws <= 35 deg from vertical).",
+  "inner_radius": 0.036,
+  "height": 0.095,
+  "wall": 0.004,
+  "segments": 24,
+  "mass": 0.35,
+  "rgba": [
+   0.72,
+   0.16,
+   0.12,
+   1
+  ],
+  "liquid_rgba": [
+   0.42,
+   0.26,
+   0.12,
+   1
+  ],
+  "liquid_level": 0.6,
+  "_liquid_about": "fill level as a fraction of the height: 5.7 cm of drink, the bowl must be below it to stir anything",
+  "randomize": {
+   "x": [
+    -0.03,
+    0.03
+   ],
+   "y": [
+    0.17,
+    0.21
+   ],
+   "yaw": [
+    0,
+    0
+   ]
+  },
+  "_randomize_about": "operator_reset_scene(randomize=True) and the validation runs: +-3 cm sideways, 17-21 cm forward (the spoon follows, handle towards the base)"
+ },
+ "spoon": {
+  "name": "spoon",
+  "handle_length": 0.14,
+  "handle_width": 0.012,
+  "handle_thickness": 0.004,
+  "bowl": [
+   0.024,
+   0.008,
+   0.038
+  ],
+  "mass": 0.03,
+  "rgba": [
+   0.45,
+   0.47,
+   0.5,
+   1
+  ],
+  "_rest_about": "Placed leaning on the rim on the side facing the arm base (the only side the arm holds a tilted tool from), bowl on the bottom against the far wall; twin.py drops it there and lets it settle for settle_s before writing its pose."
+ },
+ "settle_s": 1.5,
+ "cameras": [
+  {
+   "name": "stir_cam",
+   "pos": [
+    -0.32,
+    0.21,
+    0.2
+   ],
+   "lookat": [
+    0.0,
+    0.18,
+    0.08
+   ],
+   "fovy": 50,
+   "_about": "side view of the mug for the human side (docs images); the agent never gets it"
+  }
+ ]
+}

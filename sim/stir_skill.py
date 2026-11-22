@@ -100,7 +100,8 @@ class StirSkill:
             pos, mat = arm.data.cam_xpos[cid].copy(), arm.data.cam_xmat[cid].reshape(3, 3).copy()
         img = arm.frame('overview_cam').astype(np.float32)
         h, w = img.shape[:2]
-        f = (h / 2) / np.tan(np.radians(arm.model.cam_fovy[cid]) / 2)
+        import build_scene   # the pinhole MuJoCo renders with: a calibrated camera's principal point is off centre
+        K = build_scene.camera_K(arm.model, cid, w, h)   # (office overview: 4 px right, 6 px down = ~4 cm on the table)
         r_, g_, b_ = img[..., 0], img[..., 1], img[..., 2]
         red = (r_ > 90) & (r_ > 1.6 * g_) & (r_ > 1.6 * b_)
         comps = _components(red)
@@ -108,7 +109,8 @@ class StirSkill:
             return guess, 'no red mug in the overview image; using the given centre'
 
         def ray(u, v):
-            d = mat @ np.array([(u - w / 2) / f, -(v - h / 2) / f, -1.0])
+            # u, v in pixel-edge coordinates (pixel k spans k..k+1); K is in pixel-centre coordinates
+            d = mat @ np.array([(u - 0.5 - K[0, 2]) / K[0, 0], -(v - 0.5 - K[1, 2]) / K[1, 1], -1.0])
             return d / np.linalg.norm(d)
 
         def hit(u, v, z):
