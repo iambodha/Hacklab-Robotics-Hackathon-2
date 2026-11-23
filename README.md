@@ -101,31 +101,100 @@ to `sim/real_sessions/actions.jsonl`, plus the model's full transcript.
 - **`pick_thin` and the new thin-sheet hold check** have held a real sheet through a lift once. That is all the
   hardware evidence there is.
 
+## Set up
+
+You need:
+
+- a NormaCore **ElRobot follower arm** and two USB cameras (one on the gripper, one overlooking the table);
+- **NormaCore Station** running on the same machine, with the arm and cameras attached (TCP API on
+  `localhost:8888`); `scripts/run-station.sh` starts it, `station.yaml.example` is the config we used;
+- a full **norma-core** checkout next to this repo (or anywhere, with `NORMA_CORE_REPO=/path/to/norma-core`):
+  the kinematics are built from its ElRobot URDF. The `norma-core` entry in this repo is only a link to `../norma-core`;
+- [`uv`](https://docs.astral.sh/uv/) (it fetches the Python packages on first run) and Python 3.10+;
+- a model to operate the arm: the `claude` CLI logged in, or any other MCP client, or an OpenAI-compatible endpoint.
+
+Then, once per machine:
+
+1. **Calibrate the arm** so every joint has a range (`python3 scripts/calibrate_manual.py <bus id>`). The tools
+   read the joint ranges live from Station. `sim/real_ranges_5B61033301.json` is a known-good calibration of OUR
+   arm, which `ROBOT_RANGES_FILE` can point at when Station's stored one is stale: do not use it for another arm.
+2. **Tell the tools which camera is which.** Camera IDs change when cameras are re-plugged. Set
+   `ROBOT_WRIST_CAM` and `ROBOT_OVERVIEW_CAM` to the first characters of each camera's ID as Station shows it,
+   or edit `cameras` in `sim/robots/elrobot.json`.
+3. **Check the connection** without moving anything: `python3 arm_mcp/health.py` must show no read errors,
+   torque on and every joint in range. `sim/REAL_ARM.md` is the full step-by-step guide, with troubleshooting.
+
+For a different arm, copy `sim/robots/elrobot.json`, change the numbers, and select it with `ROBOT_PROFILE`
+(see `sim/robots/README.md`).
+
 ## Run it
 
-Needs NormaCore Station running with the arm and two USB cameras (TCP API on `localhost:8888`), `uv`, and the
-`claude` CLI logged in.
+All three ways use the same tool server and the same instruction sheet.
+
+**1. Headless, from a shell.** No page, no browser: one command per task. This is how most of our runs were made.
 
 ```bash
-# cameras relay (for the page) and the operator page
-python3 scripts/cam_stream.py --data-dir <station data dir> &
-python3 sim/operator_ui.py            # http://127.0.0.1:8894
-
-# or one run from the shell
-bash sim/run_agent_real.sh --model sonnet --effort low \
-  -p "Task for this run: put the loose items into the boxes: paper into the yellow box, the rest into the blue box."
-
-# any OpenAI-compatible endpoint instead of Claude (Gemini, Gemma, ...)
-MODEL_BASE_URL=... MODEL_NAME=... MODEL_API_KEY=... bash sim/run_agent_model.sh -p "..."
+bash sim/run_agent_real.sh --model sonnet --effort low --max-turns 110 \
+  --output-format stream-json --verbose \
+  -p "Task for this run: put the loose items into the boxes: paper into the yellow box, the rest into the blue box." \
+  < /dev/null > run.jsonl
 ```
 
-Camera IDs change when the cameras are re-plugged: set `ROBOT_WRIST_CAM` and `ROBOT_OVERVIEW_CAM` to the new
-ID prefixes, or edit the profile. For another arm, write a profile and select it with `ROBOT_PROFILE` (see
-`sim/robots/README.md`).
+The model gets only the arm tools: no shell, no file access, no other MCP servers. The final message in the
+transcript is its report (`DONE ...` or `BLOCKED ...`). Without `-p` the same script opens an interactive session.
 
-Safety: a person must watch the arm and be ready to stop it. Stop leaves the servos holding their last goal.
-Relax switches torque off and a raised arm drops. Other scripts that write a speed cap to the motors
-(`scripts/arm.py hold`) are fine: the gripper tool clears it on the jaw motor on every call.
+**2. The operator page.** For a person at the table: type the task, Enhance it, Start / Resume / Stop, watch
+both cameras and the tool calls live.
+
+```bash
+python3 scripts/cam_stream.py --data-dir <Station data dir> &    # camera relay on :8890, for the page only
+python3 sim/operator_ui.py                                       # http://127.0.0.1:8894
+```
+
+The page has no login. Keep it on the local machine.
+
+**3. Any other model.** The arm server is a plain MCP server on stdio, so any MCP client can drive it:
+
+```bash
+bash sim/run_real_server.sh        # point your client's MCP config at this command
+python3 sim/operator_prompt.py     # prints the instruction sheet to give the model
+```
+
+For a model behind an OpenAI-compatible endpoint (Gemini, a self-hosted Gemma, ...), there is a small runner:
+
+```bash
+MODEL_BASE_URL=https://.../v1 MODEL_NAME=... MODEL_API_KEY=... bash sim/run_agent_model.sh -p "..."
+```
+
+We drove the arm this way with Grok (through Cursor's agent), Codex and Gemini.
+
+**Logs.** Every tool call (arguments, result, duration) is appended to `sim/real_sessions/actions.jsonl`, and
+each run writes its transcript there too. That folder is not in git. Transcripts contain the camera images the
+model saw and details of your local setup: scrub them before publishing (the ones in `sim/real_runs/` have had
+images, machine paths and local plugin lists removed).
+
+**Safety.** A person must watch the arm and be ready to stop it. Stopping a run leaves the servos holding their
+last goal. Switching torque off (`set_torque(false)`, the page's Relax button) makes the arm limp: a raised arm
+drops. Other scripts that write a speed cap to the motors are fine: the gripper tool clears it on the jaw motor
+on every call.
+
+## Simulation (no hardware needed)
+
+`sim/` also holds a MuJoCo twin of the arm and table behind the same kind of MCP tools, so tools and prompts
+can be tried without the robot. It needs only `uv` and the norma-core checkout.
+
+```bash
+uv run --no-project --with 'mcp>=1.12,<2' --with pillow --with numpy --with mujoco python sim/selftest.py
+```
+
+That runs a scripted pick-and-place through the tool functions and writes a replay page; it passes on macOS.
+`bash sim/run_agent.sh` puts Claude in the operator's seat in the simulator (written for Linux / WSL), and
+`sim/README.md` has the details: scene layout, recorder, replay, ground-truth judge.
+
+What it is good for: developing tool logic, kinematics and prompts safely, and replaying sessions. What it is
+not: the table layout is estimated from photos, and grip and touch behaviour were tuned on the real motors, so
+a pick that works in the simulator can still fail on the arm (and the other way round). The tools added on the
+last day (`pick_thin`, `place_at`) exist only on the real-arm server.
 
 ## How the two days went
 
