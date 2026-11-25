@@ -86,6 +86,7 @@ FRAME = P.frame_text
 PARK, CARRY_Z = list(P.poses.park), env("ROBOT_CARRY_Z", P.poses.carry_z)
 WS, MO, GR, PK, DR, ST, IKP, TS, GB, WP = (P.workspace, P.motion, P.gripper, P.pick, P.drop, P.stir, P.ik, P.touch, P.grab,
                                               P.wipe)
+PL = P.place
 
 IK = robot_profile.Kin(P)                            # forward kinematics, wrist-camera pose, position-only IK
 MODEL = IK.model
@@ -573,9 +574,34 @@ async def _probe_hold() -> tuple[bool, dict]:
         empty_loads = [e[1] for e in _EMPTY if e[1] is not None]
         if empty_loads and g["load"] < float(np.median(empty_loads)) + GR.thin_load_margin:
             holding = False
-    if holding:                                            # back to the gentle hold
-        await am._write(GOAL_REG, {**_holds(st), GRIP_ID: st[GRIP_ID]["raw"] - GR.squeeze_min_ticks}, 2)
+    if holding:                                            # back to the gentle hold (a thin sheet: a firmer one, it cannot pop out)
+        ticks = GR.thin_hold_ticks if st[GRIP_ID]["norm"] <= GR.thin_regime_norm else GR.squeeze_min_ticks
+        await am._write(GOAL_REG, {**_holds(st), GRIP_ID: st[GRIP_ID]["raw"] - ticks}, 2)
     return holding, st
+
+
+async def _thin_grip() -> float | None:
+    """Jaw position of a grip on something thin (a sheet), settled under the thin hold; None if the jaws are open,
+    closed as far as empty jaws go, or holding something thick."""
+    st = await am._read()
+    g = st[GRIP_ID]
+    if not (_thin_min() <= g["norm"] <= GR.thin_regime_norm):
+        return None
+    await am._write(GOAL_REG, {**_holds(st), GRIP_ID: g["raw"] - GR.thin_hold_ticks}, 2)
+    await asyncio.sleep(GR.probe_wait_s)
+    return float((await am._read())[GRIP_ID]["norm"])
+
+
+async def _thin_still_held(before: float) -> tuple[bool, dict]:
+    """After a lift or pull: is the thin sheet still between the jaws? Its thickness keeps the jaws where they were
+    when it was gripped; once it slips out they close by its thickness. This compares the jaws with themselves, so
+    it does not depend on the motor load, which is too noisy to tell one layer of tissue from nothing."""
+    st = await am._read()
+    await am._write(GOAL_REG, {**_holds(st), GRIP_ID: st[GRIP_ID]["raw"] - GR.thin_hold_ticks}, 2)
+    await asyncio.sleep(GR.probe_wait_s)
+    st = await am._read()
+    n = st[GRIP_ID]["norm"]
+    return (n >= before - GR.thin_keep_drop and n >= _thin_min()), st
 
 
 @server.tool(annotations={"destructiveHint": True})
@@ -598,6 +624,10 @@ async def gripper(open_fraction: float, force: float | None = None) -> str:
     target = int(round(lo + min(OPEN_MAX, max(0.0, float(open_fraction))) * (hi - lo)))   # the jaws stop mechanically before 1.0
     start, hold = st[G]["raw"], _holds(st)
     closing = target < start
+    # A speed/acceleration cap left on the jaw motor by another script (arm.py hold writes one) makes the jaws lag
+    # behind this loop: they then stop half open and report touches that are not there. Clear it on every call.
+    await am._write(GR.speed_register, {G: 0}, 2)
+    await am._write(GR.accel_register, {G: 0}, 1)
     # torque limit: gentle while closing/holding, full for opening (friction) so the jaws never stick shut
     await am._write(GR.torque_limit_register, {G: max(GR.torque_min, int(round(force * GR.torque_full))) if closing else GR.torque_full}, 2)
     frac = GR.close_step_fraction if closing else GR.step_fraction
@@ -845,7 +875,7 @@ async def _descend_guarded(x: float, y: float, z_to: float, yaw: float, guard_to
             return res, None
         q, st = await measured()
         seed, last = sol, float(IK.fk(q)[0][2])
-    hits = 0
+    hits, base = 0, None
     for z in list(np.arange(last - TS.step, z_to, -TS.step)) + [z_to]:
         sol, _ = await asyncio.to_thread(_solve_tcp, np.array([x, y, z]), seed, yaw)
         if sol is None:
@@ -861,7 +891,19 @@ async def _descend_guarded(x: float, y: float, z_to: float, yaw: float, guard_to
         short = max(abs(st[ARM_IDS[i]]["lo"] + float(norm[i]) * (st[ARM_IDS[i]]["hi"] - st[ARM_IDS[i]]["lo"]) - st[ARM_IDS[i]]["raw"])
                     for i in range(NA))
         loads = sorted((st[m]["load"] for m in ARM_IDS), reverse=True)
-        hits = hits + 1 if (short >= TS.short_ticks and loads[0] + loads[1] >= TS.load_sum) else 0
+        if guard_top is None:
+            touching = short >= TS.short_ticks and loads[0] + loads[1] >= TS.load_sum
+        else:
+            # Carrying a part, higher up: a joint is often a few ticks short from the weight alone, and the loads are
+            # high all the way (measured: a false touch at 26 ticks, loads 276+88, in free air). What does change at
+            # a real touch is that the gripper stops following: its height falls behind the commanded height, more
+            # each step. So compare the lag with the smallest lag seen so far on this descent.
+            lag = meas - float(z)
+            base = lag if base is None else min(base, lag)
+            # ... but the lag also drifts by itself on a long limited-effort descent (a false touch at 3 cm, empty,
+            # with every joint within 6 ticks). So both must hold: falling behind AND a joint held short.
+            touching = lag - base >= PL.lag and short >= TS.short_ticks
+        hits = hits + 1 if touching else 0
         if hits >= TS.reads:
             await _stop_here(st, ARM_IDS)                     # stop pushing: goals = where the joints are
             up, _ = await asyncio.to_thread(_solve_tcp, np.array([x, y, meas + TS.backoff]), qn, yaw)
@@ -945,6 +987,7 @@ async def grab_tip(x: float, y: float, z_top: float, z_min: float, pull_to: floa
             if pull_to <= z:
                 return [f"HOLDING it by the tip (first contact at gripper height {z:.3f}). Pull it out with grab_tip's pull_to, "
                         f"or lift with move_tcp.\n" + "\n".join(log)] + await _views()
+            thin0 = await _thin_grip()
             qn, _ = await measured()
             cur, seed, peak = IK.fk(qn)[0], qn, 0
             for zz in list(np.arange(cur[2] + GB.pull_step, pull_to, GB.pull_step)) + [pull_to]:
@@ -961,7 +1004,7 @@ async def grab_tip(x: float, y: float, z_top: float, z_min: float, pull_to: floa
                 if res.startswith("ABORTED"):
                     log.append("pull: " + res)
                     break
-            held, st = await _probe_hold()
+            held, st = await (_probe_hold() if thin0 is None else _thin_still_held(thin0))
             end = float(IK.fk((await measured())[0])[0][2])
             log.append(f"pulled up to gripper height {end:.3f} (peak arm motor load {peak}); " + _touch(st, None, held))
             return [("HOLDING it after the pull: check in the images that only the sheet came up, not the pack." if held else
@@ -1094,9 +1137,10 @@ async def pick_at(x: float, y: float, object_height: float = PK.default_height, 
                "the jaws touched the object but it slipped out when squeezed: try a lower grip_force, or grip a different part of it")
         return [f"NOT holding ({why}). The jaws are open again and the gripper is {PK.backoff_z * 100:.0f} cm above "
                 f"the pick point: find the object in the wrist image below, re-localize and retry.\n" + "\n".join(log)] + await _views()
+    thin0 = await _thin_grip()
     out = await move_tcp(x=x, y=y, z=CARRY_Z, top_down=True, yaw_deg=yaw_deg)
     log.append("lift: " + _first(out))
-    held, st = await _probe_hold()
+    held, st = await (_probe_hold() if thin0 is None else _thin_still_held(thin0))
     g = st[GRIP_ID]
     log.append("after the lift, " + _touch(st, None, held))
     verdict = (f"HOLDING something ({GRIP_NAME} {g['norm']:.3f}, load {g['load']}): check the wrist image shows it between the jaws."
@@ -1105,6 +1149,67 @@ async def pick_at(x: float, y: float, object_height: float = PK.default_height, 
     if _stopped(out):
         verdict = "LIFT STOPPED. " + verdict
     return [verdict + "\n" + "\n".join(log)] + await _views()
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+@doc
+async def pick_thin(x: float, y: float, yaw_deg: float = 0.0, force: float = GR.thin_force) -> list:
+    """Pick up something THIN and soft lying on the table: a napkin, a tissue, a sheet of paper, foil, a cloth, a
+    flat wrapper. (x, y) is a point ON the sheet (base frame, from pixel_to_table at height 0 on a CLOSE wrist view):
+    aim at a wrinkle, a fold or a raised edge if there is one, not at a part lying perfectly flat. The fingertips
+    go down until they FEEL the table, close firmly, and the sheet is lifted to z = <<CARRY_Z>>. A thin sheet barely
+    changes what the jaws feel, so this tool does NOT open the jaws again just because the feel is weak: it keeps
+    the grip, lifts, and compares the jaws with their own reading from before the lift. Only jaws that closed as far
+    as empty jaws do count as a miss. The reply says HOLDING, PROBABLY holding or NOT holding: ALWAYS confirm in the
+    wrist image that the sheet hangs from the jaws before carrying it anywhere. yaw_deg turns the jaws about vertical."""
+    log = []
+    st = await am._read()
+    if st[GRIP_ID]["norm"] < GR.open_enough:
+        log.append("open: " + _first(await gripper(open_fraction=1.0)))
+    out = await move_tcp(x=x, y=y, z=max(GR.thin_height + PK.hover_above, PK.hover_min), top_down=True, yaw_deg=yaw_deg)
+    log.append("hover: " + _first(out))
+    if _stopped(out) or "do not grasp" in out:
+        return ["PICK STOPPED before closing.\n" + "\n".join(log)] + await _views()
+    felt = _table_tcp_z(x, y)
+    table = TS.nominal_table_tcp_z if felt is None else felt
+    text, hit = await _descend_guarded(x, y, table - TS.max_below, _yaw_now((await measured())[0]))
+    log.append("descend: " + text)
+    if text.startswith("ABORTED"):
+        return ["PICK STOPPED before closing.\n" + "\n".join(log)] + await _views()
+    if hit is not None:
+        _remember_touch(x, y, hit)
+    closed = await gripper(open_fraction=0.0, force=force)
+    log.append("close: " + _first(closed))
+    log.append(next((l for l in closed.splitlines() if l.startswith("touch:")), ""))
+    st = await am._read()
+    if st[GRIP_ID]["norm"] < _thin_min():          # closed exactly as far as empty jaws do: nothing, not even one layer
+        await gripper(open_fraction=1.0)
+        out = await move_tcp(x=x, y=y, z=PK.backoff_z, top_down=True, yaw_deg=yaw_deg)
+        log.append("back off: " + _first(out))
+        return [f"NOT holding: the jaws closed fully ({st[GRIP_ID]['norm']:.3f}, as empty jaws do), so no sheet was between "
+                f"them. The jaws are open again, {PK.backoff_z * 100:.0f} cm above the point: aim at a wrinkle or an edge of "
+                f"the sheet in the wrist image below and retry.\n" + "\n".join(log)] + await _views()
+    thin0 = await _thin_grip()
+    out = await move_tcp(x=x, y=y, z=CARRY_Z, top_down=True, yaw_deg=yaw_deg)
+    log.append("lift: " + _first(out))
+    if thin0 is None:                                # something thicker than a sheet came up: the ordinary test applies
+        held, st = await _probe_hold()
+    else:
+        held, st = await _thin_still_held(thin0)
+    g = st[GRIP_ID]
+    log.append(f"after the lift, jaws at {g['norm']:.3f}" + ("" if thin0 is None else f" (they were at {thin0:.3f} when they gripped)")
+               + f", motor load {g['load']}/1000")
+    if held:
+        verdict = "HOLDING the sheet: the jaws are as far apart as when they gripped it."
+    elif g["norm"] >= _thin_min():
+        verdict = ("PROBABLY holding: the jaws closed a little during the lift but not as far as empty jaws do. The jaws were "
+                   "NOT opened.")
+    else:
+        verdict = "NOT holding: the sheet came out of the jaws during the lift (they are fully closed now)."
+    if _stopped(out):
+        verdict = "LIFT STOPPED. " + verdict
+    return [verdict + " Confirm in the wrist image that the sheet hangs from the jaws.\n" + "\n".join(log)] + await _views()
 
 
 @server.tool(annotations={"destructiveHint": True})
@@ -1124,6 +1229,58 @@ async def drop_at(x: float, y: float, z: float = DR.default_z, yaw_deg: float | 
     out = await move_tcp(x=PARK[0], y=PARK[1], z=max(z, P.poses.retreat_min_z), top_down=True)
     log.append("retreat: " + _first(out))
     return ["RELEASED at " + str([round(x, 3), round(y, 3), round(z, 3)]) + ".\n" + "\n".join(log)] + await _views()
+
+
+@server.tool(annotations={"destructiveHint": True})
+@recorded
+@doc
+async def place_at(x: float, y: float, z_from: float = PL.z_from, z_min: float | None = None, yaw_deg: float | None = None,
+                   twist_deg: float = 0.0) -> list:
+    """SET DOWN what the gripper holds, gently, at (x, y): for putting a part INTO or ONTO another part (a gear into a
+    ring, a lid on a cup, a block on a block), where dropping it from above would make it bounce or land tilted.
+    The gripper goes to height z_from above (x, y), then straight down in small steps, FEELING through the held part
+    for the moment it rests on something; there it stops pushing, opens the jaws and lifts straight back up to
+    z_from. z_from: a gripper height at which the held part is still clearly above the target (default <<PLACE_Z_FROM>>).
+    z_min: the lowest gripper height allowed (default: fingertips at the table); if it is reached without feeling
+    anything, the part is released there. twist_deg: before letting go, turn the part that many degrees one way and
+    back the other (use 10-20 for gears or anything keyed, so the teeth find their gaps; 0 = no twist). yaw_deg turns
+    the gripper for the placement (leave it out to keep the current rotation). (x, y) must be where the GRIPPER has
+    to be for the part to land right: verify it first with center_over on the target while the gripper is empty.
+    Returns where it touched, and fresh images taken from z_from: check in them that the part sits flat."""
+    log = []
+    out = await move_tcp(x=x, y=y, z=z_from, top_down=True, yaw_deg=yaw_deg)
+    log.append("carry: " + _first(out))
+    if _stopped(out):
+        return ["PLACE STOPPED before going down (still holding).\n" + "\n".join(log)] + await _views()
+    yaw = _yaw_now((await measured())[0])
+    low = TS.nominal_table_tcp_z if z_min is None else max(float(z_min), TS.nominal_table_tcp_z - TS.max_below)
+    text, hit = await _descend_guarded(x, y, low, yaw, guard_top=z_from)
+    log.append("lower: " + text)
+    if text.startswith("ABORTED"):
+        return ["PLACE STOPPED on the way down (still holding).\n" + "\n".join(log)] + await _views()
+    q, _ = await measured()
+    here = IK.fk(q)[0]
+    if twist_deg:
+        t = float(min(PL.twist_max, abs(twist_deg)))
+        for a in (yaw + t, yaw - t, yaw):
+            sol, _ = await asyncio.to_thread(_solve_tcp, np.array([here[0], here[1], here[2]]), q, a)
+            if sol is None:
+                log.append("twist skipped: no joint solution for that rotation here")
+                break
+            res = await _go(sol, settle=False)
+            q = sol
+            if res.startswith("ABORTED"):
+                log.append("twist: " + res)
+                break
+        else:
+            log.append(f"twisted {t:.0f} deg each way")
+    log.append("release: " + _first(await gripper(open_fraction=1.0)))
+    out = await move_tcp(x=float(here[0]), y=float(here[1]), z=z_from, top_down=True)
+    log.append("lift: " + _first(out))
+    where = (f"PLACED: the part touched down at gripper height {hit:.3f}" if hit is not None else
+             f"RELEASED at gripper height {float(here[2]):.3f} without feeling a touch (z_min reached)")
+    return [where + f", at [{float(here[0]):.3f}, {float(here[1]):.3f}]. Check in the images that it sits flat and in place.\n"
+            + "\n".join(log)] + await _views()
 
 
 SURVEY_VIEWS: dict[str, tuple] = {}     # camera pose of each image of the last survey()

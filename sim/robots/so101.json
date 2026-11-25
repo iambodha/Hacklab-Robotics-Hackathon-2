@@ -216,7 +216,14 @@
     "thin_load_margin": 20,
     "empty_memory": 6,
     "force_min": 0.1,
-    "survey_closed_margin": 0.01
+    "survey_closed_margin": 0.01,
+    "speed_register": 46,
+    "accel_register": 41,
+    "thin_regime_norm": 0.1,
+    "thin_keep_drop": 0.004,
+    "thin_hold_ticks": 45,
+    "thin_force": 0.8,
+    "thin_height": 0.004
   },
   "ik": {
     "leans_small": [
@@ -258,6 +265,12 @@
     "backoff_z": 0.09,
     "close_view_z": 0.09,
     "table_clearance": 0.002
+  },
+  "place": {
+    "_about": "place_at: set a held part down by feel instead of dropping it",
+    "z_from": 0.09,
+    "lag": 0.005,
+    "twist_max": 25
   },
   "drop": {
     "default_z": 0.17,

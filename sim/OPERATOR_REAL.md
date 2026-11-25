@@ -26,6 +26,10 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
   jaws stall, lift to z = 0.20. Says HOLDING or NOT holding, with fresh images. Needs a position from a CLOSE wrist
   view (step 2). For something FLAT pass object_height below 0.01: the fingertips then go down to the table.
   `yaw_deg` turns the jaws about vertical (at 0 they close along x); the gripped side must be narrower than 4 cm.
+- `pick_thin(x, y, yaw_deg=0)`: the pick for THIN soft things lying on the table (napkin, tissue, paper sheet, foil,
+  cloth): fingertips down to the table by touch, firm close, lift. It keeps the grip even when the feel is weak
+  and says HOLDING / PROBABLY holding / NOT holding: confirm in the wrist image that the sheet hangs from the jaws.
+  Use it instead of `pick_at` for anything thinner than about 3 mm. Aim at a wrinkle or raised edge.
 - **Touch sense.** Every grip reports a `touch:` line: the jaw gap in mm (the width of what is between the jaws),
   the motor load (0..1000: how hard it squeezes) and a verdict. `grip_state()` reads the same at any time: call it
   after a lift or a carry when you are not sure the object is still held. `pick_at(..., grip_force)` and
@@ -43,6 +47,12 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
 - `release_here()`: open the jaws where the gripper is and retreat. It reports the release position.
 - `drop_at(x, y, z, yaw_deg)`: carry, release and retreat in one call, for a box position you ALREADY verified in
   this run. Without yaw_deg the gripper keeps the rotation it picked with.
+- `place_at(x, y, z_from, z_min, yaw_deg, twist_deg)`: SET DOWN the held part gently instead of dropping it: down in
+  small steps until the part is felt resting on something, release, straight back up. Use it to put a part INTO or
+  ONTO another part (a gear into a ring, a lid on a cup, stacking): a part dropped from above bounces and lands
+  tilted. `twist_deg` 10-20 turns the part a little both ways before letting go, so gear teeth or keyed shapes
+  settle. Fix the target's position first with `center_over` while the gripper is empty, as for a box. For a part
+  that must sit against the inside wall of a ring, aim off-centre by (ring inner radius - part radius).
 - `stir(...)` and `grab_upright(x, y, z)`: see Stirring below. `wipe(x, y, to_x, to_y, strokes)`: see Wiping below.
 - `gripper(open_fraction)`, `tcp_pose()`, `joint_state()`, `move_to({...})`, `set_torque()`: rarely needed.
 
@@ -93,7 +103,7 @@ Base frame (metres): origin = centre of the arm base on the table top, +z up, +y
 ## Wiping / cleaning the table
 - `wipe(x, y, to_x, to_y, strokes)` sweeps the fingertips back and forth along a straight line on the table with
   light pressure. It feels for the table itself, so you give only the two ends of the line (at most 25 cm).
-- Take a napkin first. A loose napkin lying on the table: `pick_at` (object_height 0.005, grip_force 0.50).
+- Take a napkin first. A loose napkin lying on the table: `pick_thin(x, y)` on a wrinkle or raised edge of it.
   A sheet sticking UP out of a pack or box: `grab_tip(x, y, z_top, z_min, pull_to=0.20)` on the top of the sheet.
   It closes from the top down, so it takes the sheet by its tip and not the pack, then pulls it straight up and
   out. Localize the sheet from a CLOSE view right above it first: 2 cm off and the jaws close beside it. Check

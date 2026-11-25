@@ -15,13 +15,15 @@ Autonomous runs of `sim/run_agent_real.sh` on the physical follower arm (bus `5B
 
 ## Files
 - `actions.jsonl`: every tool call on the real arm since 15:53 (manual tests and all four runs): time, tool, arguments, duration, result text with the joint table. Calls made inside `pick_at`/`drop_at` are logged too.
-- `agent_runN.jsonl`: the full Claude Code transcript of run N (stream-json): every model message, tool call and tool result, including the camera images the agent was shown (base64).
-- `runN_frames/`: the same images as JPEG files, in the order the agent saw them (598x448 with the pixel grid).
+- `agent_runN.jsonl`: the Claude Code transcript of run N (stream-json): every model message, tool call and tool
+  result. The camera images the agent was shown have been removed (each is replaced by the text
+  `[camera image removed]`), as have machine paths and the list of locally installed plugins and skills.
 
 Runs 1-3 used the tools as of commit `0cd5133`; run 4 used `pick_at`/`drop_at` and the one-call gripper (`a0a1481`).
 
-**Personal data:** several frames (mainly runs 2 and 4) show identifiable people at the table. Keep this folder inside the team's private repo; remove those frames before sharing it outside the team.
+**Images:** the transcripts and the extracted frame folders originally contained camera frames, some showing
+people at the table. They were removed from this folder on 23 Nov 2026; older commits still contain them.
 
 Not in git: Station's continuous recording of both cameras and the motor bus (about 7 GB, `station-run/station_data` on the operator's laptop).
 
-Runs 5-7 and the UI run have transcripts here but no extracted frame folders. Run 7 used survey / center_over / release_here (no coordinates in the task) and the single-subscription Station read fix.
+Run 7 used survey / center_over / release_here (no coordinates in the task) and the single-subscription Station read fix.
