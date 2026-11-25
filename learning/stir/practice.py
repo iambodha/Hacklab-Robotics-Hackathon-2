@@ -38,6 +38,9 @@ SHORT = {k: k.split(".")[-1] for k in KEYS}
 
 # The search: (quality term it serves, key, step, why). One key at a time, continued while the score improves.
 SEARCH = (
+    ("reach", "sim.stir.grasp_from_top_m", +0.005, "holding the handle lower lets the arm stand the spoon straighter, "
+     "which leaves room for a wider circle (round 1 validation, seed 2: 2.5 cm below the end straightened to 34 deg, "
+     "5.6 cm to 12 deg)"),
     ("coverage", "sim.stir.radius_m", +0.003, "a wider circle moves more of the drink (coverage)"),
     ("depth", "sim.stir.height_m", -0.006, "a lower circle mixes what settles at the bottom (depth)"),
     ("pace", "sim.stir.step_dt_s", -0.01, "shorter steps on the circle stir faster (pace)"),
@@ -200,7 +203,7 @@ def _jpeg(S, cam, scale=1):
 
 
 async def run_attempt(S, store, cfg: dict, hypothesis: str, *, seed=None, click_noise_m=0.0, images=True,
-                      config_version=None) -> tuple[int, dict, dict]:
+                      config_version=None, trial=None) -> tuple[int, dict, dict]:
     """Reset the scene, run the stir skill with cfg, judge it. Returns (attempt, verdict, phase measurements)."""
     import numpy as np
 
@@ -219,7 +222,7 @@ async def run_attempt(S, store, cfg: dict, hypothesis: str, *, seed=None, click_
     rng = np.random.default_rng(None if seed is None else seed + 1000)
     click = cup0[:2] + (rng.normal(0, click_noise_m, 2) if click_noise_m else 0)   # a pixel_to_table click
     n = store.begin(cfg, hypothesis, seed=seed, cup_xy=[round(float(v), 4) for v in cup0[:2]],
-                    click_xy=[round(float(v), 4) for v in click], skillcfg_twin_version=config_version)
+                    click_xy=[round(float(v), 4) for v in click], skillcfg_twin_version=config_version, trial=trial)
     start = arm.stir_mark()
     marks, phases, held = {}, {}, {}
 
@@ -312,31 +315,55 @@ def envelope() -> dict:
     return {k: (reg[k]["lo"], reg[k]["hi"]) for k in KEYS}
 
 
-async def practice(S, store, attempts: int, log=print) -> list[dict]:
+PRACTICE_SEEDS = (101, 102, 103, 104)   # randomised practice positions; validation uses seeds 1.. (never these)
+
+
+def aggregate(verdicts: list[dict]) -> dict:
+    """One verdict for a trial over several mug positions: stirred only if every position stirred, the mean score,
+    the first failure's outcome, the nominal position's metrics and terms."""
+    bad = [v for v in verdicts if not v["stirred"]]
+    return {"stirred": not bad, "outcome": bad[0]["outcome"] if bad else "stirred",
+            "score": round(sum(v["score"] for v in verdicts) / len(verdicts), 3),
+            "metrics": verdicts[0].get("metrics", {}), "terms": verdicts[0].get("terms", {}),
+            "evidence": [f"position {i + 1}: {v['outcome']}, score {v['score']}" for i, v in enumerate(verdicts)]}
+
+
+async def practice(S, store, attempts: int, positions: int = 1, click_noise_m: float = 0.01, log=print):
+    """`attempts` trials; each runs at the nominal mug position plus positions-1 randomised ones (PRACTICE_SEEDS)
+    and the policy sees their aggregate. Every run is its own attempt record (field trial)."""
     pol = Policy(current_cfg(), envelope())
-    rows, verdict, phases, n = [], None, {}, 0
+    seeds = [None] + list(PRACTICE_SEEDS[:max(0, positions - 1)])
+    rows, verdict, phases, trial = [], None, {}, 0
     for i in range(attempts):
         prev_best = pol.best[0] if pol.best else None
-        changes, hyp = pol.next(n, verdict, phases)
-        ev = [f"stir attempt {n}: {verdict['outcome']}, score {verdict['score']}"] if verdict else ["code baseline"]
+        changes, hyp = pol.next(trial, verdict, phases)
+        ev = [f"stir trial {trial}: {verdict['outcome']}, score {verdict['score']}"] if verdict else ["start config"]
         version = config_apply(changes, hyp, ev)
         cfg = current_cfg()
         assert all(cfg[k] == v for k, v in changes.items()), (cfg, changes)
-        n, verdict, phases = await run_attempt(S, store, cfg, hyp, config_version=version)
-        att = store.attempts()[n]
-        les = lesson(verdict, att["begin"]["changed"], prev_best)
-        store.end(n, verdict["outcome"], les, verdict["score"])
-        row = {"attempt": n, "outcome": verdict["outcome"], "score": verdict["score"],
+        trial += 1
+        runs, verdicts = [], []
+        for seed in seeds:
+            n, v, ph = await run_attempt(S, store, cfg, hyp, seed=seed, click_noise_m=click_noise_m if seed else 0.0,
+                                         config_version=version, trial=trial)
+            att = store.attempts()[n]
+            store.end(n, v["outcome"], lesson(v, att["begin"]["changed"], prev_best), v["score"])
+            runs.append({"attempt": n, "seed": seed, "outcome": v["outcome"], "score": v["score"]})
+            verdicts.append(v)
+            if seed is None:
+                phases = ph
+        verdict = aggregate(verdicts) if len(verdicts) > 1 else verdicts[0]
+        row = {"attempt": trial, "outcome": verdict["outcome"], "score": verdict["score"],
                "best": max(verdict["score"] if verdict["stirred"] else 0, prev_best or 0),
-               "changed": {SHORT[k]: c["after"] for k, c in att["begin"]["changed"].items()},
-               "loops": verdict["metrics"].get("loops"), "radius_cm": round(100 * verdict["metrics"].get(
-                   "radius_about_axis_m", 0), 2), "pace": verdict["metrics"].get("pace_loops_per_s"),
-               "terms": verdict.get("terms"), "config_version": version,
+               "changed": {SHORT[k]: v for k, v in changes.items()},
+               "loops": verdict["metrics"].get("loops"), "radius_cm": round(100 * (verdict["metrics"].get(
+                   "radius_about_axis_m") or 0), 2), "pace": verdict["metrics"].get("pace_loops_per_s"),
+               "terms": verdict.get("terms"), "config_version": version, "runs": runs,
                "rtf": (phases.get("_window") or {}).get("real_time_factor"), "cfg": cfg}
         rows.append(row)
         log(json.dumps({k: v for k, v in row.items() if k != "cfg"}))
     if verdict and verdict["stirred"] and (pol.best is None or verdict["score"] > pol.best[0] + IMPROVE_EPS):
-        pol.best = (verdict["score"], dict(pol.cfg), n)          # the last attempt was the best: count it
+        pol.best = (verdict["score"], dict(pol.cfg), trial)      # the last trial was the best: count it
     return rows, pol
 
 
@@ -355,25 +382,36 @@ async def validate(S, store, cfg: dict, seeds, label: str, click_noise_m: float,
 
 # --- the learned profile ------------------------------------------------------------------------------------------
 def write_profile(rows: list[dict], pol: Policy, baseline: dict, run_dir: Path, validation: dict | None,
-                  path: Path = PROFILE) -> dict:
+                  path: Path = PROFILE, previous: dict | None = None) -> dict:
+    """The learned profile: every key whose best value differs from the CODE baseline, with the attempts that used it
+    and stirred cleanly, the values tried and the limit found. previous: the profile this run started from (its
+    version + 1 is written, its history and evidence carried over)."""
+    from learning import skillcfg as SC
     from learning.stir.twin import load_task, spoon_length
     task = load_task()
     score, best, n_best = pol.best
+    code = {k: SC.registry()[k]["baseline"] for k in KEYS}
+    old = (previous or {}).get("entries", {})
+    version = (previous or {}).get("version", 0) + 1
     entries = {}
     for k in KEYS:
-        if best[k] == baseline[k]:
+        if best[k] == code[k]:
             continue
-        used = [r["attempt"] for r in rows if r["cfg"][k] == best[k] and r["outcome"] == "stirred"]
+        used = sorted({a for r in rows if r["cfg"][k] == best[k] and r["outcome"] == "stirred"
+                       for a in ([x["attempt"] for x in r.get("runs", [])] or [r["attempt"]])})
         tried = sorted({r["cfg"][k] for r in rows})
-        ev = (f"{SHORT[k]} {baseline[k]} -> {best[k]}: the best clean stir (attempt {n_best}, score {score}) used "
-              f"{best[k]}; values tried {tried}.")
+        unit = "trial" if rows and rows[0].get("runs") and len(rows[0]["runs"]) > 1 else "attempt"
+        ev = (f"{run_dir.name}: {SHORT[k]} {baseline[k]} -> {best[k]}: the best clean {unit} ({unit} {n_best}, score "
+              f"{score}) used {best[k]}; values tried {tried}.")
         if k in pol.limits:
             ev += f" Limit: {pol.limits[k]}."
-        entries[k] = {"value": best[k], "baseline": baseline[k], "attempts": used or [n_best],
-                      "date": time.strftime("%Y-%m-%d"), "evidence": ev, "source": "twin"}
+        if k in old:
+            ev = f"{old[k]['evidence']} | {ev}"
+        entries[k] = {"value": best[k], "baseline": code[k], "attempts": used or [n_best],
+                      "date": time.strftime("%Y-%m-%d"), "evidence": ev, "source": "twin", "run": run_dir.name}
     c, s = task["cup"], task["spoon"]
     prof = {
-        "profile": "stir_cup", "version": 1,
+        "profile": "stir_cup", "version": version,
         "skill": "stir a drink with a spoon standing in a mug: stir_spoon (sim/stir_skill.py)",
         "learned_on": time.strftime("%Y-%m-%d"),
         "robot": "ElRobot (sim/robots/elrobot.json) - MuJoCo twin of the office table (sim/layouts/stir_office.json)",
@@ -386,12 +424,16 @@ def write_profile(rows: list[dict], pol: Policy, baseline: dict, run_dir: Path, 
         "object": {"cup_inner_radius_m": c["inner_radius"], "cup_height_m": c["height"], "cup_wall_m": c["wall"],
                    "cup_xy_m": c["xy"], "liquid_level": c["liquid_level"], "spoon_length_m": spoon_length(s),
                    "spoon_handle_width_m": s["handle_width"], "site": task["site"]},
-        "history": [{"version": 1, "date": time.strftime("%Y-%m-%d"), "by": "stir-skill session (twin practice)",
-                     "change": f"first stir profile: {len(rows)} twin attempts, best = attempt {n_best}"}],
+        "history": list((previous or {}).get("history", [])) + [
+            {"version": version, "date": time.strftime("%Y-%m-%d"), "by": "stir-skill session (twin practice)",
+             "run": run_dir.name, "change": (f"{len(rows)} twin {'trials' if version > 1 else 'attempts'} from "
+                                             f"{'profile v' + str(version - 1) if previous else 'the code baseline'}"
+                                             f", best = {n_best}")}],
         "entries": entries,
     }
     if validation:
-        prof["validation"] = validation
+        prof["validation"] = {**(previous or {}).get("validation", {}), run_dir.name: validation} if previous else {
+            run_dir.name: validation}
     path.write_text(json.dumps(prof, indent=1) + "\n")
     return prof
 
@@ -428,12 +470,18 @@ def main(argv=None):
     ap.add_argument("--click-noise", type=float, default=0.01, help="sd (m) of the mug-centre click in validation")
     ap.add_argument("--out", default=None)
     ap.add_argument("--write-profile", action="store_true")
+    ap.add_argument("--positions", type=int, default=1,
+                    help="mug positions per trial: the nominal one + randomised practice seeds (PRACTICE_SEEDS)")
+    ap.add_argument("--from-profile", action="store_true",
+                    help="start from learning/profiles/stir_cup.json instead of the code baseline (continue learning)")
     ap.add_argument("--start", action="append", default=[], metavar="KEY=VALUE",
                     help="start from this skill-config value instead of the baseline (e.g. sim.stir.turns=1)")
     a = ap.parse_args(argv)
     run_dir = Path(a.out or DATA_ROOT / time.strftime("%Y%m%d-%H%M%S"))
     run_dir.mkdir(parents=True, exist_ok=True)
-    os.environ["SKILL_PROFILES"] = "none"   # practise from the code baseline, not from an earlier profile
+    # practise from the code baseline, or continue from the profile (--from-profile)
+    os.environ["SKILL_PROFILES"] = "stir_cup" if a.from_profile else "none"
+    previous = json.loads(PROFILE.read_text()) if a.from_profile else None
     setup_env(run_dir)
     import sim_arm_mcp as S
     from learning.stir.store import StirStore
@@ -442,20 +490,22 @@ def main(argv=None):
         start = {k: json.loads(v) for k, v in (x.split("=", 1) for x in a.start)}
         config_apply(start, "operator start setting (practice --start)", ["command line"])
     t0 = time.time()
-    rows, pol = asyncio.run(practice(S, StirStore(run_dir / "practice"), a.attempts))
+    rows, pol = asyncio.run(practice(S, StirStore(run_dir / "practice"), a.attempts, a.positions, a.click_noise))
     out = {"run_dir": str(run_dir), "baseline": baseline, "rows": rows,
            "best": {"attempt": pol.best[2], "score": pol.best[0], "cfg": pol.best[1]} if pol.best else None,
            "limits": pol.limits, "practice_s": round(time.time() - t0)}
     if a.validate and pol.best:
         seeds = list(range(1, a.validate + 1))
         vstore = StirStore(run_dir / "validation")
-        vb = asyncio.run(validate(S, vstore, baseline, seeds, "baseline", a.click_noise))
+        start_label = f"start (profile v{previous['version']})" if previous else "baseline"
+        vb = asyncio.run(validate(S, vstore, baseline, seeds, start_label, a.click_noise))
         vl = asyncio.run(validate(S, vstore, pol.best[1], seeds, "learned", a.click_noise))
-        out["validation"] = {"seeds": seeds, "click_noise_m": a.click_noise, "baseline": vb, "learned": vl,
+        out["validation"] = {"seeds": seeds, "click_noise_m": a.click_noise, "start_label": start_label,
+                             "baseline": vb, "learned": vl,
                              "summary": {"baseline": summarise_validation(vb), "learned": summarise_validation(vl)}}
     (run_dir / "result.json").write_text(json.dumps(out, indent=1))
     if a.write_profile and pol.best:
-        write_profile(rows, pol, baseline, run_dir, out.get("validation", {}).get("summary"))
+        write_profile(rows, pol, baseline, run_dir, out.get("validation", {}).get("summary"), previous=previous)
         print(f"wrote {PROFILE}", flush=True)
     print(json.dumps({"summary": {k: out[k] for k in ("run_dir", "best", "limits", "practice_s")},
                       "validation": out.get("validation", {}).get("summary")}), flush=True)
