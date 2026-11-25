@@ -16,7 +16,7 @@ Start with the [project overview](../README.md), [offline quickstart](release/QU
 | [Dashboard](dashboard/README.md) | Learning inspection :8920; distinct from the executor console :8910 and recorder :8900 |
 | [Executor](executor/README.md) | [Operator workflow](../RUN.md), proposals/validation/one motion owner, [blue-to-bin](../tasks/blue_to_bin/README.md) |
 | [History](history/INTEGRATION.md) | Sanitized integration board, source [working log](../LOG.md), rounds and incident timeline |
-| [Release](release/QUICKSTART.md) | [Validation](release/VALIDATION.md), [hygiene](release/HYGIENE.md), [local paths](release/LOCAL_PATHS.md), [migration plan](release/MIGRATION_PLAN.md), [moves](release/MOVES.md), [journal](release/JOURNAL.md) |
+| [Release](release/QUICKSTART.md) | [Journal](release/JOURNAL.md), [local paths](release/LOCAL_PATHS.md), [migration plan](release/MIGRATION_PLAN.md), [moves](release/MOVES.md) |
 
 Optional model work lives in [models/POLICY_PLAN.md](../models/POLICY_PLAN.md), [benchmark](../models/bench/) and [System 2](../system2/README.md). Earlier MCP surfaces: [arm_mcp](../arm_mcp/README.md), [robot_mcp](../robot_mcp/README.md). Those historical READMEs describe their own point in development; the top-level README and release validation qualify current claims.
 
