@@ -2,6 +2,8 @@
 
 > 🥇 **1st place — [AI × Robotics Hackathon II](https://hacklabrobotics.com/articles/hacklab-edition-2-november-2026)**, HackLab × BRISA, CIC Berlin, 21–22 November 2026.
 
+Built by:  Vibbodh Somani, Evgenii Chubar, Zvonko Vugreshek, Serhat Alp Acar
+
 <video src="https://github.com/iambodha/Hacklab-Robotics-Hackathon-2/releases/download/v1.0/Generaloids_LinkedIn_Final.mp4" poster="https://raw.githubusercontent.com/iambodha/Hacklab-Robotics-Hackathon-2/main/docs/assets/demo_poster.jpg" controls muted playsinline width="100%"></video>
 
 *75 s demo — sorting, wiping a spill, and the bottle-cap skill the model taught itself. If the player does not appear, [watch it on the release page](https://github.com/iambodha/Hacklab-Robotics-Hackathon-2/releases/tag/v1.0).*
